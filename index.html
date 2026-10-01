@@ -411,6 +411,24 @@
       var(--bg);
   }
   #login-gate.hidden{display:none;}
+
+  /* State "checking": dipakai saat browser punya data login tersimpan dan
+     sistem sedang memverifikasi (cek revoke di Sheet Logs). Kartu sign in
+     DISEMBUNYIKAN, diganti spinner kecil -- supaya user tidak mengira harus
+     sign in ulang. */
+  #login-gate .gate-loading{
+    display:none;flex-direction:column;align-items:center;gap:14px;
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);
+  }
+  #login-gate.checking .login-card{display:none;}
+  #login-gate.checking .gate-loading{display:flex;}
+  .gate-spinner{
+    width:30px;height:30px;border-radius:50%;
+    border:3px solid var(--line);border-top-color:var(--primary);
+    animation:gate-spin .8s linear infinite;
+  }
+  @keyframes gate-spin{ to{ transform:rotate(360deg); } }
   .login-card{
     width:100%;max-width:400px;
     background:var(--surface);
@@ -527,6 +545,10 @@
 <body>
 
 <div id="login-gate">
+  <div class="gate-loading" role="status" aria-live="polite">
+    <div class="gate-spinner"></div>
+    <div>Verifying access…</div>
+  </div>
   <div class="login-card">
     <div class="login-bar"></div>
     <h1 id="login-title">Sign In Required</h1>
@@ -569,6 +591,22 @@
     <div class="login-note">BINUS Employees Only.</div>
   </div>
 </div>
+
+<script>
+/* Jalankan SECEPAT MUNGKIN (sebelum halaman pertama kali digambar): kalau
+   browser ini punya data login yang lengkap, langsung tampilkan state
+   "checking" (spinner) sehingga form Sign In tidak sempat terlihat. */
+(function(){
+  try {
+    var saved = JSON.parse(localStorage.getItem("srsc_login_email") || "null");
+    var eligible = saved && saved.email && (
+      (saved.domain === "binus.edu" && saved.unit) ||
+      (saved.domain === "binus.ac.id" && saved.role === "Dosen" && saved.kodeDosen)
+    );
+    if (eligible) document.getElementById("login-gate").classList.add("checking");
+  } catch (e) { /* data rusak / localStorage tidak tersedia -> tampilkan form biasa */ }
+})();
+</script>
 
 <div class="top-accent"></div>
 <div class="wrap">
@@ -1348,9 +1386,18 @@ async function checkLoginRevoked(email){
     // sempat tersimpan di cache (URL-nya kalau tidak begini akan selalu
     // sama persis untuk email yang sama, jadi rawan di-cache browser).
     const url = LOG_WEBAPP_URL + "?action=checkRevoked&email=" + encodeURIComponent(email) + "&_=" + Date.now();
-    const res = await fetch(url, { cache: "no-store" });
-    const data = await res.json();
-    return !!data.revoked;
+    // Batas waktu 8 detik: kalau Apps Script lambat/macet, jangan biarkan
+    // user menunggu selamanya -- anggap tidak revoked (sama seperti saat
+    // jaringan gagal) lalu lanjut auto-login.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+      const data = await res.json();
+      return !!data.revoked;
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (err){
     // Kalau ini muncul di Console (F12), berarti pemanggilan ke Apps
     // Script gagal -- kemungkinan besar Web App-nya belum di-deploy ulang
@@ -1506,8 +1553,16 @@ document.getElementById("kodedosen-back").addEventListener("click", () => {
 });
 
 (async () => {
-  const loggedInOtomatis = await tryAutoLogin();
+  let loggedInOtomatis = false;
+  try {
+    loggedInOtomatis = await tryAutoLogin();
+  } catch (err){
+    console.warn("Auto-login error:", err);
+  }
   if (!loggedInOtomatis){
+    // Auto-login tidak berlaku (tidak ada data tersimpan, sudah di-revoke,
+    // atau data tidak lengkap) -> BARU sekarang tampilkan form Sign In.
+    document.getElementById("login-gate").classList.remove("checking");
     document.getElementById("login-email").focus();
   }
 })();

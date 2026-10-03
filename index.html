@@ -648,9 +648,9 @@
 
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
-<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353151</mso:_dlc_DocId>
-<mso:_dlc_DocIdItemGuid msdt:dt="string">d6631130-f2f4-4a52-a804-30fadd9428d0</mso:_dlc_DocIdItemGuid>
-<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353151, 3ZXFJ3NKVQQC-643343547-353151</mso:_dlc_DocIdUrl>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">115ec381-ecf8-496f-922c-3ae72a955231</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353195, 3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocIdUrl>
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
@@ -795,7 +795,7 @@ const LOG_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwuoasOaaZoVpE34
 // perubahan data, tampilan dibiarkan persis seperti semula (tidak ada reload,
 // tidak ada kedipan). Kalau ada perubahan, tampilan diperbarui secara diam-diam
 // di tempat, tanpa memuat ulang halaman.
-const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 menit
+const REFRESH_INTERVAL_MS = 60 * 1000; // 1 menit (hanya saat halaman sedang dibuka/terlihat)
 
 /* =========================================================================
    ATURAN STRUKTUR SHEET (baca ini kalau halaman menampilkan pesan error)
@@ -1679,6 +1679,49 @@ document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
   if (e.target.id === "pic-modal-overlay") e.target.classList.remove("open");
 });
 
+/* =========================================================================
+   VISIBILITY INDEX (baris "Visibility Index" di sheet Master)
+   - Leader                          : semua index, urutan 1 / 2 / 3
+   - PIC                             : hanya index milik sheet tempat dia terdaftar
+   - Unit Binus Support / BSP /
+     Contact Center                  : semua index, urutan 3 / 2 / 1
+   - Unit lain (karyawan @binus.edu) : semua index, urutan 1 / 2 / 3
+   - Dosen                           : hanya index 1 dan 3 (urutan 1 / 3)
+   "Urutan" = prioritas tampilan pertama kali: dipilih index pertama dalam
+   urutan itu yang section-nya Active. Sheet Inactive otomatis dilewati.
+   ========================================================================= */
+const SUPPORT_UNIT_PATTERN = /\bbinus\s*support\b|\bbsp\b|\bcontact\s*center\b/i;
+const DOSEN_ALLOWED_INDEXES = [1, 3];
+let currentSel = { email: "", set: false, career: null, secKey: null };   // pilihan tab user saat ini (career=null -> semua section)
+
+function parseVisIndex(raw){
+  const m = String(raw == null ? "" : raw).match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+// ctx: { leader:boolean, userIdx:Set<number>, allIdx:number[] }
+// Hasil: { allowed:Set|null (null = semua), order:number[], strict:boolean }
+function resolveViewerVisibility(ctx){
+  const saved = readSavedLoginState() || {};
+  const asc  = ctx.allIdx.slice().sort((a, b) => a - b);
+  const desc = ctx.allIdx.slice().sort((a, b) => b - a);
+
+  if (ctx.leader) return { allowed: null, order: asc, strict: false, isLeader: true };
+
+  if (saved.role === "Dosen" || saved.domain === "binus.ac.id"){
+    return { allowed: new Set(DOSEN_ALLOWED_INDEXES), order: DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b), strict: true };
+  }
+
+  if (ctx.userIdx.size > 0){   // PIC
+    return { allowed: ctx.userIdx, order: Array.from(ctx.userIdx).sort((a, b) => a - b), strict: false };
+  }
+
+  if (SUPPORT_UNIT_PATTERN.test(String(saved.unit || ""))){
+    return { allowed: null, order: desc, strict: false };
+  }
+  return { allowed: null, order: asc, strict: false };
+}
+
 async function loadAndRender(isInitial, fromCache){
   // Kalau ada popup yang sedang dibuka pengguna, tunda dulu pengecekan diam-diam
   // ini ke siklus berikutnya — supaya tidak mengganti isi halaman di tengah
@@ -1738,6 +1781,7 @@ async function loadAndRender(isInitial, fromCache){
   const subRow    = masterRows.find(r => labelOf(r).includes("sub"));
   const careerRow = masterRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
   const statusRow = masterRows.find(r => labelOf(r).includes("status"));
+  const visRow    = masterRows.find(r => labelOf(r).includes("visibility"));
 
   if (!sheetRow || !judulRow){
     if (isInitial){
@@ -1753,7 +1797,7 @@ async function loadAndRender(isInitial, fromCache){
   const newSectionMembers = [];
   const newSectionMeta = [];
   const careerTabs = []; // daftar kategori unik (Career), urut sesuai kemunculan pertama di sheet Master
-  const careerSections = {}; // career -> daftar {id, label} section di dalamnya, untuk sub-tab
+  const renderedSecs = []; // section yang benar-benar tampil: {id, sheetKey, career, label, visIdx}
   let introHtml = "";
   let fetchFailed = false;
 
@@ -1767,6 +1811,38 @@ async function loadAndRender(isInitial, fromCache){
     if (key.toLowerCase() === "all" || key.toLowerCase() === MASTER_SHEET_NAME.toLowerCase()) continue;
     rowsOf(key).catch(() => {}); // error ditangani di loop di bawah
   }
+
+  // --- Visibility Index: tentukan index apa saja yang boleh dilihat user ini ---
+  const isSheetActive = (c) => {
+    const k = (sheetRow[c] || "").trim();
+    if (!k) return false;
+    const st = (statusRow ? (statusRow[c] || "") : "").trim().toLowerCase();
+    if (st === "inactive" || st === "nonaktif" || st === "non-aktif") return false;
+    return !(k.toLowerCase() === "all" || k.toLowerCase() === MASTER_SHEET_NAME.toLowerCase());
+  };
+  const userIdx = new Set();   // index milik sheet tempat email ini terdaftar (PIC)
+  const allIdx = [];
+  const me = getCurrentUserEmail();
+  if (visRow){
+    for (let c = 1; c < numCols; c++){
+      if (!isSheetActive(c)) continue;
+      const vi = parseVisIndex(visRow[c]);
+      if (vi === null) continue;
+      if (!allIdx.includes(vi)) allIdx.push(vi);
+      if (!me) continue;
+      try {
+        const r = await rowsOf((sheetRow[c] || "").trim());
+        const cc = detectColumns(r[0] || []);
+        if (cc.email >= 0 && r.slice(1).some(row => splitEmails(row[cc.email]).includes(me))) userIdx.add(vi);
+      } catch (e){ /* sheet gagal dibaca: ditangani di loop utama */ }
+    }
+  }
+  const viewVis = resolveViewerVisibility({ leader: !!extra.leader, userIdx: userIdx, allIdx: allIdx });
+  const canSeeIdx = (vi) => {
+    if (!visRow) return true;                 // belum ada baris Visibility Index -> tidak difilter
+    if (vi === null) return !viewVis.strict;  // sel kosong: terlihat, kecuali untuk Dosen
+    return viewVis.allowed === null || viewVis.allowed.has(vi);
+  };
 
   for (let c = 1; c < numCols; c++){
     const sectionKey = (sheetRow[c] || "").trim();
@@ -1787,9 +1863,11 @@ async function loadAndRender(isInitial, fromCache){
       continue;
     }
 
+    const secVisIdx = visRow ? parseVisIndex(visRow[c]) : null;
+    if (!canSeeIdx(secVisIdx)) continue;   // tidak termasuk Visibility Index user ini
+
     const rawCareer = careerRow ? (careerRow[c] || "").trim() : "";
     const career = (rawCareer && rawCareer !== "-") ? rawCareer : "";
-    if (career && !careerTabs.includes(career)) careerTabs.push(career);
 
     let rows;
     try {
@@ -1830,8 +1908,12 @@ async function loadAndRender(isInitial, fromCache){
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
-      (careerSections[career] = careerSections[career] || []).push({
+      if (!careerTabs.includes(career)) careerTabs.push(career);
+      renderedSecs.push({
         id: `sec-${secIdx}`,
+        sheetKey: sectionKey,
+        career: career,
+        visIdx: secVisIdx,
         label: header.replace(/\s*\n\s*/g, " ").trim() || sectionKey
       });
     }
@@ -1863,12 +1945,9 @@ async function loadAndRender(isInitial, fromCache){
   sectionMeta = newSectionMeta;
   siteLeaderFlag = !!extra.leader;
 
-  // Simpan state tampilan saat ini (posisi scroll + tab/sub-tab yang aktif)
-  // supaya setelah render ulang, sudut pandang pengguna tidak "melompat"
-  // atau balik ke kondisi awal.
+  // Simpan posisi scroll supaya render ulang diam-diam tidak membuat tampilan "melompat".
+  // (Tab/section yang dipilih disimpan di variabel currentSel.)
   const prevScrollY = isInitial ? null : window.scrollY;
-  const prevActiveCareer = document.querySelector(".tab-btn.active")?.dataset.career || null;
-  const prevActiveSecId = document.querySelector(".subtab-btn.active")?.dataset.secId || null;
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
@@ -1876,66 +1955,86 @@ async function loadAndRender(isInitial, fromCache){
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){
     const catBtns = careerTabs.map(k =>
-      `<button class="tab-btn" data-career="${escapeHtml(k)}" type="button">${escapeHtml(k)}</button>`
+      `<button class="tab-btn" data-career="${escapeHtml(k)}" type="button" aria-pressed="false">${escapeHtml(k)}</button>`
     ).join("");
     tabsWrap.innerHTML = `<div class="tabs-scroll">${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
 
     const subtabsEl = document.getElementById("subtabs-scroll");
 
-    const showAllSections = () => {
-      document.querySelectorAll(".section[data-career]").forEach(sec => { sec.style.display = ""; });
+    // Pilih section sesuai urutan prioritas user (mis. 3 / 2 / 1): index pertama
+    // dalam urutan itu yang punya section Active.
+    const pickByPriority = (list) => {
+      for (const idx of viewVis.order){
+        const f = list.find(s => s.visIdx === idx);
+        if (f) return f;
+      }
+      return list[0];
     };
-    const filterByCareer = (career) => {
-      document.querySelectorAll(".section[data-career]").forEach(sec => {
-        const secCareer = sec.dataset.career;
-        sec.style.display = (!secCareer || secCareer === career) ? "" : "none";
+
+    // Terapkan pilihan saat ini (currentSel) ke tampilan:
+    //   career = null            -> semua section yang boleh dilihat user tampil
+    //   career + secKey = null   -> semua section di kategori itu
+    //   career + secKey          -> hanya satu section itu
+    // Klik tab/sub-tab yang sedang aktif = mematikannya (kembali melebar).
+    const applySel = () => {
+      const { career, secKey } = currentSel;
+      tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
+        const on = b.dataset.career === career;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", String(on));
       });
-    };
-    const filterBySectionId = (id) => {
-      document.querySelectorAll(".section[data-career]").forEach(sec => {
-        sec.style.display = (sec.id === id) ? "" : "none";
+      document.querySelectorAll(".section[data-career]").forEach(el => {
+        const c = el.dataset.career;
+        let show = true;
+        if (career && c){
+          show = (c === career) && (!secKey || el.dataset.sheet === secKey);
+        }
+        el.style.display = show ? "" : "none";
       });
-    };
-    const closeSubtabs = () => {
-      subtabsEl.innerHTML = "";
-      subtabsEl.classList.remove("open");
-    };
-    const renderSubtabs = (career) => {
-      const list = careerSections[career] || [];
-      if (list.length <= 1){ closeSubtabs(); return; }
+      const list = career ? renderedSecs.filter(s => s.career === career) : [];
+      if (list.length <= 1){
+        subtabsEl.innerHTML = "";
+        subtabsEl.classList.remove("open");
+        return;
+      }
       subtabsEl.innerHTML = list.map(item =>
-        `<button class="subtab-btn" data-sec-id="${escapeHtml(item.id)}" type="button">${escapeHtml(item.label)}</button>`
+        `<button class="subtab-btn${item.sheetKey === secKey ? " active" : ""}" data-sheet-key="${escapeHtml(item.sheetKey)}" type="button" aria-pressed="${item.sheetKey === secKey}">${escapeHtml(item.label)}</button>`
       ).join("");
       subtabsEl.classList.add("open");
       subtabsEl.querySelectorAll(".subtab-btn").forEach(sBtn => {
         sBtn.addEventListener("click", () => {
-          const alreadyActive = sBtn.classList.contains("active");
-          subtabsEl.querySelectorAll(".subtab-btn").forEach(b => b.classList.remove("active"));
-          if (alreadyActive){
-            filterByCareer(career); // balik ke: semua section dalam kategori ini
-          } else {
-            sBtn.classList.add("active");
-            filterBySectionId(sBtn.dataset.secId);
-          }
+          currentSel.secKey = (currentSel.secKey === sBtn.dataset.sheetKey) ? null : sBtn.dataset.sheetKey;
+          applySel();
         });
       });
     };
 
     tabsWrap.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        const alreadyActive = btn.classList.contains("active");
-        tabsWrap.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-        if (alreadyActive){
-          // klik ulang tab yang sedang aktif -> nonaktifkan, tampilkan semua section
-          showAllSections();
-          closeSubtabs();
-        } else {
-          btn.classList.add("active");
-          filterByCareer(btn.dataset.career);
-          renderSubtabs(btn.dataset.career);
-        }
+        const same = currentSel.career === btn.dataset.career;
+        currentSel = { email: getCurrentUserEmail(), set: true, career: same ? null : btn.dataset.career, secKey: null };
+        applySel();
       });
     });
+
+    // Pilihan awal (hanya saat user ini belum pernah memilih):
+    //  - Leader      -> semua section langsung tampil (tidak ada yang dipilih)
+    //  - User lain   -> langsung ke section prioritas pertama sesuai Visibility Index
+    // Setelah itu pilihan user dipertahankan walau data di-refresh otomatis.
+    const me2 = getCurrentUserEmail();
+    if (!(currentSel.set && currentSel.email === me2)){
+      if (viewVis.isLeader || !visRow){
+        currentSel = { email: me2, set: true, career: null, secKey: null };
+      } else {
+        const pick = pickByPriority(renderedSecs);
+        const multi = renderedSecs.filter(s => s.career === pick.career).length > 1;
+        currentSel = { email: me2, set: true, career: pick.career, secKey: multi ? pick.sheetKey : null };
+      }
+    }
+    // Pilihan lama yang sudah tidak ada di data terbaru -> kembali melebar.
+    if (currentSel.career && !careerTabs.includes(currentSel.career)) currentSel.career = currentSel.secKey = null;
+    if (currentSel.secKey && !renderedSecs.some(s => s.sheetKey === currentSel.secKey)) currentSel.secKey = null;
+    applySel();
   } else {
     tabsWrap.innerHTML = "";
   }
@@ -1950,22 +2049,8 @@ async function loadAndRender(isInitial, fromCache){
     });
   });
 
-  // Kembalikan filter tab/sub-tab yang tadinya aktif (kalau masih ada di
-  // data terbaru), lalu kembalikan posisi scroll — supaya pembaruan diam-diam
-  // ini tidak terasa mengganggu buat pengguna yang sedang membaca halaman.
-  if (!isInitial){
-    if (prevActiveCareer){
-      const careerBtn = tabsWrap.querySelector(`.tab-btn[data-career="${CSS.escape(prevActiveCareer)}"]`);
-      if (careerBtn){
-        careerBtn.click();
-        if (prevActiveSecId){
-          const secBtn = document.querySelector(`.subtab-btn[data-sec-id="${CSS.escape(prevActiveSecId)}"]`);
-          if (secBtn) secBtn.click();
-        }
-      }
-    }
-    if (prevScrollY !== null) window.scrollTo(0, prevScrollY);
-  }
+  // Kembalikan posisi scroll (pilihan tab sudah dipulihkan lewat currentSel).
+  if (!isInitial && prevScrollY !== null) window.scrollTo(0, prevScrollY);
 }
 
 /* =========================================================================
@@ -2540,16 +2625,20 @@ async function main(){
   // Cek pembaruan data secara berkala. Selama tidak ada perubahan di Google
   // Sheet sumber, tampilan tidak diapa-apakan sama sekali (tidak reload,
   // tidak ada indikator loading) — benar-benar tidak terlihat oleh pengguna.
-  setInterval(() => { loadAndRender(false).catch(() => {}); }, REFRESH_INTERVAL_MS);
+  let silentBusy = false;
+  const silentRefresh = () => {
+    if (silentBusy || document.visibilityState !== "visible") return;
+    silentBusy = true;
+    loadAndRender(false).catch(() => {}).finally(() => { silentBusy = false; });
+  };
+  setInterval(silentRefresh, REFRESH_INTERVAL_MS);
 
   // Saat pengguna kembali ke tab ini setelah sempat berpindah, lakukan satu
   // kali pengecekan tambahan (tetap diam-diam) — supaya perubahan data lebih
   // cepat terlihat tanpa harus menunggu penuh 15 menit, tanpa menambah beban
   // permintaan saat halaman tidak sedang dilihat.
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible"){
-      loadAndRender(false).catch(() => {});
-    }
+    if (document.visibilityState === "visible") silentRefresh();
   });
 }
 </script>

@@ -397,18 +397,20 @@
   }
 
   /* ===== PIC Menu (hanya tampil untuk email yang terdaftar sebagai PIC) ===== */
+  /* Ukuran & gaya disamakan dengan tombol "Our Team" (.team-btn). */
   .pic-menu-btn{
     font-family:'IBM Plex Mono',monospace;
-    font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;
     color:#fff;background:var(--accent-warm);
     border:1px solid var(--accent-warm);
-    padding:7px 14px;border-radius:16px;cursor:pointer;
-    display:inline-flex;align-items:center;gap:7px;
-    transition:background .15s ease, transform .15s ease;
+    padding:11px 20px;border-radius:8px;
+    cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:background .15s ease, color .15s ease, transform .15s ease;
   }
   .pic-menu-btn:hover{ background:var(--accent-warm-dark);border-color:var(--accent-warm-dark); }
   .pic-menu-btn:active{ transform:scale(.98); }
-  .pic-menu-btn svg{width:13px;height:13px;flex:none;}
+  .pic-menu-btn svg{width:14px;height:14px;flex:none;}
   .section-actions{
     display:flex;align-items:center;justify-content:space-between;
     gap:12px;flex-wrap:wrap;margin-bottom:28px;
@@ -417,6 +419,10 @@
   .pic-slot{ margin-left:auto; }
   .pic-slot:empty{ display:none; }
   .pic-modal{ max-width:560px; }
+  /* Popup PIC Menu tampil di tengah layar (vertikal & horizontal). margin:auto
+     dipakai (bukan align-items:center) supaya popup tetap bisa di-scroll dari
+     atas kalau isinya panjang. */
+  #pic-modal-overlay .modal{ margin:auto; }
   .pic-block-title{
     font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;
     text-transform:uppercase;color:var(--ink-faint);margin:22px 0 10px;

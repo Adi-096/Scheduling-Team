@@ -1896,10 +1896,9 @@ async function loadAndRender(isInitial, fromCache){
     }
     sigParts.push(`${sectionKey}:${JSON.stringify(rows)}`);
 
-    if (rows.length < 2){
-      sectionsHtml.push(`<div class="notice">Sheet "${escapeHtml(sectionKey)}" belum berisi data anggota tim.</div>`);
-      continue;
-    }
+    // Sheet yang belum berisi anggota tetap dibuat sebagai section (pesan "belum ada
+    // data PIC"), supaya tab utama / sub-tab-nya tetap muncul.
+    if (rows.length < 1) rows = [[]];
 
     const cols = detectColumns(rows[0]);
     const members = rows.slice(1).map(r => ({
@@ -1983,10 +1982,11 @@ async function loadAndRender(isInitial, fromCache){
     // Terapkan pilihan saat ini (currentSel) ke tampilan:
     //   Selalu tepat satu section yang tampil (career + secKey).
     // Tab utama (kategori): SELALU wajib ada satu yang terpilih untuk semua user.
-    // Sub-tab (section): wajib pilih satu juga, KECUALI Leader dan user yang
-    // punya akses Editor Menu -- mereka boleh mematikan sub-tab yang aktif
-    // sehingga semua section di kategori itu tampil sekaligus.
-    const canToggleSub = !!viewVis.isLeader || (extra.editorFor || []).length > 0;
+    // Sub-tab (section): wajib pilih satu juga, KECUALI Leader -- Leader boleh
+    // mematikan sub-tab yang aktif sehingga semua section di kategori itu tampil.
+    // Hanya LEADER yang boleh membiarkan sub-tab tidak terpilih (semua sub section tampil).
+    // Editor Menu dan user lain: wajib pilih salah satu sub-tab.
+    const canToggleSub = !!viewVis.isLeader;
     const applySel = () => {
       const { career, secKey } = currentSel;
       tabsWrap.querySelectorAll(".tab-btn").forEach(b => {

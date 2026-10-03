@@ -64,14 +64,16 @@
   .tabs-wrap{
     position:sticky; top:0; z-index:20;
     background:var(--bg);
+    border-bottom:1px solid var(--line);   /* satu garis di bawah GRUP tab utama + sub-tab */
   }
   .tabs-scroll{
     display:flex; gap:8px; align-items:center; justify-content:center;
     overflow-x:auto; -webkit-overflow-scrolling:touch;
     padding:20px 0; margin-bottom:0;
-    border-bottom:1px solid var(--line);
     scrollbar-width:thin;
   }
+  /* kalau ada sub-tab, tab utama dan sub-tab dirapatkan jadi satu grup */
+  .tabs-scroll:has(+ .subtabs-scroll.open){ padding-bottom:10px; }
   .tabs-scroll::-webkit-scrollbar{ height:4px; }
   .tabs-scroll::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
   .tab-btn{
@@ -97,7 +99,7 @@
     display:none; flex-wrap:nowrap;
     gap:6px; align-items:center; justify-content:center;
     overflow-x:auto; -webkit-overflow-scrolling:touch;
-    padding:20px 0 0;
+    padding:0 0 20px;
     scrollbar-width:thin;
   }
   .subtabs-scroll.open{ display:flex; }

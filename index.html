@@ -409,6 +409,13 @@
   .pic-menu-btn:hover{ background:var(--accent-warm-dark);border-color:var(--accent-warm-dark); }
   .pic-menu-btn:active{ transform:scale(.98); }
   .pic-menu-btn svg{width:13px;height:13px;flex:none;}
+  .section-actions{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:12px;flex-wrap:wrap;margin-bottom:28px;
+  }
+  .section-actions .team-btn{ margin-bottom:0; }
+  .pic-slot{ margin-left:auto; }
+  .pic-slot:empty{ display:none; }
   .pic-modal{ max-width:560px; }
   .pic-block-title{
     font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;
@@ -648,7 +655,6 @@
   <div class="masthead">
     <div class="brand">Course Scheduling &amp; Student Registration Team</div>
     <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
-    <div id="pic-menu-slot"></div>
   </div>
 
   <div class="tabs-wrap" id="tabs-wrap"></div>
@@ -680,7 +686,7 @@
   <div class="modal pic-modal">
     <button class="modal-close" id="pic-modal-close">Tutup ✕</button>
     <h3>PIC Menu</h3>
-    <div class="modal-sub">Visible to registered PICs only</div>
+    <div class="modal-sub" id="pic-modal-sub"></div>
     <div id="pic-modal-content"></div>
   </div>
 </div>
@@ -920,10 +926,10 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
     ${subheader ? `<p class="subheader">${escapeHtml(subheader)}</p>` : ""}
     ${empty
       ? `<p class="subheader">Belum ada data PIC yang diisi untuk bagian ini.</p>`
-      : `<button class="team-btn" data-target="${secId}">
+      : `<div class="section-actions"><button class="team-btn" data-target="${secId}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
           Our Team
-        </button>
+        </button><span class="pic-slot" data-pic-slot="${idx}"></span></div>
         <ul class="task-list">${taskLinks}</ul>`}
   </section>`;
 }
@@ -1058,21 +1064,22 @@ let lastDataSignature = null; // dipakai untuk mendeteksi apakah data sumber ber
 let sectionMeta = [];         // paralel dengan sectionMembers: {header, sheetKey} per section
 
 /* =========================================================================
-   PIC MENU — menu tambahan yang hanya muncul kalau email yang sedang login
-   tercatat di kolom Email salah satu sheet tim (artinya dia seorang PIC).
-   User lain tidak melihat tombolnya sama sekali.
-
-   Isi tautan di bawah ini untuk menambah menu khusus PIC. Contoh:
-     { label: "Form Request Perubahan", url: "https://...", desc: "Ajukan perubahan data tim" }
-   Kalau dibiarkan kosong, PIC hanya melihat ringkasan tanggung jawabnya.
+   PIC MENU — tombol di sebelah "Our Team" (rata kanan) yang berisi tautan
+   khusus PIC. Sumber datanya blok "Kumpulan Link PIC" di sheet Master:
+     Kolom "PIC Sheet"   -> nama sheet (harus sama dengan baris "Sheet")
+     Kolom "Nama Link"   -> teks tautan
+     Kolom "link / URL"  -> alamat tautan
+     Kolom "Keterangan"  -> penjelasan singkat (opsional)
+     Kolom "is Visible from other PIC" -> siapa lagi yang boleh melihat link
+        (kosong = hanya PIC sheet itu; "Master" = semua PIC; nama sheet = PIC
+        sheet tsb juga). Leader (Section Head/Manager/Senior Manager) selalu
+        bisa melihat semua link.
+   Tombol hanya muncul di section yang punya setidaknya satu link yang boleh
+   dilihat oleh email yang sedang login.
    ========================================================================= */
-const PIC_MENU_ITEMS = [
-  // { label: "Nama Menu", url: "https://...", desc: "Keterangan singkat (opsional)" },
-];
-
 const PIC_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3z"/><path d="m9 12 2 2 4-4"/></svg>`;
 
-let currentPicEntries = [];
+const normSheetName = (v) => String(v || "").toLowerCase().replace(/\s+/g, " ").trim();
 
 // Satu sel Email bisa berisi lebih dari satu alamat (dipisah koma/titik koma/spasi).
 function splitEmails(raw){
@@ -1084,31 +1091,6 @@ function getCurrentUserEmail(){
   return saved && saved.email ? String(saved.email).trim().toLowerCase() : "";
 }
 
-// Cari semua baris (di semua section yang tampil) yang emailnya sama dengan
-// email user yang sedang login.
-function findPicEntries(email){
-  if (!email) return [];
-  const found = [];
-  sectionMembers.forEach((members, i) => {
-    const meta = sectionMeta[i] || {};
-    members.forEach(m => {
-      if (splitEmails(m.email).includes(email)){
-        found.push({ header: meta.header || meta.sheetKey || "", pic: m.pic, task: m.task, jabatan: m.jabatan });
-      }
-    });
-  });
-  return found;
-}
-
-function updatePicMenu(){
-  const slot = document.getElementById("pic-menu-slot");
-  if (!slot) return;
-  currentPicEntries = findPicEntries(getCurrentUserEmail());
-  slot.innerHTML = currentPicEntries.length
-    ? `<button class="pic-menu-btn" id="pic-menu-btn" type="button">${PIC_SVG}PIC Menu</button>`
-    : "";
-}
-
 function safeHttpUrl(u){
   try {
     const url = new URL(String(u || "").trim());
@@ -1116,37 +1098,118 @@ function safeHttpUrl(u){
   } catch (e){ return ""; }
 }
 
-function openPicMenu(){
-  const entries = currentPicEntries;
-  if (!entries.length) return;
-  const name = entries.find(e => e.pic)?.pic || getCurrentUserEmail();
+// Baca blok "Kumpulan Link PIC" dari sheet Master -> { "nama sheet pemilik": [link, ...] }
+// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[] }
+//   - kolom "is Visible from other PIC" kosong  -> hanya PIC sheet pemilik
+//   - berisi "Master"                           -> semua PIC di semua sheet
+//   - berisi nama sheet (boleh lebih dari satu, dipisah baris baru / ; / |)
+//                                               -> PIC sheet pemilik + PIC sheet2 tsb
+// (Leader -- Section Head/Manager/Senior Manager -- selalu bisa melihat semua link.)
+function parsePicLinks(masterRows){
+  const map = {};
+  const hi = masterRows.findIndex(r => normalizeHeader(r[0]) === "pic sheet");
+  if (hi < 0) return map;
+  const hdr = masterRows[hi].map(normalizeHeader);
+  const pick = (fn, fallback) => { const i = hdr.findIndex(fn); return i >= 0 ? i : fallback; };
+  const cSheet = pick(h => h.includes("sheet"), 0);
+  const cName  = pick(h => h.includes("nama"), 1);
+  const cUrl   = pick(h => h.includes("url") || (h.includes("link") && !h.includes("nama")), 2);
+  const cDesc  = pick(h => h.includes("keterangan") || h.includes("desc"), 3);
+  const cVis   = pick(h => h.includes("visible"), 4);
 
-  const respHtml = entries.map(e => `
-    <li>
-      <div class="pic-li-main">${escapeHtml(e.task || e.jabatan || "-")}</div>
-      <div class="pic-li-sub">${escapeHtml((e.header || "").replace(/\s*\n\s*/g, " "))}${e.jabatan ? " · " + escapeHtml(e.jabatan) : ""}</div>
-    </li>`).join("");
+  // Daftar nama sheet yang dikenal (baris "Sheet" di Master) -- dipakai supaya
+  // nama sheet yang kebetulan mengandung koma tidak ikut terpecah.
+  const known = new Set();
+  const sheetRow = masterRows.find(r => normalizeHeader(r[0]) === "sheet");
+  if (sheetRow) sheetRow.slice(1).forEach(v => { const n = normSheetName(v); if (n) known.add(n); });
 
-  const items = PIC_MENU_ITEMS.map(it => ({ ...it, href: safeHttpUrl(it.url) })).filter(it => it.href && it.label);
-  const itemsHtml = items.length
-    ? `<ul class="pic-list">${items.map(it => `
-        <li>
-          <div class="pic-li-main"><a href="${escapeHtml(it.href)}" target="_blank" rel="noopener">${escapeHtml(it.label)} &rarr;</a></div>
-          ${it.desc ? `<div class="pic-li-sub">${escapeHtml(it.desc)}</div>` : ""}
-        </li>`).join("")}</ul>`
-    : `<p class="pic-empty">Belum ada menu tambahan yang diatur.</p>`;
+  const parseVisible = (raw) => {
+    const out = { all: false, list: [] };
+    String(raw || "").split(/[\n;|]+/).forEach(part => {
+      const n = normSheetName(part);
+      if (!n) return;
+      const pieces = known.has(n) ? [n] : n.split(",").map(x => x.trim()).filter(Boolean);
+      pieces.forEach(x => { if (x === "master" || x === "all") out.all = true; else out.list.push(x); });
+    });
+    return out;
+  };
 
+  masterRows.slice(hi + 1).forEach(r => {
+    const owner = normSheetName(r[cSheet]);
+    const url = safeHttpUrl(r[cUrl]);
+    if (!owner || !url) return;
+    const vis = parseVisible(r[cVis]);
+    (map[owner] = map[owner] || []).push({
+      owner: owner,
+      name: (r[cName] || "").trim() || url,
+      url: url,
+      desc: (r[cDesc] || "").trim(),
+      visibleAll: vis.all,
+      visibleTo: vis.list
+    });
+  });
+  return map;
+}
+
+// Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
+function getPicContext(){
+  const ctx = { sheets: new Set(), leader: false };
+  const email = getCurrentUserEmail();
+  if (!email) return ctx;
+  sectionMembers.forEach((members, i) => {
+    const key = normSheetName((sectionMeta[i] || {}).sheetKey);
+    members.forEach(m => {
+      if (!splitEmails(m.email).includes(email)) return;
+      ctx.sheets.add(key);
+      if (LEADER_TITLES.includes(normJabatan(m.jabatan))) ctx.leader = true;
+    });
+  });
+  return ctx;
+}
+
+function canSeePicLink(link, ctx){
+  if (ctx.leader) return true;                         // leader: semua link
+  if (ctx.sheets.size === 0) return false;             // bukan PIC terdata
+  if (ctx.sheets.has(link.owner)) return true;         // PIC sheet pemilik link
+  if (link.visibleAll) return true;                    // "Master": semua PIC
+  return link.visibleTo.some(n => ctx.sheets.has(n));  // PIC sheet yang ditunjuk
+}
+
+// Link yang boleh dilihat user, per section (dipakai juga saat popup dibuka).
+let picVisible = {};
+
+function applyPicMenus(){
+  const ctx = getPicContext();
+  picVisible = {};
+  document.querySelectorAll("[data-pic-slot]").forEach(slot => {
+    const idx = Number(slot.dataset.picSlot);
+    const meta = sectionMeta[idx];
+    const list = ((meta && meta.links) || []).filter(l => canSeePicLink(l, ctx));
+    picVisible[idx] = list;
+    slot.innerHTML = list.length
+      ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
+      : "";
+  });
+}
+
+function openPicMenu(idx){
+  const meta = sectionMeta[idx];
+  const links = picVisible[idx] || [];
+  if (!meta || !links.length) return;
+  document.getElementById("pic-modal-sub").textContent =
+    (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
   document.getElementById("pic-modal-content").innerHTML = `
-    <p class="pic-empty" style="margin:0">Signed in as <strong>${escapeHtml(name)}</strong></p>
-    <div class="pic-block-title">Your responsibilities</div>
-    <ul class="pic-list">${respHtml}</ul>
-    <div class="pic-block-title">PIC tools</div>
-    ${itemsHtml}`;
+    <ul class="pic-list">${links.map(l => `
+      <li>
+        <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
+        ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
+      </li>`).join("")}</ul>`;
   document.getElementById("pic-modal-overlay").classList.add("open");
 }
 
 document.addEventListener("click", (e) => {
-  if (e.target.closest("#pic-menu-btn")) openPicMenu();
+  const btn = e.target.closest("[data-pic-sec]");
+  if (btn) openPicMenu(Number(btn.dataset.picSec));
 });
 document.getElementById("pic-modal-close").addEventListener("click", () => {
   document.getElementById("pic-modal-overlay").classList.remove("open");
@@ -1180,11 +1243,17 @@ async function loadAndRender(isInitial){
   sigParts.push(JSON.stringify(masterRows));
 
   const labelOf = (r) => (r[0] || "").toLowerCase().trim();
-  const sheetRow  = masterRows.find(r => labelOf(r) === "sheet");
-  const judulRow  = masterRows.find(r => labelOf(r).includes("judul") && !labelOf(r).includes("sub"));
-  const subRow    = masterRows.find(r => labelOf(r).includes("sub"));
-  const careerRow = masterRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
-  const statusRow = masterRows.find(r => labelOf(r).includes("status"));
+  // Blok "Kumpulan Link PIC" ada di bawah baris-baris section. Baris-baris
+  // pencari label di bawah hanya membaca bagian ATAS (sebelum header "PIC
+  // Sheet") supaya isi blok link tidak tertukar dengan label section.
+  const linkHdrIdx = masterRows.findIndex(r => normalizeHeader(r[0]) === "pic sheet");
+  const topRows = linkHdrIdx >= 0 ? masterRows.slice(0, linkHdrIdx) : masterRows;
+  const picLinkMap = parsePicLinks(masterRows);
+  const sheetRow  = topRows.find(r => labelOf(r) === "sheet");
+  const judulRow  = topRows.find(r => labelOf(r).includes("judul") && !labelOf(r).includes("sub"));
+  const subRow    = topRows.find(r => labelOf(r).includes("sub"));
+  const careerRow = topRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
+  const statusRow = topRows.find(r => labelOf(r).includes("status"));
 
   if (!sheetRow || !judulRow){
     if (isInitial){
@@ -1262,7 +1331,8 @@ async function loadAndRender(isInitial){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey });
+    const picLinks = picLinkMap[normSheetName(sectionKey)] || [];
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: picLinks });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -1302,7 +1372,7 @@ async function loadAndRender(isInitial){
   const prevActiveSecId = document.querySelector(".subtab-btn.active")?.dataset.secId || null;
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
-  updatePicMenu(); // tampilkan/sembunyikan PIC Menu sesuai email yang sedang login
+  applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){

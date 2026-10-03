@@ -1256,25 +1256,9 @@ function parseSheetPicLinks(rows, sheetKey, knownSheets){
 }
 
 // Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
-// Kolom "Menu Editor" di sheet tim: PIC yang ditandai (Yes / Ya / TRUE / centang)
-// boleh menambah / mengubah / menghapus menu untuk sheet-nya sendiri.
-function isTruthyCell(v){
-  return ["yes", "ya", "y", "true", "1", "v", "ok"].includes(String(v == null ? "" : v).trim().toLowerCase());
-}
-function parseSheetEditors(rows){
-  const out = [];
-  if (!rows || rows.length < 2) return out;
-  const hdr = rows[0].map(normalizeHeader);
-  const cEdt = hdr.findIndex(h => h.includes("editor"));
-  const cEml = hdr.findIndex(h => h.includes("email") || h.includes("e-mail"));
-  if (cEdt < 0 || cEml < 0) return out;
-  rows.slice(1).forEach(r => {
-    if (!isTruthyCell(r[cEdt])) return;
-    splitEmails(r[cEml]).forEach(em => { if (!out.includes(em)) out.push(em); });
-  });
-  return out;
-}
-
+// Editor menu: email-email (boleh banyak, dipisah koma) di baris "Editor Menu" sheet
+// Master, pada kolom sheet yang bersangkutan -> boleh Add/Edit/Delete menu
+// untuk sheet itu saja. (Leader boleh untuk semua sheet.)
 function getPicContext(){
   const ctx = { sheets: new Set(), leader: false, editorSheets: new Set() };
   const email = getCurrentUserEmail();
@@ -1295,6 +1279,7 @@ function getPicContext(){
 
 function canSeePicLink(link, ctx){
   if (ctx.leader) return true;                         // leader: semua link
+  if (ctx.editorSheets.has(link.owner)) return true;   // editor menu: semua link di sheet yang dikelolanya
   if (ctx.sheets.size === 0) return false;             // bukan PIC terdata
   if (ctx.sheets.has(link.owner)) return true;         // PIC sheet pemilik link
   if (link.visibleAll) return true;                    // "Master": semua PIC
@@ -1718,6 +1703,7 @@ async function loadAndRender(isInitial, fromCache){
   const subRow    = masterRows.find(r => labelOf(r).includes("sub"));
   const careerRow = masterRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
   const statusRow = masterRows.find(r => labelOf(r).includes("status"));
+  const editorRow = masterRows.find(r => labelOf(r).includes("editor"));  // baris "Editor Menu"
 
   if (!sheetRow || !judulRow){
     if (isInitial){
@@ -1806,7 +1792,7 @@ async function loadAndRender(isInitial, fromCache){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: parseSheetPicLinks(rows, sectionKey, knownSheets), editors: parseSheetEditors(rows) });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: parseSheetPicLinks(rows, sectionKey, knownSheets), editors: editorRow ? splitEmails(editorRow[c] || "") : [] });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){

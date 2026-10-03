@@ -2041,6 +2041,77 @@ async function lookupPicLogin(email){
   }
 }
 
+// ---- Percepatan login PIC ----------------------------------------------
+// Begitu form Sign In tampil (selagi user mengetik email), di latar belakang:
+//  1. "Membangunkan" Apps Script (ping "warm") supaya tidak cold start saat
+//     dibutuhkan, dan
+//  2. Mengambil data sheet publik (paralel) untuk membuat indeks lokal:
+//     email -> sheet mana saja, dan sheet mana yang memakai password.
+// Dengan indeks ini, langkah email diputuskan LANGSUNG di browser (tanpa
+// menunggu server). Kalau indeks belum siap dalam 2,5 detik / gagal dibuat,
+// dipakai pengecekan lewat Apps Script seperti sebelumnya. Password tetap
+// dibandingkan di server.
+let picIndexPromise = null;
+
+function startLoginPrefetch(){
+  if (picIndexPromise) return;
+
+  if (LOG_WEBAPP_URL && !LOG_WEBAPP_URL.includes("PASTE_URL")){
+    // no-cors: cukup "mengetuk" server, balasannya tidak perlu dibaca.
+    fetch(LOG_WEBAPP_URL + "?action=warm&_=" + Date.now(), { mode: "no-cors", cache: "no-store" }).catch(() => {});
+  }
+
+  picIndexPromise = (async () => {
+    const master = await fetchSheet(MASTER_SHEET_NAME);
+    const sheetRow = master.find(r => normalizeHeader(r[0]) === "sheet");
+    const pwRow    = master.find(r => normalizeHeader(r[0]) === "sheet password");
+    if (!sheetRow) throw new Error("baris Sheet tidak ditemukan");
+
+    const names = [];
+    const hasPw = {};
+    for (let c = 1; c < sheetRow.length; c++){
+      const name = (sheetRow[c] || "").trim();
+      const key = normSheetName(name);
+      if (!key || key === "master" || key === "all") continue;
+      names.push({ key: key, name: name });
+      if (pwRow && (pwRow[c] || "").trim()) hasPw[key] = true;
+    }
+
+    const all = await Promise.all(names.map(n => fetchSheet(n.name).catch(() => null)));
+    if (all.some(rows => rows === null)) throw new Error("ada sheet yang gagal dibaca");
+
+    const emails = {};
+    all.forEach((rows, i) => {
+      if (rows.length < 2) return;
+      const cEml = rows[0].map(normalizeHeader).findIndex(h => h.includes("email") || h.includes("e-mail"));
+      if (cEml < 0) return;
+      rows.slice(1).forEach(r => {
+        splitEmails(r[cEml]).forEach(em => {
+          const list = emails[em] || (emails[em] = []);
+          if (!list.includes(names[i].key)) list.push(names[i].key);
+        });
+      });
+    });
+    return { emails: emails, hasPw: hasPw };
+  })();
+  picIndexPromise.catch(() => {});
+}
+
+// Keputusan lokal: { ok, isPic, needsPassword } atau null kalau indeks belum siap.
+async function localPicLookup(email){
+  if (!picIndexPromise) return null;
+  try {
+    const idx = await Promise.race([
+      picIndexPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("lambat")), 2500))
+    ]);
+    const sheets = idx.emails[String(email).trim().toLowerCase()] || [];
+    return { ok: true, isPic: sheets.length > 0, needsPassword: sheets.some(k => idx.hasPw[k]) };
+  } catch (err){
+    return null;
+  }
+}
+
 // Memeriksa password PIC ke Apps Script (password dibandingkan di server,
 // bukan di browser).
 async function verifyPicPassword(email, password){
@@ -2079,7 +2150,8 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     submitBtn.textContent = "Checking...";
     clearLoginError();
 
-    const pic = await lookupPicLogin(email);
+    let pic = await localPicLookup(email);          // instan kalau indeks lokal sudah siap
+    if (!pic) pic = await lookupPicLogin(email);    // cadangan: tanya Apps Script
 
     submitBtn.disabled = false;
     submitBtn.textContent = originalLabel;
@@ -2259,6 +2331,7 @@ document.getElementById("kodedosen-back").addEventListener("click", () => {
     // atau data tidak lengkap) -> BARU sekarang tampilkan form Sign In.
     document.getElementById("login-gate").classList.remove("checking");
     document.getElementById("login-email").focus();
+    startLoginPrefetch(); // siapkan pengecekan PIC selagi user mengetik email
   }
 })();
 

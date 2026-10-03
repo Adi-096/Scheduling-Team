@@ -2020,27 +2020,30 @@ async function loadAndRender(isInitial, fromCache){
 
     tabsWrap.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        if (currentSel.career === btn.dataset.career) return;   // tidak bisa di-toggle off
+        if (currentSel.career === btn.dataset.career) return;   // tab utama: wajib pilih satu (semua user)
         const list = renderedSecs.filter(s => s.career === btn.dataset.career);
         if (!list.length) return;
+        // Leader: sub-tab tidak diklik -> semua sub section di kategori itu tampil.
+        // User lain: langsung ke satu section prioritas pertama di kategori itu.
         const pick = pickByPriority(list);
-        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: pick.sheetKey };
+        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
         applySel();
       });
     });
 
-    // Pilihan awal (hanya saat user ini belum pernah memilih): section prioritas
-    // pertama sesuai Visibility Index user. Setelah itu pilihan user dipertahankan
-    // walau data di-refresh otomatis.
+    // Pilihan awal (hanya saat user ini belum pernah memilih). Setelah itu pilihan
+    // user dipertahankan walau data di-refresh otomatis.
     const me2 = getCurrentUserEmail();
-    const selValid = currentSel.set && currentSel.email === me2 && (
+    const selValid = currentSel.set && currentSel.email === me2 && !!currentSel.career && (
       currentSel.secKey
         ? renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career)
         : (canToggleSub && careerTabs.includes(currentSel.career))
     );
     if (!selValid){
       const pick = pickByPriority(renderedSecs);
-      currentSel = { email: me2, set: true, career: pick.career, secKey: pick.sheetKey };
+      // Leader: tab utama terpilih (prioritas Visibility Index), sub-tab TIDAK diklik -> semua sub section tampil.
+      // User lain: langsung ke satu section prioritas pertama.
+      currentSel = { email: me2, set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
     }
     applySel();
   } else {

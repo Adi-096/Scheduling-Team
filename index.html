@@ -65,16 +65,15 @@
     position:sticky; top:0; z-index:20;
     background:var(--bg);
   }
-  .tabs-wrap{ border-bottom:1px solid var(--line); }
   .tabs-scroll{
-    display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center;
-    padding:20px 0;
+    display:flex; gap:8px; align-items:center; justify-content:center;
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+    padding:20px 0; margin-bottom:0;
+    border-bottom:1px solid var(--line);
+    scrollbar-width:thin;
   }
-  /* layar lebar: baris tab boleh lebih lebar dari kolom konten supaya
-     tab utama + sub-tab muat dalam SATU baris */
-  @media (min-width:1100px){
-    .tabs-scroll{ margin-left:-110px; margin-right:-110px; }
-  }
+  .tabs-scroll::-webkit-scrollbar{ height:4px; }
+  .tabs-scroll::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
   .tab-btn{
     font-family:'IBM Plex Mono',monospace;
     font-size:11.5px; letter-spacing:.06em; text-transform:uppercase;
@@ -93,12 +92,13 @@
   /* sub-tab — muncul di bawah tab kategori utama saat kategori yang aktif
      punya lebih dari satu section, sebagai toggle untuk memilih satu
      section spesifik (klik lagi tombol yang aktif untuk kembali ke semua). */
-  /* sub-tab: satu baris dengan tab utama (di dalam .tabs-scroll), dipisah garis tipis */
+  /* sub-tab: di bawah tab utama, selalu SATU baris (kalau layar sempit, digeser ke samping) */
   .subtabs-scroll{
-    display:none; flex-wrap:wrap;
+    display:none; flex-wrap:nowrap;
     gap:6px; align-items:center; justify-content:center;
-    padding:0 0 0 14px; margin-left:6px;
-    border-left:1px solid var(--line);
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+    padding:20px 0 0;
+    scrollbar-width:thin;
   }
   .subtabs-scroll.open{ display:flex; }
   .subtab-btn{
@@ -1964,7 +1964,7 @@ async function loadAndRender(isInitial, fromCache){
     const catBtns = careerTabs.map(k =>
       `<button class="tab-btn" data-career="${escapeHtml(k)}" type="button" aria-pressed="false">${escapeHtml(k)}</button>`
     ).join("");
-    tabsWrap.innerHTML = `<div class="tabs-scroll">${catBtns}<div class="subtabs-scroll" id="subtabs-scroll"></div></div>`;
+    tabsWrap.innerHTML = `<div class="tabs-scroll">${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
 
     const subtabsEl = document.getElementById("subtabs-scroll");
 

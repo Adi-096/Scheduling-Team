@@ -447,29 +447,35 @@
     color:var(--ink-soft);background:var(--surface-soft);
     border-radius:10px;padding:2px 9px;
   }
-  .pic-del{
-    flex:none;width:30px;height:30px;border-radius:50%;
-    border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
-    cursor:pointer;font-size:13px;line-height:1;
-    transition:background .15s ease,color .15s ease,border-color .15s ease;
-  }
-  .pic-del:hover{ background:#B3401F;border-color:#B3401F;color:#fff; }
+  .pic-check{ flex:none;display:flex;align-items:center;padding-top:1px; }
+  .pic-check input{ width:18px;height:18px;margin:0;accent-color:#B3401F;cursor:pointer; }
   .pic-form{ display:flex;flex-direction:column;gap:10px; }
-  .pic-form input,.pic-form select{
+  .pic-form input[type="text"],.pic-form input[type="url"],.pic-form select{
     width:100%;font-family:'Work Sans',sans-serif;font-size:14px;
     padding:11px 13px;border-radius:8px;border:1px solid var(--line);
     background:var(--surface);color:var(--ink);outline:none;
     transition:border-color .15s ease;
   }
   .pic-form input:focus,.pic-form select:focus{ border-color:var(--accent); }
-  .pic-form .pic-submit{
+  .pic-actions{ display:flex;gap:10px;margin-top:18px; }
+  .pic-actions .pic-btn{ flex:1; }
+  .pic-btn{
     font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:.08em;
-    text-transform:uppercase;color:#fff;background:var(--primary);
-    border:1px solid var(--primary);padding:11px 16px;border-radius:8px;cursor:pointer;
-    transition:background .15s ease;
+    text-transform:uppercase;cursor:pointer;
+    padding:11px 14px;border-radius:8px;
+    color:var(--primary);background:var(--surface);border:1px solid var(--primary);
+    transition:background .15s ease,color .15s ease,border-color .15s ease;
   }
-  .pic-form .pic-submit:hover{ background:var(--primary-dark); }
-  .pic-form .pic-submit:disabled{ opacity:.6;cursor:wait; }
+  .pic-btn:hover{ background:var(--primary);color:#fff; }
+  .pic-btn.primary{ background:var(--primary);color:#fff; }
+  .pic-btn.primary:hover{ background:var(--primary-dark);border-color:var(--primary-dark); }
+  .pic-btn.danger{ color:#B3401F;border-color:#B3401F; }
+  .pic-btn.danger:hover{ background:#B3401F;color:#fff; }
+  .pic-btn.danger.solid{ background:#B3401F;color:#fff; }
+  .pic-btn:disabled{ opacity:.45;cursor:not-allowed; }
+  .pic-btn:disabled:hover{ background:var(--surface);color:#B3401F; }
+  .pic-btn.danger.solid:disabled:hover{ background:#B3401F;color:#fff; }
+  .pic-hint{ font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:14px 0 0; }
   .pic-status{ display:none;font-size:12.5px;line-height:1.5;border-radius:8px;padding:9px 12px; }
   .pic-status.show{ display:block; }
   .pic-status.ok{ color:#17623A;background:#E7F6EE;border:1px solid #BFE3CF; }
@@ -815,6 +821,23 @@ function parseCSV(text){
   }
   if (field.length || row.length){ row.push(field); rows.push(row); }
   return rows.filter(r => r.some(c => c && c.trim() !== ""));
+}
+
+// ---- Cache data di browser (stale-while-revalidate) ----
+// Data sheet terakhir disimpan di localStorage. Saat halaman dibuka lagi,
+// tampilan langsung dibuat dari cache (instan), lalu data terbaru diambil
+// diam-diam dan hanya menggantikan tampilan kalau ternyata ada perubahan.
+const DATA_CACHE_KEY = "srsc_data_cache_v1";
+let cacheSheets = null;
+function loadDataCache(){
+  try {
+    const c = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || "null");
+    return c && c.sheets && typeof c.sheets === "object" ? c.sheets : null;
+  } catch (e){ return null; }
+}
+function saveDataCache(store){
+  try { localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({ t: Date.now(), sheets: store })); }
+  catch (e){ /* penuh / tidak tersedia -> abaikan */ }
 }
 
 async function fetchSheet(sheetName){
@@ -1267,6 +1290,9 @@ function visibilityLabel(l){
   return "Visible to: this sheet's PIC only";
 }
 
+// Mode tampilan popup: "view" (daftar saja), "add" (form tambah), "delete" (pilih yang dihapus)
+let picMode = "view";
+
 function setPicStatus(type, text){
   const el = document.getElementById("pic-status");
   if (!el) return;
@@ -1278,46 +1304,76 @@ function renderPicModal(idx, note){
   const meta = sectionMeta[idx];
   if (!meta) return;
   const links = picVisible[idx] || [];
+  const deleting = picIsLeader && picMode === "delete";
   document.getElementById("pic-modal-sub").textContent =
     (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
 
+  // ---- Daftar menu (selalu tampil dulu) ----
   const listHtml = links.length
     ? `<ul class="pic-list">${links.map((l, i) => `
         <li>
+          ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
           <div class="pic-li-body">
             <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
             ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
             ${picIsLeader ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
           </div>
-          ${picIsLeader ? `<button type="button" class="pic-del" data-pic-del="${i}" title="Delete link" aria-label="Delete ${escapeHtml(l.name)}">&#10005;</button>` : ""}
         </li>`).join("")}</ul>`
-    : `<p class="pic-empty">No links yet.</p>`;
+    : `<p class="pic-empty">No menus yet.</p>`;
 
-  let formHtml = "";
+  // ---- Bagian di bawah daftar, tergantung mode (khusus leader) ----
+  let controlsHtml = "";
   if (picIsLeader){
-    const others = sectionMeta
-      .filter((m, i) => i !== idx)
-      .map(m => `<option value="${escapeHtml(m.sheetKey)}">Also visible to: ${escapeHtml(m.sheetKey)}</option>`)
-      .join("");
-    formHtml = `
-      <div class="pic-block-title">Add link</div>
-      <form id="pic-add-form" class="pic-form" autocomplete="off">
-        <input type="text" id="pic-add-name" placeholder="Link name" maxlength="120" required>
-        <input type="url" id="pic-add-url" placeholder="https://..." required>
-        <input type="text" id="pic-add-desc" placeholder="Description (optional)" maxlength="300">
-        <select id="pic-add-vis">
-          <option value="">Visible to this sheet's PIC only</option>
-          <option value="Master">Visible to all PICs</option>
-          ${others}
-        </select>
-        <button type="submit" class="pic-submit" id="pic-add-submit">Add link</button>
-        <div class="pic-status" id="pic-status"></div>
-      </form>`;
+    if (picMode === "add"){
+      const others = sectionMeta
+        .filter((m, i) => i !== idx)
+        .map(m => `<option value="${escapeHtml(m.sheetKey)}">Also visible to: ${escapeHtml(m.sheetKey)}</option>`)
+        .join("");
+      controlsHtml = `
+        <div class="pic-block-title">Add menu</div>
+        <form id="pic-add-form" class="pic-form" autocomplete="off">
+          <input type="text" id="pic-add-name" placeholder="Menu name" maxlength="120" required>
+          <input type="url" id="pic-add-url" placeholder="https://..." required>
+          <input type="text" id="pic-add-desc" placeholder="Description (optional)" maxlength="300">
+          <select id="pic-add-vis">
+            <option value="">Visible to this sheet's PIC only</option>
+            <option value="Master">Visible to all PICs</option>
+            ${others}
+          </select>
+          <div class="pic-actions">
+            <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+            <button type="submit" class="pic-btn primary" id="pic-add-submit">Save</button>
+          </div>
+        </form>`;
+    } else if (picMode === "delete"){
+      controlsHtml = `
+        <p class="pic-hint">Tick the menus you want to delete, then click <strong>Delete Menu</strong>.</p>
+        <div class="pic-actions">
+          <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+          <button type="button" class="pic-btn danger solid" id="pic-delete-confirm" disabled>Delete Menu</button>
+        </div>`;
+    } else {
+      controlsHtml = `
+        <div class="pic-actions">
+          <button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>
+          ${links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
+        </div>`;
+    }
   }
 
   document.getElementById("pic-modal-content").innerHTML =
-    listHtml + (picIsLeader ? formHtml : "");
+    listHtml + controlsHtml + `<div class="pic-status" id="pic-status" style="margin-top:12px"></div>`;
   if (note) setPicStatus(note.type, note.text);
+  if (picMode === "add"){
+    const nameEl = document.getElementById("pic-add-name");
+    if (nameEl) nameEl.focus();
+  }
+}
+
+function setPicMode(mode){
+  if (picBusy || picCurrentIdx === null) return;
+  picMode = mode;
+  renderPicModal(picCurrentIdx);
 }
 
 function openPicMenu(idx){
@@ -1325,6 +1381,7 @@ function openPicMenu(idx){
   if (!meta) return;
   if (!(picVisible[idx] || []).length && !picIsLeader) return;
   picCurrentIdx = idx;
+  picMode = "view";
   renderPicModal(idx);
   document.getElementById("pic-modal-overlay").classList.add("open");
 }
@@ -1363,7 +1420,7 @@ async function addPicLink(){
   const desc = document.getElementById("pic-add-desc").value.trim();
   const vis  = document.getElementById("pic-add-vis").value;
 
-  if (!name){ setPicStatus("err", "Link name cannot be empty."); return; }
+  if (!name){ setPicStatus("err", "Menu name cannot be empty."); return; }
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return;
@@ -1378,7 +1435,7 @@ async function addPicLink(){
       sheet: meta.sheetKey, name: name, url: url, desc: desc, visible: vis
     });
     if (!data || !data.ok){
-      setPicStatus("err", (data && data.error) || "Failed to add link.");
+      setPicStatus("err", (data && data.error) || "Failed to add menu.");
     } else {
       const v = parseVisibleSheets(vis, knownSheetsGlobal);
       meta.links.push({
@@ -1386,52 +1443,79 @@ async function addPicLink(){
         url: safeHttpUrl(url), rawUrl: url, desc: desc,
         visibleAll: v.all, visibleTo: v.list
       });
-      refreshPicLocal(idx, { type: "ok", text: "Link added and saved to the spreadsheet." });
+      picMode = "view";
+      refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." });
     }
   } catch (err){
     setPicStatus("err", "Could not reach the server: " + err.message);
   } finally {
     picBusy = false;
     const b = document.getElementById("pic-add-submit");
-    if (b){ b.disabled = false; b.textContent = "Add link"; }
+    if (b){ b.disabled = false; b.textContent = "Save"; }
   }
 }
 
-async function deletePicLink(i){
+// Perbarui tombol "Delete Menu" (aktif hanya kalau ada yang dicentang).
+function updatePicDeleteButton(){
+  const btn = document.getElementById("pic-delete-confirm");
+  if (!btn) return;
+  const n = document.querySelectorAll("[data-pic-check]:checked").length;
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? `Delete Menu (${n})` : "Delete Menu";
+}
+
+async function deleteSelectedPicLinks(){
   if (picBusy || !picIsLeader || picCurrentIdx === null) return;
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
-  const link = (picVisible[idx] || [])[i];
-  if (!link) return;
-  if (!confirm(`Delete this link from the menu and the spreadsheet?\n\n${link.name}`)) return;
+  const visible = picVisible[idx] || [];
+  const chosen = Array.from(document.querySelectorAll("[data-pic-check]:checked"))
+    .map(el => visible[Number(el.dataset.picCheck)])
+    .filter(Boolean);
+  if (!chosen.length) return;
 
-  picBusy = true;
+  const btn = document.getElementById("pic-delete-confirm");
+  picBusy = true; btn.disabled = true; btn.textContent = "Deleting...";
   setPicStatus("", "");
+
+  let done = 0, failMsg = "";
   try {
-    const data = await picApi({
-      action: "deleteLink", actor: getCurrentUserEmail(),
-      sheet: meta.sheetKey, name: link.rawName, url: link.rawUrl
-    });
-    if (data && (data.ok || data.notFound)){
-      meta.links = meta.links.filter(x => x !== link);
-      refreshPicLocal(idx, data.ok
-        ? { type: "ok", text: "Link deleted from the spreadsheet." }
-        : { type: "ok", text: "That link was already removed from the spreadsheet." });
-    } else {
-      setPicStatus("err", (data && data.error) || "Failed to delete link.");
+    for (const link of chosen){
+      const data = await picApi({
+        action: "deleteLink", actor: getCurrentUserEmail(),
+        sheet: meta.sheetKey, name: link.rawName, url: link.rawUrl
+      });
+      if (data && (data.ok || data.notFound)){
+        meta.links = meta.links.filter(x => x !== link);
+        done++;
+      } else {
+        failMsg = (data && data.error) || "Failed to delete menu.";
+        break;
+      }
     }
   } catch (err){
-    setPicStatus("err", "Could not reach the server: " + err.message);
+    failMsg = "Could not reach the server: " + err.message;
   } finally {
     picBusy = false;
+  }
+
+  picMode = "view";
+  if (failMsg){
+    refreshPicLocal(idx, { type: "err", text: `${done} of ${chosen.length} deleted. ${failMsg}` });
+  } else {
+    refreshPicLocal(idx, { type: "ok", text: `${done} menu${done === 1 ? "" : "s"} deleted from the spreadsheet.` });
   }
 }
 
 document.addEventListener("click", (e) => {
   const open = e.target.closest("[data-pic-sec]");
   if (open){ openPicMenu(Number(open.dataset.picSec)); return; }
-  const del = e.target.closest("[data-pic-del]");
-  if (del) deletePicLink(Number(del.dataset.picDel));
+  const modeBtn = e.target.closest("[data-pic-mode]");
+  if (modeBtn){ setPicMode(modeBtn.dataset.picMode); return; }
+  if (e.target.closest("#pic-delete-confirm")) deleteSelectedPicLinks();
+});
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.matches && e.target.matches("[data-pic-check]")) updatePicDeleteButton();
 });
 document.addEventListener("submit", (e) => {
   if (e.target && e.target.id === "pic-add-form"){
@@ -1446,7 +1530,7 @@ document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
   if (e.target.id === "pic-modal-overlay") e.target.classList.remove("open");
 });
 
-async function loadAndRender(isInitial){
+async function loadAndRender(isInitial, fromCache){
   // Kalau ada popup yang sedang dibuka pengguna, tunda dulu pengecekan diam-diam
   // ini ke siklus berikutnya — supaya tidak mengganti isi halaman di tengah
   // interaksi pengguna.
@@ -1454,8 +1538,19 @@ async function loadAndRender(isInitial){
 
   const sigParts = [];
   let masterRows;
+
+  // Ambil data sheet: dari cache (kalau diminta & tersedia) atau dari jaringan.
+  // Semua sheet section diminta SERENTAK (paralel), bukan satu per satu.
+  const runStore = {};
+  const pending = {};
+  const rowsOf = (name) => pending[name] || (pending[name] = (
+    fromCache && cacheSheets && cacheSheets[name]
+      ? Promise.resolve(cacheSheets[name]).then(rows => { runStore[name] = rows; return rows; })
+      : fetchSheet(name).then(rows => { runStore[name] = rows; return rows; })
+  ));
+
   try {
-    masterRows = await fetchSheet(MASTER_SHEET_NAME);
+    masterRows = await rowsOf(MASTER_SHEET_NAME);
   } catch (err){
     if (isInitial){
       renderError(`Tidak bisa membaca sheet "${MASTER_SHEET_NAME}".`, [
@@ -1500,6 +1595,17 @@ async function loadAndRender(isInitial){
   let introHtml = "";
   let fetchFailed = false;
 
+  // Mulai ambil semua sheet section yang akan ditampilkan SEKARANG juga
+  // (paralel); hasilnya nanti dipakai oleh loop di bawah.
+  for (let c = 1; c < numCols; c++){
+    const key = (sheetRow[c] || "").trim();
+    if (!key) continue;
+    const st = (statusRow ? (statusRow[c] || "") : "").trim().toLowerCase();
+    if (st === "inactive" || st === "nonaktif" || st === "non-aktif") continue;
+    if (key.toLowerCase() === "all" || key.toLowerCase() === MASTER_SHEET_NAME.toLowerCase()) continue;
+    rowsOf(key).catch(() => {}); // error ditangani di loop di bawah
+  }
+
   for (let c = 1; c < numCols; c++){
     const sectionKey = (sheetRow[c] || "").trim();
     if (!sectionKey) continue;
@@ -1525,7 +1631,7 @@ async function loadAndRender(isInitial){
 
     let rows;
     try {
-      rows = await fetchSheet(sectionKey);
+      rows = await rowsOf(sectionKey);
     } catch (err){
       fetchFailed = true;
       sigParts.push(`${sectionKey}:ERROR:${err.message}`);
@@ -1573,6 +1679,10 @@ async function loadAndRender(isInitial){
   // diambil, jangan timpa tampilan yang sudah ada dengan hasil yang tidak
   // lengkap — biarkan seperti semula, dicoba lagi di siklus berikutnya.
   if (!isInitial && fetchFailed) return;
+
+  // Simpan data terbaru untuk pembukaan halaman berikutnya (hanya dari hasil
+  // jaringan yang lengkap).
+  if (!fromCache && !fetchFailed) saveDataCache(runStore);
 
   if (sectionsHtml.length === 0 && !introHtml){
     if (isInitial){
@@ -1708,6 +1818,14 @@ async function loadAndRender(isInitial){
 // pertanyaan lanjutan yang berbeda — lihat STEP_EL & handler di bawah).
 const DOMAIN_EDU = "binus.edu";       // karyawan -> ditanya Unit
 const DOMAIN_AC_ID = "binus.ac.id";   // dosen/mahasiswa -> ditanya peran dulu
+
+// Kalau pengecekan "apakah email ini PIC?" ke Apps Script GAGAL (Apps Script
+// error / belum diperbarui / kuota habis / internet putus):
+//   true  -> lanjut ke langkah Department/Unit seperti dulu, supaya SEMUA
+//            karyawan tidak ikut terkunci gara-gara Apps Script bermasalah.
+//   false -> sign in dihentikan dengan pesan error (lebih ketat, tapi semua
+//            karyawan @binus.edu tidak bisa masuk selama Apps Script bermasalah).
+const PIC_LOOKUP_FAIL_OPEN = true;
 
 // Data login yang tersimpan sekarang berupa OBJECT (bukan cuma email polos
 // seperti sebelumnya), supaya Unit / Kode Dosen ikut diingat untuk
@@ -1854,34 +1972,37 @@ async function checkLoginRevoked(email){
   }
 }
 
+// Auto-login OPTIMISTIS: kalau browser sudah punya data login yang lengkap,
+// halaman LANGSUNG ditampilkan -- tidak menunggu Apps Script (yang bisa lambat
+// saat "cold start"). Pengecekan "dipaksa logout" (Hapus Login) berjalan di
+// latar belakang; kalau ternyata di-revoke, data login dihapus dan halaman
+// dimuat ulang ke form Sign In. (Server menghapus tanda revoke begitu
+// dibaca, jadi hasilnya HARUS selalu ditindaklanjuti seperti di bawah.)
 async function tryAutoLogin(){
   const saved = readSavedLoginState();
   if (!saved) return false;
 
-  // Kalau email ini baru saja "dihapus login"-nya lewat Sheet, batalkan
-  // auto-login: hapus data tersimpan di browser ini, lalu minta user
-  // login dari awal (Step 1 - email).
-  const revoked = await checkLoginRevoked(saved.email);
-  if (revoked){
-    localStorage.removeItem(LOGIN_STORAGE_KEY);
+  let extraForLog;
+  if (saved.domain === DOMAIN_EDU && (saved.unit || saved.pic)){
+    extraForLog = saved.unit || "PIC";
+  } else if (saved.domain === DOMAIN_AC_ID && saved.role === "Dosen" && saved.kodeDosen){
+    extraForLog = saved.kodeDosen;
+  } else {
     return false;
   }
 
-  if (saved.domain === DOMAIN_EDU && (saved.unit || saved.pic)){
-    logSignIn(saved.email, "Auto-login", saved.unit || "PIC", "sudah pernah sign in");
-    hideLoginGate();
-    main();
-    return true;
-  }
+  hideLoginGate();
+  main();
 
-  if (saved.domain === DOMAIN_AC_ID && saved.role === "Dosen" && saved.kodeDosen){
-    logSignIn(saved.email, "Auto-login", saved.kodeDosen, "sudah pernah sign in");
-    hideLoginGate();
-    main();
-    return true;
-  }
-
-  return false;
+  checkLoginRevoked(saved.email).then(revoked => {
+    if (revoked){
+      localStorage.removeItem(LOGIN_STORAGE_KEY);
+      location.reload();
+      return;
+    }
+    logSignIn(saved.email, "Auto-login", extraForLog, "sudah pernah sign in");
+  });
+  return true;
 }
 
 // Bertanya ke Apps Script: "email ini PIC (terdata di sheet tim) atau bukan,
@@ -1964,6 +2085,13 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     submitBtn.textContent = originalLabel;
 
     if (!pic.ok){
+      if (PIC_LOOKUP_FAIL_OPEN){
+        // Gagal cek PIC -> perlakukan seperti karyawan biasa (tanya Unit).
+        console.warn("Pengecekan PIC gagal -> lanjut ke Department/Unit.");
+        goToStep("unit");
+        document.getElementById("login-unit").focus();
+        return;
+      }
       showLoginError("Failed to verify your account. Please check your internet connection and try again.");
       return;
     }
@@ -2135,7 +2263,16 @@ document.getElementById("kodedosen-back").addEventListener("click", () => {
 })();
 
 async function main(){
-  await loadAndRender(true);
+  // Kalau ada cache dari kunjungan sebelumnya: tampilkan INSTAN dari cache,
+  // lalu segarkan diam-diam dari Google Sheet. Kalau tidak: muat seperti biasa.
+  const cached = loadDataCache();
+  if (cached && cached[MASTER_SHEET_NAME]){
+    cacheSheets = cached;
+    await loadAndRender(true, true);
+    loadAndRender(false).catch(() => {});
+  } else {
+    await loadAndRender(true);
+  }
 
   // Cek pembaruan data secara berkala. Selama tidak ada perubahan di Google
   // Sheet sumber, tampilan tidak diapa-apakan sama sekali (tidak reload,

@@ -449,6 +449,7 @@
   }
   .pic-check{ flex:none;display:flex;align-items:center;padding-top:1px; }
   .pic-check input{ width:18px;height:18px;margin:0;accent-color:#B3401F;cursor:pointer; }
+  .pic-check input[type="radio"]{ accent-color:var(--primary); }
   .pic-form{ display:flex;flex-direction:column;gap:10px; }
   .pic-form input[type="text"],.pic-form input[type="url"],.pic-form select{
     width:100%;font-family:'Work Sans',sans-serif;font-size:14px;
@@ -457,8 +458,8 @@
     transition:border-color .15s ease;
   }
   .pic-form input:focus,.pic-form select:focus{ border-color:var(--accent); }
-  .pic-actions{ display:flex;gap:10px;margin-top:18px; }
-  .pic-actions .pic-btn{ flex:1; }
+  .pic-actions{ display:flex;flex-wrap:wrap;gap:10px;margin-top:18px; }
+  .pic-actions .pic-btn{ flex:1 1 120px; }
   .pic-btn{
     font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:.08em;
     text-transform:uppercase;cursor:pointer;
@@ -576,6 +577,22 @@
      pilihan Dosen/Mahasiswa, dan input Kode Dosen. Disembunyikan lewat
      class "hidden" dan ditampilkan bergantian oleh JS. */
   .login-step.hidden{ display:none; }
+  /* Ikon "mata" di dalam kolom password: tekan & tahan = password terlihat. */
+  .pw-wrap{ position:relative;margin-bottom:12px; }
+  .login-card .pw-wrap input[type="password"],
+  .login-card .pw-wrap input[type="text"]{ margin-bottom:0;padding-right:48px; }
+  .login-card .pw-toggle{
+    position:absolute;right:6px;top:50%;margin-top:-18px;
+    width:36px;height:36px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    background:transparent;border:none;border-radius:8px;
+    color:var(--ink-soft);cursor:pointer;
+    touch-action:none;user-select:none;-webkit-user-select:none;
+  }
+  .login-card .pw-toggle:hover{ background:transparent;color:var(--primary); }
+  .login-card .pw-toggle:active{ transform:none; }
+  .login-card .pw-toggle.on{ color:var(--primary); }
+  .pw-toggle svg{ width:20px;height:20px;pointer-events:none; }
   .login-card input[type="text"],
   .login-card input[type="password"]{
     width:100%;
@@ -668,7 +685,12 @@
     <!-- STEP 2a-PIC: khusus email PIC (@binus.edu) yang sheet-nya memakai password
          -> isi Password (menggantikan Department/Unit) -->
     <form id="password-form" class="login-step hidden" autocomplete="off">
-      <input type="password" id="login-password" placeholder="Password" required>
+      <div class="pw-wrap">
+        <input type="password" id="login-password" placeholder="Password" required autocomplete="off">
+        <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Hold to show password" title="Hold to show password">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
       <div class="login-actions-row">
         <button type="button" class="login-back" id="password-back">&larr; Back</button>
         <button type="submit">Continue</button>
@@ -1234,10 +1256,32 @@ function parseSheetPicLinks(rows, sheetKey, knownSheets){
 }
 
 // Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
+// Kolom "Menu Editor" di sheet tim: PIC yang ditandai (Yes / Ya / TRUE / centang)
+// boleh menambah / mengubah / menghapus menu untuk sheet-nya sendiri.
+function isTruthyCell(v){
+  return ["yes", "ya", "y", "true", "1", "v", "ok"].includes(String(v == null ? "" : v).trim().toLowerCase());
+}
+function parseSheetEditors(rows){
+  const out = [];
+  if (!rows || rows.length < 2) return out;
+  const hdr = rows[0].map(normalizeHeader);
+  const cEdt = hdr.findIndex(h => h.includes("editor"));
+  const cEml = hdr.findIndex(h => h.includes("email") || h.includes("e-mail"));
+  if (cEdt < 0 || cEml < 0) return out;
+  rows.slice(1).forEach(r => {
+    if (!isTruthyCell(r[cEdt])) return;
+    splitEmails(r[cEml]).forEach(em => { if (!out.includes(em)) out.push(em); });
+  });
+  return out;
+}
+
 function getPicContext(){
-  const ctx = { sheets: new Set(), leader: false };
+  const ctx = { sheets: new Set(), leader: false, editorSheets: new Set() };
   const email = getCurrentUserEmail();
   if (!email) return ctx;
+  sectionMeta.forEach((meta, i) => {
+    if ((meta.editors || []).includes(email)) ctx.editorSheets.add(normSheetName(meta.sheetKey));
+  });
   sectionMembers.forEach((members, i) => {
     const key = normSheetName((sectionMeta[i] || {}).sheetKey);
     members.forEach(m => {
@@ -1259,22 +1303,27 @@ function canSeePicLink(link, ctx){
 
 // Link yang boleh dilihat user, per section (dipakai juga saat popup dibuka).
 let picVisible = {};
-let picIsLeader = false;
+let picCanManage = false;   // boleh Add/Edit/Delete di section yang sedang dibuka
+let picManageMap = {};
 let picCurrentIdx = null;
 let picBusy = false;
 let knownSheetsGlobal = new Set();
 
 function applyPicMenus(){
   const ctx = getPicContext();
-  picIsLeader = ctx.leader;
   picVisible = {};
+  picManageMap = {};
   document.querySelectorAll("[data-pic-slot]").forEach(slot => {
     const idx = Number(slot.dataset.picSlot);
     const meta = sectionMeta[idx];
     const list = ((meta && meta.links) || []).filter(l => canSeePicLink(l, ctx));
+    // Boleh kelola (Add/Edit/Delete) = leader (semua sheet) ATAU PIC yang
+    // ditandai di kolom "Menu Editor" (hanya sheet-nya sendiri).
+    const canManage = !!meta && (ctx.leader || ctx.editorSheets.has(normSheetName(meta.sheetKey)));
     picVisible[idx] = list;
-    // Leader selalu melihat tombolnya (untuk menambah link pertama di sheet yang masih kosong).
-    slot.innerHTML = (list.length || ctx.leader)
+    picManageMap[idx] = canManage;
+    // Yang boleh kelola selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
+    slot.innerHTML = (list.length || canManage)
       ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
       : "";
   });
@@ -1290,8 +1339,11 @@ function visibilityLabel(l){
   return "Visible to: this sheet's PIC only";
 }
 
-// Mode tampilan popup: "view" (daftar saja), "add" (form tambah), "delete" (pilih yang dihapus)
+// Mode tampilan popup:
+//   "view" (daftar saja) | "add" (form tambah) | "delete" (centang yang dihapus)
+//   "edit-pick" (pilih 1 menu) | "edit" (form ubah)
 let picMode = "view";
+let picEditLink = null;
 
 function setPicStatus(type, text){
   const el = document.getElementById("pic-status");
@@ -1300,11 +1352,49 @@ function setPicStatus(type, text){
   el.textContent = text || "";
 }
 
+// <select> visibilitas. Saat mengubah menu, nilai yang sekarang dipilih otomatis.
+function visSelectHtml(idx, link){
+  const others = sectionMeta.filter((m, i) => i !== idx).map(m => m.sheetKey);
+  let selected = "";
+  let keepLabel = "";
+  if (link){
+    if (link.visibleAll) selected = "Master";
+    else if (link.visibleTo.length === 1){
+      const nm = sheetDisplayName(link.visibleTo[0]);
+      if (others.includes(nm)) selected = nm; else keepLabel = nm;
+    } else if (link.visibleTo.length > 1){
+      keepLabel = link.visibleTo.map(sheetDisplayName).join(", ");
+    }
+  }
+  const sel = (v) => (!keepLabel && selected === v) ? " selected" : "";
+  return `<select id="pic-f-vis">
+      ${keepLabel ? `<option value="__keep__" selected>Keep current: ${escapeHtml(keepLabel)}</option>` : ""}
+      <option value=""${sel("")}>Visible to this sheet's PIC only</option>
+      <option value="Master"${sel("Master")}>Visible to all PICs</option>
+      ${others.map(n => `<option value="${escapeHtml(n)}"${sel(n)}>Also visible to: ${escapeHtml(n)}</option>`).join("")}
+    </select>`;
+}
+
+function picFormHtml(idx, formId, link, submitLabel){
+  return `
+    <form id="${formId}" class="pic-form" autocomplete="off">
+      <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
+      <input type="url" id="pic-f-url" placeholder="https://..." required value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
+      <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
+      ${visSelectHtml(idx, link)}
+      <div class="pic-actions">
+        <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+        <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
+      </div>
+    </form>`;
+}
+
 function renderPicModal(idx, note){
   const meta = sectionMeta[idx];
   if (!meta) return;
   const links = picVisible[idx] || [];
-  const deleting = picIsLeader && picMode === "delete";
+  const deleting = picCanManage && picMode === "delete";
+  const picking  = picCanManage && picMode === "edit-pick";
   document.getElementById("pic-modal-sub").textContent =
     (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
 
@@ -1313,38 +1403,29 @@ function renderPicModal(idx, note){
     ? `<ul class="pic-list">${links.map((l, i) => `
         <li>
           ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
+          ${picking ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
           <div class="pic-li-body">
             <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
             ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
-            ${picIsLeader ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
+            ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
           </div>
         </li>`).join("")}</ul>`
     : `<p class="pic-empty">No menus yet.</p>`;
 
-  // ---- Bagian di bawah daftar, tergantung mode (khusus leader) ----
+  // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
   let controlsHtml = "";
-  if (picIsLeader){
+  if (picCanManage){
     if (picMode === "add"){
-      const others = sectionMeta
-        .filter((m, i) => i !== idx)
-        .map(m => `<option value="${escapeHtml(m.sheetKey)}">Also visible to: ${escapeHtml(m.sheetKey)}</option>`)
-        .join("");
+      controlsHtml = `<div class="pic-block-title">Add menu</div>` + picFormHtml(idx, "pic-add-form", null, "Save");
+    } else if (picMode === "edit" && picEditLink){
+      controlsHtml = `<div class="pic-block-title">Edit menu</div>` + picFormHtml(idx, "pic-edit-form", picEditLink, "Save changes");
+    } else if (picMode === "edit-pick"){
       controlsHtml = `
-        <div class="pic-block-title">Add menu</div>
-        <form id="pic-add-form" class="pic-form" autocomplete="off">
-          <input type="text" id="pic-add-name" placeholder="Menu name" maxlength="120" required>
-          <input type="url" id="pic-add-url" placeholder="https://..." required>
-          <input type="text" id="pic-add-desc" placeholder="Description (optional)" maxlength="300">
-          <select id="pic-add-vis">
-            <option value="">Visible to this sheet's PIC only</option>
-            <option value="Master">Visible to all PICs</option>
-            ${others}
-          </select>
-          <div class="pic-actions">
-            <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
-            <button type="submit" class="pic-btn primary" id="pic-add-submit">Save</button>
-          </div>
-        </form>`;
+        <p class="pic-hint">Select the menu you want to edit, then click <strong>Edit Menu</strong>.</p>
+        <div class="pic-actions">
+          <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+          <button type="button" class="pic-btn primary" id="pic-edit-continue" disabled>Edit Menu</button>
+        </div>`;
     } else if (picMode === "delete"){
       controlsHtml = `
         <p class="pic-hint">Tick the menus you want to delete, then click <strong>Delete Menu</strong>.</p>
@@ -1356,6 +1437,7 @@ function renderPicModal(idx, note){
       controlsHtml = `
         <div class="pic-actions">
           <button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>
+          ${links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
           ${links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
         </div>`;
     }
@@ -1365,7 +1447,7 @@ function renderPicModal(idx, note){
     listHtml + controlsHtml + `<div class="pic-status" id="pic-status" style="margin-top:12px"></div>`;
   if (note) setPicStatus(note.type, note.text);
   if (picMode === "add"){
-    const nameEl = document.getElementById("pic-add-name");
+    const nameEl = document.getElementById("pic-f-name");
     if (nameEl) nameEl.focus();
   }
 }
@@ -1373,22 +1455,25 @@ function renderPicModal(idx, note){
 function setPicMode(mode){
   if (picBusy || picCurrentIdx === null) return;
   picMode = mode;
+  if (mode !== "edit") picEditLink = null;
   renderPicModal(picCurrentIdx);
 }
 
 function openPicMenu(idx){
   const meta = sectionMeta[idx];
   if (!meta) return;
-  if (!(picVisible[idx] || []).length && !picIsLeader) return;
+  picCanManage = !!picManageMap[idx];
+  if (!(picVisible[idx] || []).length && !picCanManage) return;
   picCurrentIdx = idx;
   picMode = "view";
+  picEditLink = null;
   renderPicModal(idx);
   document.getElementById("pic-modal-overlay").classList.add("open");
 }
 
-// Kirim perintah tulis (add/delete) ke Apps Script. Hasilnya dibaca balik
-// (JSON). "actor" = email leader yang melakukan; server memeriksa ulang bahwa
-// email itu memang tercatat sebagai leader di Sheet.
+// Kirim perintah tulis (add/edit/delete) ke Apps Script. Hasilnya dibaca balik
+// (JSON). "actor" = email yang melakukan; server memeriksa ulang bahwa email
+// itu memang leader atau "Menu Editor" untuk sheet tersebut.
 async function picApi(payload){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL is not configured.");
@@ -1411,36 +1496,42 @@ function refreshPicLocal(idx, note){
   renderPicModal(idx, note);
 }
 
-async function addPicLink(){
-  if (picBusy || !picIsLeader || picCurrentIdx === null) return;
-  const idx = picCurrentIdx;
-  const meta = sectionMeta[idx];
-  const name = document.getElementById("pic-add-name").value.trim();
-  const url  = document.getElementById("pic-add-url").value.trim();
-  const desc = document.getElementById("pic-add-desc").value.trim();
-  const vis  = document.getElementById("pic-add-vis").value;
-
-  if (!name){ setPicStatus("err", "Menu name cannot be empty."); return; }
+// Baca & validasi isi form (dipakai Add dan Edit). Mengembalikan null kalau tidak valid.
+function readPicForm(){
+  const name = document.getElementById("pic-f-name").value.trim();
+  const url  = document.getElementById("pic-f-url").value.trim();
+  const desc = document.getElementById("pic-f-desc").value.trim();
+  const vis  = document.getElementById("pic-f-vis").value;
+  if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
-    return;
+    return null;
   }
+  return { name, url, desc, vis };
+}
 
-  const btn = document.getElementById("pic-add-submit");
+async function addPicLink(){
+  if (picBusy || !picCanManage || picCurrentIdx === null) return;
+  const idx = picCurrentIdx;
+  const meta = sectionMeta[idx];
+  const f = readPicForm();
+  if (!f) return;
+
+  const btn = document.getElementById("pic-submit");
   picBusy = true; btn.disabled = true; btn.textContent = "Saving...";
   setPicStatus("", "");
   try {
     const data = await picApi({
       action: "addLink", actor: getCurrentUserEmail(),
-      sheet: meta.sheetKey, name: name, url: url, desc: desc, visible: vis
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
     } else {
-      const v = parseVisibleSheets(vis, knownSheetsGlobal);
+      const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
       meta.links.push({
-        owner: normSheetName(meta.sheetKey), name: name, rawName: name,
-        url: safeHttpUrl(url), rawUrl: url, desc: desc,
+        owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
+        url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
         visibleAll: v.all, visibleTo: v.list
       });
       picMode = "view";
@@ -1450,12 +1541,51 @@ async function addPicLink(){
     setPicStatus("err", "Could not reach the server: " + err.message);
   } finally {
     picBusy = false;
-    const b = document.getElementById("pic-add-submit");
+    const b = document.getElementById("pic-submit");
     if (b){ b.disabled = false; b.textContent = "Save"; }
   }
 }
 
-// Perbarui tombol "Delete Menu" (aktif hanya kalau ada yang dicentang).
+async function editPicLink(){
+  if (picBusy || !picCanManage || picCurrentIdx === null || !picEditLink) return;
+  const idx = picCurrentIdx;
+  const meta = sectionMeta[idx];
+  const link = picEditLink;
+  const f = readPicForm();
+  if (!f) return;
+
+  const btn = document.getElementById("pic-submit");
+  picBusy = true; btn.disabled = true; btn.textContent = "Saving...";
+  setPicStatus("", "");
+  try {
+    const data = await picApi({
+      action: "editLink", actor: getCurrentUserEmail(),
+      sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis
+    });
+    if (!data || !data.ok){
+      setPicStatus("err", (data && data.error) || "Failed to update menu.");
+    } else {
+      link.name = f.name; link.rawName = f.name;
+      link.url = safeHttpUrl(f.url); link.rawUrl = f.url;
+      link.desc = f.desc;
+      if (f.vis !== "__keep__"){
+        const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
+        link.visibleAll = v.all; link.visibleTo = v.list;
+      }
+      picMode = "view"; picEditLink = null;
+      refreshPicLocal(idx, { type: "ok", text: "Menu updated and saved to the spreadsheet." });
+    }
+  } catch (err){
+    setPicStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    picBusy = false;
+    const b = document.getElementById("pic-submit");
+    if (b){ b.disabled = false; b.textContent = "Save changes"; }
+  }
+}
+
+// Tombol "Delete Menu" aktif hanya kalau ada yang dicentang.
 function updatePicDeleteButton(){
   const btn = document.getElementById("pic-delete-confirm");
   if (!btn) return;
@@ -1465,7 +1595,7 @@ function updatePicDeleteButton(){
 }
 
 async function deleteSelectedPicLinks(){
-  if (picBusy || !picIsLeader || picCurrentIdx === null) return;
+  if (picBusy || !picCanManage || picCurrentIdx === null) return;
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
   const visible = picVisible[idx] || [];
@@ -1512,16 +1642,28 @@ document.addEventListener("click", (e) => {
   if (open){ openPicMenu(Number(open.dataset.picSec)); return; }
   const modeBtn = e.target.closest("[data-pic-mode]");
   if (modeBtn){ setPicMode(modeBtn.dataset.picMode); return; }
+  if (e.target.closest("#pic-edit-continue")){
+    const r = document.querySelector("[data-pic-radio]:checked");
+    if (!r) return;
+    picEditLink = (picVisible[picCurrentIdx] || [])[Number(r.dataset.picRadio)] || null;
+    if (picEditLink){ picMode = "edit"; renderPicModal(picCurrentIdx); }
+    return;
+  }
   if (e.target.closest("#pic-delete-confirm")) deleteSelectedPicLinks();
 });
 document.addEventListener("change", (e) => {
-  if (e.target && e.target.matches && e.target.matches("[data-pic-check]")) updatePicDeleteButton();
+  const t = e.target;
+  if (!t || !t.matches) return;
+  if (t.matches("[data-pic-check]")) updatePicDeleteButton();
+  if (t.matches("[data-pic-radio]")){
+    const b = document.getElementById("pic-edit-continue");
+    if (b) b.disabled = false;
+  }
 });
 document.addEventListener("submit", (e) => {
-  if (e.target && e.target.id === "pic-add-form"){
-    e.preventDefault();
-    addPicLink();
-  }
+  const id = e.target && e.target.id;
+  if (id === "pic-add-form"){ e.preventDefault(); addPicLink(); }
+  else if (id === "pic-edit-form"){ e.preventDefault(); editPicLink(); }
 });
 document.getElementById("pic-modal-close").addEventListener("click", () => {
   document.getElementById("pic-modal-overlay").classList.remove("open");
@@ -1664,7 +1806,7 @@ async function loadAndRender(isInitial, fromCache){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: parseSheetPicLinks(rows, sectionKey, knownSheets) });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: parseSheetPicLinks(rows, sectionKey, knownSheets), editors: parseSheetEditors(rows) });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -2192,6 +2334,29 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   logSignIn(email, "Ditolak", "", "domain tidak diizinkan");
   showLoginError("Access denied. Please use a valid email address.");
 });
+
+// ---- Ikon "mata": tekan & tahan = tampilkan password, lepas = sembunyikan ----
+(function(){
+  const input = document.getElementById("login-password");
+  const btn = document.getElementById("pw-toggle");
+  const show = () => { input.type = "text"; btn.classList.add("on"); };
+  const hide = () => { input.type = "password"; btn.classList.remove("on"); };
+
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();                       // jangan ambil fokus / seleksi teks
+    show();
+    try { btn.setPointerCapture(e.pointerId); } catch (err) {}  // tetap "tertahan" walau jari bergeser
+  });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach(t => btn.addEventListener(t, hide));
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());   // tahan lama di HP tidak memunculkan menu
+  btn.addEventListener("keydown", (e) => {                          // akses keyboard: tahan Spasi / Enter
+    if (e.key === " " || e.key === "Enter"){ e.preventDefault(); show(); }
+  });
+  btn.addEventListener("keyup", hide);
+  btn.addEventListener("blur", hide);
+  window.addEventListener("blur", hide);
+  document.addEventListener("visibilitychange", hide);
+})();
 
 // ---- STEP 2a-PIC: Password (untuk email PIC @binus.edu) ----
 document.getElementById("password-form").addEventListener("submit", async (e) => {

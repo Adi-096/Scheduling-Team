@@ -1899,7 +1899,7 @@ async function lookupPicLogin(email){
   try {
     const url = LOG_WEBAPP_URL + "?action=picLogin&email=" + encodeURIComponent(email) + "&_=" + Date.now();
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const timer = setTimeout(() => ctrl.abort(), 25000); // Apps Script bisa lambat saat "cold start"
     try {
       const res = await fetch(url, { method: "GET", cache: "no-store", signal: ctrl.signal });
       const data = await res.json();
@@ -1912,6 +1912,10 @@ async function lookupPicLogin(email){
       clearTimeout(timer);
     }
   } catch (err){
+    // Lihat di Console (F12): "AbortError" = server terlalu lama menjawab;
+    // "Unexpected token <" / "Failed to fetch" = Apps Script belum
+    // diperbarui/di-deploy ulang, belum diberi izin, atau error di dalamnya.
+    console.warn("picLogin gagal:", err && err.name, err && err.message);
     return { ok: false };
   }
 }
@@ -1926,6 +1930,7 @@ async function verifyPicPassword(email, password){
     const data = await res.json();
     return { ok: true, valid: !!data.valid, locked: !!data.locked };
   } catch (err){
+    console.warn("verifyPicPassword gagal:", err && err.name, err && err.message);
     return { ok: false, valid: false, locked: false };
   }
 }

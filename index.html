@@ -46,7 +46,7 @@
   .masthead{
     display:flex;align-items:baseline;justify-content:space-between;
     border-bottom:1px solid var(--line);
-    padding-bottom:16px;margin-bottom:36px;
+    padding-bottom:20px;margin-bottom:0;
     flex-wrap:wrap;gap:8px;
   }
   .masthead .brand{
@@ -56,7 +56,8 @@
   }
   .masthead .sub{
     font-family:'IBM Plex Mono',monospace;
-    font-size:11px;color:var(--ink-faint);letter-spacing:.05em;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--primary-dark);
   }
 
   /* career tabs — sticky navigation so users don't need to scroll to find a section */
@@ -67,7 +68,7 @@
   .tabs-scroll{
     display:flex; gap:8px; align-items:center; justify-content:center;
     overflow-x:auto; -webkit-overflow-scrolling:touch;
-    padding:14px 0; margin-bottom:6px;
+    padding:20px 0; margin-bottom:0;
     border-bottom:1px solid var(--line);
     scrollbar-width:thin;
   }
@@ -95,7 +96,7 @@
     display:none;
     gap:6px; align-items:center; justify-content:center;
     overflow-x:auto; -webkit-overflow-scrolling:touch;
-    padding:0 0 14px;
+    padding:20px 0 0;
   }
   .subtabs-scroll.open{ display:flex; }
   .subtab-btn{
@@ -133,7 +134,7 @@
   /* section */
   .section{
     position:relative;
-    padding:28px 0 36px;
+    padding:20px 0 36px;
     border-bottom:1px dashed var(--line);
   }
   .section:last-of-type{border-bottom:none;}
@@ -142,10 +143,11 @@
     font-family:'Fraunces',serif;
     font-weight:600;
     font-size:clamp(26px,4vw,38px);
-    line-height:1.1;
-    margin:0 0 8px;
+    line-height:1.15;
+    margin:0 0 20px;
     color:var(--ink);
     white-space:pre-line;
+    text-align:center;
   }
   p.subheader{
     font-family:'Work Sans',sans-serif;
@@ -153,15 +155,16 @@
     color:var(--ink-soft);
     max-width:56ch;
     line-height:1.6;
-    margin:0 0 22px;
+    margin:-8px auto 20px;
+    text-align:center;
     white-space:pre-line;
   }
 
   /* hero (judul utama / kolom "All"/"Master" di Sheet Master) */
   .hero{
     text-align:center;
-    padding:0 0 22px;
-    margin-bottom:20px;
+    padding:20px 0 20px;
+    margin-bottom:0;
     border-bottom:1px dashed var(--line);
   }
   .hero-title{
@@ -413,7 +416,7 @@
   .pic-menu-btn svg{width:14px;height:14px;flex:none;}
   .section-actions{
     display:flex;align-items:center;justify-content:space-between;
-    gap:12px;flex-wrap:wrap;margin-bottom:28px;
+    gap:12px;flex-wrap:wrap;margin-bottom:20px;
   }
   .section-actions .team-btn{ margin-bottom:0; }
   /* display:flex membuat tombol di dalamnya jadi flex item langsung (bukan

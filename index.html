@@ -1712,8 +1712,10 @@ function resolveViewerVisibility(ctx){
     return { allowed: new Set(DOSEN_ALLOWED_INDEXES), order: DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b), strict: true };
   }
 
-  if (ctx.userIdx.size > 0){   // PIC
-    return { allowed: ctx.userIdx, order: Array.from(ctx.userIdx).sort((a, b) => a - b), strict: false };
+  if (ctx.userIdx.size > 0){   // PIC: boleh membuka semua index; yang dipilih pertama = index sheet miliknya
+    const own = Array.from(ctx.userIdx).sort((a, b) => a - b);
+    const rest = asc.filter(i => !ctx.userIdx.has(i));
+    return { allowed: null, order: own.concat(rest), strict: false };
   }
 
   if (SUPPORT_UNIT_PATTERN.test(String(saved.unit || ""))){
@@ -1972,10 +1974,8 @@ async function loadAndRender(isInitial, fromCache){
     };
 
     // Terapkan pilihan saat ini (currentSel) ke tampilan:
-    //   career = null            -> semua section yang boleh dilihat user tampil
-    //   career + secKey = null   -> semua section di kategori itu
-    //   career + secKey          -> hanya satu section itu
-    // Klik tab/sub-tab yang sedang aktif = mematikannya (kembali melebar).
+    //   Selalu tepat satu section yang tampil (career + secKey).
+    // Wajib ada satu yang terpilih: klik tab/sub-tab yang sedang aktif tidak melakukan apa-apa.
     const applySel = () => {
       const { career, secKey } = currentSel;
       tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
@@ -2003,7 +2003,8 @@ async function loadAndRender(isInitial, fromCache){
       subtabsEl.classList.add("open");
       subtabsEl.querySelectorAll(".subtab-btn").forEach(sBtn => {
         sBtn.addEventListener("click", () => {
-          currentSel.secKey = (currentSel.secKey === sBtn.dataset.sheetKey) ? null : sBtn.dataset.sheetKey;
+          if (currentSel.secKey === sBtn.dataset.sheetKey) return;   // tidak bisa di-toggle off
+          currentSel.secKey = sBtn.dataset.sheetKey;
           applySel();
         });
       });
@@ -2011,29 +2012,25 @@ async function loadAndRender(isInitial, fromCache){
 
     tabsWrap.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        const same = currentSel.career === btn.dataset.career;
-        currentSel = { email: getCurrentUserEmail(), set: true, career: same ? null : btn.dataset.career, secKey: null };
+        if (currentSel.career === btn.dataset.career) return;   // tidak bisa di-toggle off
+        const list = renderedSecs.filter(s => s.career === btn.dataset.career);
+        if (!list.length) return;
+        const pick = pickByPriority(list);
+        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: pick.sheetKey };
         applySel();
       });
     });
 
-    // Pilihan awal (hanya saat user ini belum pernah memilih):
-    //  - Leader      -> semua section langsung tampil (tidak ada yang dipilih)
-    //  - User lain   -> langsung ke section prioritas pertama sesuai Visibility Index
-    // Setelah itu pilihan user dipertahankan walau data di-refresh otomatis.
+    // Pilihan awal (hanya saat user ini belum pernah memilih): section prioritas
+    // pertama sesuai Visibility Index user. Setelah itu pilihan user dipertahankan
+    // walau data di-refresh otomatis.
     const me2 = getCurrentUserEmail();
-    if (!(currentSel.set && currentSel.email === me2)){
-      if (viewVis.isLeader || !visRow){
-        currentSel = { email: me2, set: true, career: null, secKey: null };
-      } else {
-        const pick = pickByPriority(renderedSecs);
-        const multi = renderedSecs.filter(s => s.career === pick.career).length > 1;
-        currentSel = { email: me2, set: true, career: pick.career, secKey: multi ? pick.sheetKey : null };
-      }
+    const selValid = currentSel.set && currentSel.email === me2 &&
+      renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career);
+    if (!selValid){
+      const pick = pickByPriority(renderedSecs);
+      currentSel = { email: me2, set: true, career: pick.career, secKey: pick.sheetKey };
     }
-    // Pilihan lama yang sudah tidak ada di data terbaru -> kembali melebar.
-    if (currentSel.career && !careerTabs.includes(currentSel.career)) currentSel.career = currentSel.secKey = null;
-    if (currentSel.secKey && !renderedSecs.some(s => s.sheetKey === currentSel.secKey)) currentSel.secKey = null;
     applySel();
   } else {
     tabsWrap.innerHTML = "";

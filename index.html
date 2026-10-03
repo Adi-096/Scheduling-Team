@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -396,6 +396,33 @@
     text-align:center;
   }
 
+  /* ===== PIC Menu (hanya tampil untuk email yang terdaftar sebagai PIC) ===== */
+  .pic-menu-btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:#fff;background:var(--accent-warm);
+    border:1px solid var(--accent-warm);
+    padding:7px 14px;border-radius:16px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;
+    transition:background .15s ease, transform .15s ease;
+  }
+  .pic-menu-btn:hover{ background:var(--accent-warm-dark);border-color:var(--accent-warm-dark); }
+  .pic-menu-btn:active{ transform:scale(.98); }
+  .pic-menu-btn svg{width:13px;height:13px;flex:none;}
+  .pic-modal{ max-width:560px; }
+  .pic-block-title{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-faint);margin:22px 0 10px;
+  }
+  .pic-list{ list-style:none;margin:0;padding:0; }
+  .pic-list li{ border-top:1px solid var(--line);padding:12px 2px; }
+  .pic-list li:last-child{ border-bottom:1px solid var(--line); }
+  .pic-list .pic-li-main{ font-weight:500;font-size:14.5px;color:var(--ink); }
+  .pic-list .pic-li-sub{ font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-top:2px; }
+  .pic-list a{ color:var(--primary);text-decoration:none; }
+  .pic-list a:hover{ text-decoration:underline; }
+  .pic-empty{ font-size:13px;color:var(--ink-soft);line-height:1.6; }
+
   @media (prefers-reduced-motion: reduce){
     *{transition:none !important;}
   }
@@ -541,6 +568,14 @@
     margin-bottom:0;
   }
 </style>
+
+<!--[if gte mso 9]><xml>
+<mso:CustomDocumentProperties>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353151</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">d6631130-f2f4-4a52-a804-30fadd9428d0</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353151, 3ZXFJ3NKVQQC-643343547-353151</mso:_dlc_DocIdUrl>
+</mso:CustomDocumentProperties>
+</xml><![endif]-->
 </head>
 <body>
 
@@ -613,6 +648,7 @@
   <div class="masthead">
     <div class="brand">Course Scheduling &amp; Student Registration Team</div>
     <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
+    <div id="pic-menu-slot"></div>
   </div>
 
   <div class="tabs-wrap" id="tabs-wrap"></div>
@@ -637,6 +673,15 @@
   <div class="modal member-modal">
     <button class="modal-close" id="member-modal-close">Tutup ✕</button>
     <div class="member-card" id="member-card-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pic-modal-overlay">
+  <div class="modal pic-modal">
+    <button class="modal-close" id="pic-modal-close">Tutup ✕</button>
+    <h3>PIC Menu</h3>
+    <div class="modal-sub">Visible to registered PICs only</div>
+    <div id="pic-modal-content"></div>
   </div>
 </div>
 
@@ -1010,6 +1055,105 @@ function renderError(message, hints){
 // baris di daftar task diklik.
 let sectionMembers = [];
 let lastDataSignature = null; // dipakai untuk mendeteksi apakah data sumber berubah
+let sectionMeta = [];         // paralel dengan sectionMembers: {header, sheetKey} per section
+
+/* =========================================================================
+   PIC MENU — menu tambahan yang hanya muncul kalau email yang sedang login
+   tercatat di kolom Email salah satu sheet tim (artinya dia seorang PIC).
+   User lain tidak melihat tombolnya sama sekali.
+
+   Isi tautan di bawah ini untuk menambah menu khusus PIC. Contoh:
+     { label: "Form Request Perubahan", url: "https://...", desc: "Ajukan perubahan data tim" }
+   Kalau dibiarkan kosong, PIC hanya melihat ringkasan tanggung jawabnya.
+   ========================================================================= */
+const PIC_MENU_ITEMS = [
+  // { label: "Nama Menu", url: "https://...", desc: "Keterangan singkat (opsional)" },
+];
+
+const PIC_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3z"/><path d="m9 12 2 2 4-4"/></svg>`;
+
+let currentPicEntries = [];
+
+// Satu sel Email bisa berisi lebih dari satu alamat (dipisah koma/titik koma/spasi).
+function splitEmails(raw){
+  return String(raw || "").toLowerCase().split(/[\s,;]+/).filter(isValidEmail);
+}
+
+function getCurrentUserEmail(){
+  const saved = readSavedLoginState();
+  return saved && saved.email ? String(saved.email).trim().toLowerCase() : "";
+}
+
+// Cari semua baris (di semua section yang tampil) yang emailnya sama dengan
+// email user yang sedang login.
+function findPicEntries(email){
+  if (!email) return [];
+  const found = [];
+  sectionMembers.forEach((members, i) => {
+    const meta = sectionMeta[i] || {};
+    members.forEach(m => {
+      if (splitEmails(m.email).includes(email)){
+        found.push({ header: meta.header || meta.sheetKey || "", pic: m.pic, task: m.task, jabatan: m.jabatan });
+      }
+    });
+  });
+  return found;
+}
+
+function updatePicMenu(){
+  const slot = document.getElementById("pic-menu-slot");
+  if (!slot) return;
+  currentPicEntries = findPicEntries(getCurrentUserEmail());
+  slot.innerHTML = currentPicEntries.length
+    ? `<button class="pic-menu-btn" id="pic-menu-btn" type="button">${PIC_SVG}PIC Menu</button>`
+    : "";
+}
+
+function safeHttpUrl(u){
+  try {
+    const url = new URL(String(u || "").trim());
+    return (url.protocol === "https:" || url.protocol === "http:") ? url.href : "";
+  } catch (e){ return ""; }
+}
+
+function openPicMenu(){
+  const entries = currentPicEntries;
+  if (!entries.length) return;
+  const name = entries.find(e => e.pic)?.pic || getCurrentUserEmail();
+
+  const respHtml = entries.map(e => `
+    <li>
+      <div class="pic-li-main">${escapeHtml(e.task || e.jabatan || "-")}</div>
+      <div class="pic-li-sub">${escapeHtml((e.header || "").replace(/\s*\n\s*/g, " "))}${e.jabatan ? " · " + escapeHtml(e.jabatan) : ""}</div>
+    </li>`).join("");
+
+  const items = PIC_MENU_ITEMS.map(it => ({ ...it, href: safeHttpUrl(it.url) })).filter(it => it.href && it.label);
+  const itemsHtml = items.length
+    ? `<ul class="pic-list">${items.map(it => `
+        <li>
+          <div class="pic-li-main"><a href="${escapeHtml(it.href)}" target="_blank" rel="noopener">${escapeHtml(it.label)} &rarr;</a></div>
+          ${it.desc ? `<div class="pic-li-sub">${escapeHtml(it.desc)}</div>` : ""}
+        </li>`).join("")}</ul>`
+    : `<p class="pic-empty">Belum ada menu tambahan yang diatur.</p>`;
+
+  document.getElementById("pic-modal-content").innerHTML = `
+    <p class="pic-empty" style="margin:0">Signed in as <strong>${escapeHtml(name)}</strong></p>
+    <div class="pic-block-title">Your responsibilities</div>
+    <ul class="pic-list">${respHtml}</ul>
+    <div class="pic-block-title">PIC tools</div>
+    ${itemsHtml}`;
+  document.getElementById("pic-modal-overlay").classList.add("open");
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#pic-menu-btn")) openPicMenu();
+});
+document.getElementById("pic-modal-close").addEventListener("click", () => {
+  document.getElementById("pic-modal-overlay").classList.remove("open");
+});
+document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "pic-modal-overlay") e.target.classList.remove("open");
+});
 
 async function loadAndRender(isInitial){
   // Kalau ada popup yang sedang dibuka pengguna, tunda dulu pengecekan diam-diam
@@ -1054,6 +1198,7 @@ async function loadAndRender(isInitial){
   const numCols = Math.max(sheetRow.length, judulRow.length, subRow ? subRow.length : 0, statusRow ? statusRow.length : 0);
   const sectionsHtml = [];
   const newSectionMembers = [];
+  const newSectionMeta = [];
   const careerTabs = []; // daftar kategori unik (Career), urut sesuai kemunculan pertama di sheet Master
   const careerSections = {}; // career -> daftar {id, label} section di dalamnya, untuk sub-tab
   let introHtml = "";
@@ -1117,6 +1262,7 @@ async function loadAndRender(isInitial){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
+    newSectionMeta.push({ header: header, sheetKey: sectionKey });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -1146,6 +1292,7 @@ async function loadAndRender(isInitial){
   if (!isInitial && signature === lastDataSignature) return;
   lastDataSignature = signature;
   sectionMembers = newSectionMembers;
+  sectionMeta = newSectionMeta;
 
   // Simpan state tampilan saat ini (posisi scroll + tab/sub-tab yang aktif)
   // supaya setelah render ulang, sudut pandang pengguna tidak "melompat"
@@ -1155,6 +1302,7 @@ async function loadAndRender(isInitial){
   const prevActiveSecId = document.querySelector(".subtab-btn.active")?.dataset.secId || null;
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
+  updatePicMenu(); // tampilkan/sembunyikan PIC Menu sesuai email yang sedang login
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){

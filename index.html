@@ -778,9 +778,11 @@
 
 <script>
 /* =========================================================================
-   PENGATURAN — sesuaikan dua baris ini kalau perlu
+   PENGATURAN
    ========================================================================= */
-const SPREADSHEET_ID = "1l6ZYSZA-lv3VrEFM8zMVWG_HPRf8uLmsAeimEf_sf9s";
+// Spreadsheet sumber data bersifat PRIVAT. Website tidak membacanya langsung
+// (ID spreadsheet sengaja TIDAK ada di kode ini); semua data diambil lewat
+// Web App Apps Script di bawah (action=data).
 const MASTER_SHEET_NAME = "Master";
 
 // URL Web App Google Apps Script yang bertugas MENULIS baris baru ke Sheet
@@ -819,9 +821,6 @@ const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 menit
        - berisi "display"/"picture"/"foto"/"photo"-> Display Picture (URL gambar)
    ========================================================================= */
 
-const gvizUrl = (sheetName) =>
-  `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
-
 /* ---------- CSV parser sederhana (menangani tanda kutip, koma, baris baru) ---------- */
 function parseCSV(text){
   const rows = [];
@@ -846,30 +845,66 @@ function parseCSV(text){
 }
 
 // ---- Cache data di browser (stale-while-revalidate) ----
-// Data sheet terakhir disimpan di localStorage. Saat halaman dibuka lagi,
-// tampilan langsung dibuat dari cache (instan), lalu data terbaru diambil
-// diam-diam dan hanya menggantikan tampilan kalau ternyata ada perubahan.
-const DATA_CACHE_KEY = "srsc_data_cache_v1";
+// Data terakhir disimpan di localStorage. Saat halaman dibuka lagi, tampilan
+// langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
+// hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
+// dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
+const DATA_CACHE_KEY = "srsc_data_cache_v2";
 let cacheSheets = null;
+let cacheExtra = null;
 function loadDataCache(){
   try {
     const c = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || "null");
-    return c && c.sheets && typeof c.sheets === "object" ? c.sheets : null;
+    if (!c || !c.sheets || typeof c.sheets !== "object" || !c.extra) return null;
+    if (c.email !== getCurrentUserEmail()) return null;
+    return c;
   } catch (e){ return null; }
 }
-function saveDataCache(store){
-  try { localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({ t: Date.now(), sheets: store })); }
-  catch (e){ /* penuh / tidak tersedia -> abaikan */ }
+function saveDataCache(store, extra){
+  try {
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({
+      t: Date.now(), email: getCurrentUserEmail(), sheets: store, extra: extra
+    }));
+  } catch (e){ /* penuh / tidak tersedia -> abaikan */ }
+}
+
+// ---- Ambil data dari Apps Script (spreadsheet privat) ----
+// Satu permintaan membawa semuanya: Master, semua sheet tim yang aktif, dan
+// link PIC Menu yang BOLEH dilihat email yang sedang login (disaring di server).
+let serverDataPromise = null;
+let serverDataEmail = null;
+
+async function fetchServerData(email){
+  if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
+    throw new Error("Web App URL belum diatur.");
+  }
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&_=" + Date.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45000);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+    const d = await res.json();
+    if (!d || !d.ok || !d.master) throw new Error((d && d.error) || "Respons data tidak valid.");
+    return d;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function getServerData(){
+  const email = getCurrentUserEmail();   // "" kalau belum login
+  if (!serverDataPromise || serverDataEmail !== email){
+    serverDataEmail = email;
+    serverDataPromise = fetchServerData(email).catch(err => { serverDataPromise = null; throw err; });
+  }
+  return serverDataPromise;
 }
 
 async function fetchSheet(sheetName){
-  const res = await fetch(gvizUrl(sheetName));
-  if (!res.ok) throw new Error(`Gagal mengambil sheet "${sheetName}" (status ${res.status})`);
-  const text = await res.text();
-  if (text.trim().startsWith("<")) {
-    throw new Error(`Sheet "${sheetName}" tidak ditemukan atau belum bisa diakses publik.`);
-  }
-  return parseCSV(text);
+  const d = await getServerData();
+  const rows = sheetName === MASTER_SHEET_NAME ? d.master : (d.sheets && d.sheets[sheetName]);
+  if (!rows) throw new Error(`Sheet "${sheetName}" tidak tersedia.`);
+  return rows;
 }
 
 function normalizeHeader(h){
@@ -1224,41 +1259,27 @@ function parseVisibleSheets(raw, knownSheets){
   return res;
 }
 
-function parseSheetPicLinks(rows, sheetKey, knownSheets){
-  const out = [];
-  if (!rows || rows.length < 2) return out;
-  const hdr = rows[0].map(normalizeHeader);
-  const cUrl  = hdr.findIndex(h => h.includes("url") || (h.includes("link") && !h.includes("nama")));
-  if (cUrl < 0) return out;
-  const cName = hdr.findIndex(h => h.includes("nama") && h.includes("link"));
-  const cDesc = hdr.findIndex(h => h.includes("keterangan"));
-  const cVis  = hdr.findIndex(h => h.includes("visible"));
-  const owner = normSheetName(sheetKey);
-
-  rows.slice(1).forEach(r => {
-    const rawUrl = String(r[cUrl] || "").trim();
-    const url = safeHttpUrl(rawUrl);
-    if (!url) return;
-    const rawName = String((cName >= 0 ? r[cName] : "") || "").trim();
-    const vis = parseVisibleSheets(cVis >= 0 ? r[cVis] : "", knownSheets);
-    out.push({
-      owner: owner,
-      name: rawName || url,
-      rawName: rawName,   // persis seperti di sheet -- dipakai untuk mencocokkan saat hapus
-      url: url,
-      rawUrl: rawUrl,
-      desc: String((cDesc >= 0 ? r[cDesc] : "") || "").trim(),
-      visibleAll: vis.all,
-      visibleTo: vis.list
-    });
-  });
-  return out;
+// Link PIC Menu datang sudah disaring dari server (per email). Di sini hanya
+// dirapikan ke bentuk yang dipakai tampilan.
+function mapServerLinks(arr){
+  return (arr || []).map(l => ({
+    owner: l.owner,
+    name: l.name || l.rawUrl,
+    rawName: l.rawName || "",      // persis seperti di sheet -- dipakai saat edit/hapus
+    url: safeHttpUrl(l.rawUrl),
+    rawUrl: l.rawUrl || "",
+    desc: l.desc || "",
+    visibleAll: !!l.visibleAll,
+    visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : []
+  })).filter(l => l.url);
 }
 
 // Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
 // Editor menu: email-email (boleh banyak, dipisah koma) di baris "Editor Menu" sheet
 // Master, pada kolom sheet yang bersangkutan -> boleh Add/Edit/Delete menu
 // untuk sheet itu saja. (Leader boleh untuk semua sheet.)
+let siteLeaderFlag = false;   // status leader menurut server (termasuk sheet nonaktif)
+
 function getPicContext(){
   const ctx = { sheets: new Set(), leader: false, editorSheets: new Set() };
   const email = getCurrentUserEmail();
@@ -1274,6 +1295,7 @@ function getPicContext(){
       if (LEADER_TITLES.includes(normJabatan(m.jabatan))) ctx.leader = true;
     });
   });
+  if (siteLeaderFlag) ctx.leader = true;
   return ctx;
 }
 
@@ -1665,6 +1687,10 @@ async function loadAndRender(isInitial, fromCache){
 
   const sigParts = [];
   let masterRows;
+  let extra = { links: {}, editorFor: [], leader: false };
+
+  // Setiap siklus (kecuali dari cache) mengambil data BARU dari server.
+  if (!fromCache) serverDataPromise = null;
 
   // Ambil data sheet: dari cache (kalau diminta & tersedia) atau dari jaringan.
   // Semua sheet section diminta SERENTAK (paralel), bukan satu per satu.
@@ -1678,6 +1704,15 @@ async function loadAndRender(isInitial, fromCache){
 
   try {
     masterRows = await rowsOf(MASTER_SHEET_NAME);
+    // Data pendamping per email: link PIC Menu yang boleh dilihat, sheet yang
+    // boleh dikelola (Editor Menu), dan status leader -- dihitung di server.
+    if (fromCache && cacheExtra){
+      extra = cacheExtra;
+    } else {
+      const d = await getServerData();
+      extra = { links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader };
+    }
+    sigParts.push("extra:" + JSON.stringify(extra));
   } catch (err){
     if (isInitial){
       renderError(`Tidak bisa membaca sheet "${MASTER_SHEET_NAME}".`, [
@@ -1703,7 +1738,6 @@ async function loadAndRender(isInitial, fromCache){
   const subRow    = masterRows.find(r => labelOf(r).includes("sub"));
   const careerRow = masterRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
   const statusRow = masterRows.find(r => labelOf(r).includes("status"));
-  const editorRow = masterRows.find(r => labelOf(r).includes("editor"));  // baris "Editor Menu"
 
   if (!sheetRow || !judulRow){
     if (isInitial){
@@ -1792,7 +1826,7 @@ async function loadAndRender(isInitial, fromCache){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: parseSheetPicLinks(rows, sectionKey, knownSheets), editors: editorRow ? splitEmails(editorRow[c] || "") : [] });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -1810,7 +1844,7 @@ async function loadAndRender(isInitial, fromCache){
 
   // Simpan data terbaru untuk pembukaan halaman berikutnya (hanya dari hasil
   // jaringan yang lengkap).
-  if (!fromCache && !fetchFailed) saveDataCache(runStore);
+  if (!fromCache && !fetchFailed) saveDataCache(runStore, extra);
 
   if (sectionsHtml.length === 0 && !introHtml){
     if (isInitial){
@@ -1827,6 +1861,7 @@ async function loadAndRender(isInitial, fromCache){
   lastDataSignature = signature;
   sectionMembers = newSectionMembers;
   sectionMeta = newSectionMeta;
+  siteLeaderFlag = !!extra.leader;
 
   // Simpan state tampilan saat ini (posisi scroll + tab/sub-tab yang aktif)
   // supaya setelah render ulang, sudut pandang pengguna tidak "melompat"
@@ -2190,39 +2225,35 @@ function startLoginPrefetch(){
   }
 
   picIndexPromise = (async () => {
-    const master = await fetchSheet(MASTER_SHEET_NAME);
-    const sheetRow = master.find(r => normalizeHeader(r[0]) === "sheet");
-    const pwRow    = master.find(r => normalizeHeader(r[0]) === "sheet password");
-    if (!sheetRow) throw new Error("baris Sheet tidak ditemukan");
-
-    const names = [];
-    const hasPw = {};
-    for (let c = 1; c < sheetRow.length; c++){
-      const name = (sheetRow[c] || "").trim();
-      const key = normSheetName(name);
-      if (!key || key === "master" || key === "all") continue;
-      names.push({ key: key, name: name });
-      if (pwRow && (pwRow[c] || "").trim()) hasPw[key] = true;
-    }
-
-    const all = await Promise.all(names.map(n => fetchSheet(n.name).catch(() => null)));
-    if (all.some(rows => rows === null)) throw new Error("ada sheet yang gagal dibaca");
-
+    const d = await getServerData();      // belum login -> tanpa link PIC Menu
     const emails = {};
-    all.forEach((rows, i) => {
-      if (rows.length < 2) return;
+    Object.keys(d.sheets || {}).forEach(name => {
+      const rows = d.sheets[name];
+      if (!rows || rows.length < 2) return;
+      const key = normSheetName(name);
       const cEml = rows[0].map(normalizeHeader).findIndex(h => h.includes("email") || h.includes("e-mail"));
       if (cEml < 0) return;
       rows.slice(1).forEach(r => {
         splitEmails(r[cEml]).forEach(em => {
           const list = emails[em] || (emails[em] = []);
-          if (!list.includes(names[i].key)) list.push(names[i].key);
+          if (!list.includes(key)) list.push(key);
         });
       });
     });
-    return { emails: emails, hasPw: hasPw };
+    const hasPw = {};
+    (d.pwSheets || []).forEach(k => { hasPw[k] = true; });
+    return { emails: emails, hasPw: hasPw, inactive: new Set(d.inactive || []) };
   })();
   picIndexPromise.catch(() => {});
+}
+
+// SHA-256 (hex) dari teks; null kalau browser tidak mendukung.
+async function sha256Hex(text){
+  try {
+    if (!window.crypto || !crypto.subtle) return null;
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  } catch (e){ return null; }
 }
 
 // Keputusan lokal: { ok, isPic, needsPassword } atau null kalau indeks belum siap.
@@ -2233,7 +2264,14 @@ async function localPicLookup(email){
       picIndexPromise,
       new Promise((_, reject) => setTimeout(() => reject(new Error("lambat")), 2500))
     ]);
-    const sheets = idx.emails[String(email).trim().toLowerCase()] || [];
+    const em = String(email).trim().toLowerCase();
+    // Email yang juga tercatat di sheet NONAKTIF tidak ada di data lokal ->
+    // biarkan server yang memutuskan (lebih lambat, tapi benar).
+    if (idx.inactive.size > 0){
+      const h = await sha256Hex(em);
+      if (h === null || idx.inactive.has(h)) return null;
+    }
+    const sheets = idx.emails[em] || [];
     return { ok: true, isPic: sheets.length > 0, needsPassword: sheets.some(k => idx.hasPw[k]) };
   } catch (err){
     return null;
@@ -2490,8 +2528,9 @@ async function main(){
   // Kalau ada cache dari kunjungan sebelumnya: tampilkan INSTAN dari cache,
   // lalu segarkan diam-diam dari Google Sheet. Kalau tidak: muat seperti biasa.
   const cached = loadDataCache();
-  if (cached && cached[MASTER_SHEET_NAME]){
-    cacheSheets = cached;
+  if (cached && cached.sheets[MASTER_SHEET_NAME]){
+    cacheSheets = cached.sheets;
+    cacheExtra = cached.extra;
     await loadAndRender(true, true);
     loadAndRender(false).catch(() => {});
   } else {

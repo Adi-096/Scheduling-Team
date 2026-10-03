@@ -416,8 +416,12 @@
     gap:12px;flex-wrap:wrap;margin-bottom:28px;
   }
   .section-actions .team-btn{ margin-bottom:0; }
-  .pic-slot{ margin-left:auto; }
+  /* display:flex membuat tombol di dalamnya jadi flex item langsung (bukan
+     inline di dalam baris teks), sehingga tidak ada selisih tinggi/baseline
+     dan posisinya persis sejajar dengan tombol Our Team. */
+  .pic-slot{ margin-left:auto; display:flex; align-items:center; }
   .pic-slot:empty{ display:none; }
+  .section-actions .team-btn, .section-actions .pic-menu-btn{ margin:0; line-height:1.2; }
   .pic-modal{ max-width:560px; }
   /* Popup PIC Menu tampil di tengah layar (vertikal & horizontal). margin:auto
      dipakai (bukan align-items:center) supaya popup tetap bisa di-scroll dari
@@ -1071,15 +1075,16 @@ let sectionMeta = [];         // paralel dengan sectionMembers: {header, sheetKe
 
 /* =========================================================================
    PIC MENU — tombol di sebelah "Our Team" (rata kanan) yang berisi tautan
-   khusus PIC. Sumber datanya blok "Kumpulan Link PIC" di sheet Master:
-     Kolom "PIC Sheet"   -> nama sheet (harus sama dengan baris "Sheet")
-     Kolom "Nama Link"   -> teks tautan
-     Kolom "link / URL"  -> alamat tautan
-     Kolom "Keterangan"  -> penjelasan singkat (opsional)
-     Kolom "is Visible from other PIC" -> siapa lagi yang boleh melihat link
+   khusus PIC. Sumber datanya ada di MASING-MASING sheet tim (kolom I dst.,
+   sejajar dengan baris data di sheet itu), dikenali dari nama header:
+     "Nama Link"   -> teks tautan
+     "link / URL"  -> alamat tautan (baris tanpa URL valid diabaikan)
+     "Keterangan"  -> penjelasan singkat (opsional)
+     "is Visible from other PIC" -> siapa lagi yang boleh melihat link
         (kosong = hanya PIC sheet itu; "Master" = semua PIC; nama sheet = PIC
         sheet tsb juga). Leader (Section Head/Manager/Senior Manager) selalu
         bisa melihat semua link.
+   Pemilik link = sheet tempat link itu ditulis.
    Tombol hanya muncul di section yang punya setidaknya satu link yang boleh
    dilihat oleh email yang sedang login.
    ========================================================================= */
@@ -1104,57 +1109,51 @@ function safeHttpUrl(u){
   } catch (e){ return ""; }
 }
 
-// Baca blok "Kumpulan Link PIC" dari sheet Master -> { "nama sheet pemilik": [link, ...] }
+// Baca kolom link PIC di sebuah sheet tim -> [link, ...]
 // Setiap link: { owner, name, url, desc, visibleAll, visibleTo[] }
 //   - kolom "is Visible from other PIC" kosong  -> hanya PIC sheet pemilik
 //   - berisi "Master"                           -> semua PIC di semua sheet
 //   - berisi nama sheet (boleh lebih dari satu, dipisah baris baru / ; / |)
 //                                               -> PIC sheet pemilik + PIC sheet2 tsb
 // (Leader -- Section Head/Manager/Senior Manager -- selalu bisa melihat semua link.)
-function parsePicLinks(masterRows){
-  const map = {};
-  const hi = masterRows.findIndex(r => normalizeHeader(r[0]) === "pic sheet");
-  if (hi < 0) return map;
-  const hdr = masterRows[hi].map(normalizeHeader);
-  const pick = (fn, fallback) => { const i = hdr.findIndex(fn); return i >= 0 ? i : fallback; };
-  const cSheet = pick(h => h.includes("sheet"), 0);
-  const cName  = pick(h => h.includes("nama"), 1);
-  const cUrl   = pick(h => h.includes("url") || (h.includes("link") && !h.includes("nama")), 2);
-  const cDesc  = pick(h => h.includes("keterangan") || h.includes("desc"), 3);
-  const cVis   = pick(h => h.includes("visible"), 4);
-
-  // Daftar nama sheet yang dikenal (baris "Sheet" di Master) -- dipakai supaya
-  // nama sheet yang kebetulan mengandung koma tidak ikut terpecah.
-  const known = new Set();
-  const sheetRow = masterRows.find(r => normalizeHeader(r[0]) === "sheet");
-  if (sheetRow) sheetRow.slice(1).forEach(v => { const n = normSheetName(v); if (n) known.add(n); });
+// "knownSheets" = himpunan nama sheet (sudah dinormalisasi) dari baris "Sheet"
+// di Master, supaya nama sheet yang kebetulan mengandung koma tidak terpecah.
+function parseSheetPicLinks(rows, sheetKey, knownSheets){
+  const out = [];
+  if (!rows || rows.length < 2) return out;
+  const hdr = rows[0].map(normalizeHeader);
+  const cUrl  = hdr.findIndex(h => h.includes("url") || (h.includes("link") && !h.includes("nama")));
+  if (cUrl < 0) return out;
+  const cName = hdr.findIndex(h => h.includes("nama") && h.includes("link"));
+  const cDesc = hdr.findIndex(h => h.includes("keterangan"));
+  const cVis  = hdr.findIndex(h => h.includes("visible"));
+  const owner = normSheetName(sheetKey);
 
   const parseVisible = (raw) => {
-    const out = { all: false, list: [] };
+    const res = { all: false, list: [] };
     String(raw || "").split(/[\n;|]+/).forEach(part => {
       const n = normSheetName(part);
       if (!n) return;
-      const pieces = known.has(n) ? [n] : n.split(",").map(x => x.trim()).filter(Boolean);
-      pieces.forEach(x => { if (x === "master" || x === "all") out.all = true; else out.list.push(x); });
+      const pieces = knownSheets.has(n) ? [n] : n.split(",").map(x => x.trim()).filter(Boolean);
+      pieces.forEach(x => { if (x === "master" || x === "all") res.all = true; else res.list.push(x); });
     });
-    return out;
+    return res;
   };
 
-  masterRows.slice(hi + 1).forEach(r => {
-    const owner = normSheetName(r[cSheet]);
+  rows.slice(1).forEach(r => {
     const url = safeHttpUrl(r[cUrl]);
-    if (!owner || !url) return;
-    const vis = parseVisible(r[cVis]);
-    (map[owner] = map[owner] || []).push({
+    if (!url) return;
+    const vis = parseVisible(cVis >= 0 ? r[cVis] : "");
+    out.push({
       owner: owner,
-      name: (r[cName] || "").trim() || url,
+      name: ((cName >= 0 ? r[cName] : "") || "").trim() || url,
       url: url,
-      desc: (r[cDesc] || "").trim(),
+      desc: ((cDesc >= 0 ? r[cDesc] : "") || "").trim(),
       visibleAll: vis.all,
       visibleTo: vis.list
     });
   });
-  return map;
+  return out;
 }
 
 // Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
@@ -1249,17 +1248,15 @@ async function loadAndRender(isInitial){
   sigParts.push(JSON.stringify(masterRows));
 
   const labelOf = (r) => (r[0] || "").toLowerCase().trim();
-  // Blok "Kumpulan Link PIC" ada di bawah baris-baris section. Baris-baris
-  // pencari label di bawah hanya membaca bagian ATAS (sebelum header "PIC
-  // Sheet") supaya isi blok link tidak tertukar dengan label section.
-  const linkHdrIdx = masterRows.findIndex(r => normalizeHeader(r[0]) === "pic sheet");
-  const topRows = linkHdrIdx >= 0 ? masterRows.slice(0, linkHdrIdx) : masterRows;
-  const picLinkMap = parsePicLinks(masterRows);
-  const sheetRow  = topRows.find(r => labelOf(r) === "sheet");
-  const judulRow  = topRows.find(r => labelOf(r).includes("judul") && !labelOf(r).includes("sub"));
-  const subRow    = topRows.find(r => labelOf(r).includes("sub"));
-  const careerRow = topRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
-  const statusRow = topRows.find(r => labelOf(r).includes("status"));
+  const sheetRow  = masterRows.find(r => labelOf(r) === "sheet");
+  // Nama semua sheet di Master (dinormalisasi) -- dipakai saat membaca kolom
+  // "is Visible from other PIC" di tiap sheet tim.
+  const knownSheets = new Set();
+  if (sheetRow) sheetRow.slice(1).forEach(v => { const n = normSheetName(v); if (n) knownSheets.add(n); });
+  const judulRow  = masterRows.find(r => labelOf(r).includes("judul") && !labelOf(r).includes("sub"));
+  const subRow    = masterRows.find(r => labelOf(r).includes("sub"));
+  const careerRow = masterRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
+  const statusRow = masterRows.find(r => labelOf(r).includes("status"));
 
   if (!sheetRow || !judulRow){
     if (isInitial){
@@ -1337,8 +1334,7 @@ async function loadAndRender(isInitial){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    const picLinks = picLinkMap[normSheetName(sectionKey)] || [];
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: picLinks });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: parseSheetPicLinks(rows, sectionKey, knownSheets) });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){

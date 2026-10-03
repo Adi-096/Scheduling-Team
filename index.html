@@ -1975,7 +1975,11 @@ async function loadAndRender(isInitial, fromCache){
 
     // Terapkan pilihan saat ini (currentSel) ke tampilan:
     //   Selalu tepat satu section yang tampil (career + secKey).
-    // Wajib ada satu yang terpilih: klik tab/sub-tab yang sedang aktif tidak melakukan apa-apa.
+    // Tab utama (kategori): SELALU wajib ada satu yang terpilih untuk semua user.
+    // Sub-tab (section): wajib pilih satu juga, KECUALI Leader dan user yang
+    // punya akses Editor Menu -- mereka boleh mematikan sub-tab yang aktif
+    // sehingga semua section di kategori itu tampil sekaligus.
+    const canToggleSub = !!viewVis.isLeader || (extra.editorFor || []).length > 0;
     const applySel = () => {
       const { career, secKey } = currentSel;
       tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
@@ -2003,8 +2007,12 @@ async function loadAndRender(isInitial, fromCache){
       subtabsEl.classList.add("open");
       subtabsEl.querySelectorAll(".subtab-btn").forEach(sBtn => {
         sBtn.addEventListener("click", () => {
-          if (currentSel.secKey === sBtn.dataset.sheetKey) return;   // tidak bisa di-toggle off
-          currentSel.secKey = sBtn.dataset.sheetKey;
+          if (currentSel.secKey === sBtn.dataset.sheetKey){
+            if (!canToggleSub) return;       // user biasa: wajib pilih salah satu
+            currentSel.secKey = null;        // Leader/Editor: kembali ke semua section di kategori ini
+          } else {
+            currentSel.secKey = sBtn.dataset.sheetKey;
+          }
           applySel();
         });
       });
@@ -2025,8 +2033,11 @@ async function loadAndRender(isInitial, fromCache){
     // pertama sesuai Visibility Index user. Setelah itu pilihan user dipertahankan
     // walau data di-refresh otomatis.
     const me2 = getCurrentUserEmail();
-    const selValid = currentSel.set && currentSel.email === me2 &&
-      renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career);
+    const selValid = currentSel.set && currentSel.email === me2 && (
+      currentSel.secKey
+        ? renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career)
+        : (canToggleSub && careerTabs.includes(currentSel.career))
+    );
     if (!selValid){
       const pick = pickByPriority(renderedSecs);
       currentSel = { email: me2, set: true, career: pick.career, secKey: pick.sheetKey };

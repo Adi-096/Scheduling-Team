@@ -2862,7 +2862,7 @@ async function lookupPicLogin(email){
         console.warn("picLogin: respons tidak dikenali (Apps Script belum diperbarui?)", data);
         return { ok: true, isPic: false };
       }
-      return { ok: true, isPic: data.isPic, needsPassword: !!data.needsPassword };
+      return { ok: true, isPic: data.isPic, needsPassword: !!data.needsPassword, title: String(data.title || "") };
     } finally {
       clearTimeout(timer);
     }
@@ -2898,22 +2898,30 @@ function startLoginPrefetch(){
   picIndexPromise = (async () => {
     const d = await getServerData();      // belum login -> tanpa link PIC Menu
     const emails = {};
+    const jabs = {};   // email -> nama jabatan/posisi (leader tertinggi diutamakan)
     Object.keys(d.sheets || {}).forEach(name => {
       const rows = d.sheets[name];
       if (!rows || rows.length < 2) return;
       const key = normSheetName(name);
-      const cEml = rows[0].map(normalizeHeader).findIndex(h => h.includes("email") || h.includes("e-mail"));
+      const hdr = rows[0].map(normalizeHeader);
+      const cEml = hdr.findIndex(h => h.includes("email") || h.includes("e-mail"));
+      const cJab = hdr.findIndex(h => h.includes("jabatan") || h.includes("posisi"));
       if (cEml < 0) return;
       rows.slice(1).forEach(r => {
+        const rawJab = cJab >= 0 ? String(r[cJab] || "").trim() : "";
         splitEmails(r[cEml]).forEach(em => {
           const list = emails[em] || (emails[em] = []);
           if (!list.includes(key)) list.push(key);
+          if (rawJab){
+            const cur = jabs[em] ? LEADER_TITLES.indexOf(normJabatan(jabs[em])) : -2;
+            if (!jabs[em] || LEADER_TITLES.indexOf(normJabatan(rawJab)) > cur) jabs[em] = rawJab;
+          }
         });
       });
     });
     const hasPw = {};
     (d.pwSheets || []).forEach(k => { hasPw[k] = true; });
-    return { emails: emails, hasPw: hasPw, inactive: new Set(d.inactive || []), devs: new Set(d.devs || []) };
+    return { emails: emails, jabs: jabs, hasPw: hasPw, inactive: new Set(d.inactive || []), devs: new Set(d.devs || []) };
   })();
   picIndexPromise.catch(() => {});
 }
@@ -2940,7 +2948,7 @@ async function localPicLookup(email){
     if (idx.devs.size > 0){
       const hd = await sha256Hex(em);
       if (hd === null) return null;   // tidak bisa hash -> biarkan server yang memutuskan
-      if (idx.devs.has(hd)) return { ok: true, isPic: true, needsPassword: true };
+      if (idx.devs.has(hd)) return { ok: true, isPic: true, needsPassword: true, title: "Developer" };
     }
     // Email yang juga tercatat di sheet NONAKTIF tidak ada di data lokal ->
     // biarkan server yang memutuskan (lebih lambat, tapi benar).
@@ -2949,7 +2957,7 @@ async function localPicLookup(email){
       if (h === null || idx.inactive.has(h)) return null;
     }
     const sheets = idx.emails[em] || [];
-    return { ok: true, isPic: sheets.length > 0, needsPassword: sheets.some(k => idx.hasPw[k]) };
+    return { ok: true, isPic: sheets.length > 0, needsPassword: sheets.some(k => idx.hasPw[k]), title: (idx.jabs && idx.jabs[em]) || "" };
   } catch (err){
     return null;
   }
@@ -3018,9 +3026,14 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
       const needsPw = !!pic.needsPassword;
       document.getElementById("pw-wrap").classList.toggle("hidden", !needsPw);
       document.getElementById("login-password").required = needsPw;
+      // Sebut jabatan/posisi di spreadsheet (atau "Developer"); kalau tidak diketahui, teks umum.
+      const titleTxt = String(pic.title || "").trim();
+      const who = titleTxt
+        ? `${/^[aeiou]/i.test(titleTxt) ? "an" : "a"} ${titleTxt}`
+        : "a PIC / Leader";
       document.getElementById("password-hint").textContent = needsPw
-        ? "Your email is registered as a PIC / Leader. Enter your password to sign in, or continue as a guest."
-        : "Your email is registered as a PIC / Leader. Press Sign In to continue, or continue as a guest.";
+        ? `Your email is registered as ${who}. Enter your password to sign in, or continue as a guest.`
+        : `Your email is registered as ${who}. Press Sign In to continue, or continue as a guest.`;
       goToStep("password");
       if (needsPw) document.getElementById("login-password").focus();
       return;

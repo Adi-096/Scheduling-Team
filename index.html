@@ -1629,7 +1629,8 @@ function getPicContext(){
     deleteScope: sitePicPermissions.deleteScope || "none",
     editorSheets: new Set((sitePicPermissions.editorFor || []).map(normSheetName)),
     sectionHeadCareers: new Set((sitePicPermissions.sectionHeadCareers || []).map(normSheetName)),
-    managerCareers: new Set((sitePicPermissions.managerCareers || []).map(normSheetName))
+    managerCareers: new Set((sitePicPermissions.managerCareers || []).map(normSheetName)),
+    registeredPicCareers: new Set((sitePicPermissions.picCareers || []).map(normSheetName))
   };
 }
 
@@ -1640,7 +1641,7 @@ function picScopeAllows(scope, owner, ctx){
   if (value === "own career"){
     const meta = sectionMeta.find(x => normSheetName(x.sheetKey) === normSheetName(owner));
     const career = normSheetName(meta && meta.career);
-    return !!career && (ctx.sectionHeadCareers.has(career) || ctx.managerCareers.has(career));
+    return !!career && (ctx.sectionHeadCareers.has(career) || ctx.managerCareers.has(career) || ctx.registeredPicCareers.has(career));
   }
   return false;
 }
@@ -1677,8 +1678,8 @@ function applyPicMenus(){
     const idx = Number(slot.dataset.picSlot);
     const meta = sectionMeta[idx];
     const list = ((meta && meta.links) || []).filter(l => canSeePicLink(l, ctx));
-    // Hak lihat dan Add/Edit dihitung terpisah: Manager semua career, Section
-    // Head hanya career scope, Authorized PIC hanya section Editor Menu.
+    // Hak lihat dan Add/Edit dihitung terpisah: Registered PIC pada own career,
+    // Authorized PIC pada section Editor Menu; Leader mengikuti career scope.
     // Hak Delete menu hanya diberikan kepada Developer di dalam modal.
     const owner = normSheetName(meta && meta.sheetKey);
     const canView = !!meta && picScopeAllows(ctx.view, owner, ctx);
@@ -2065,7 +2066,8 @@ const DOSEN_ALLOWED_INDEXES = [1, 3];
         Priority Dosen    |  1/3
    (pemisah boleh "/", "," atau spasi). Baris yang tidak ada -> pakai nilai
    bawaan di bawah ini. "BSP" = Binus Support / BSP / Contact Center.
-   Index yang tidak disebut otomatis dicoba setelahnya, urut dari kecil. */
+   Pilihan All berarti urutan 1,2,3. Index yang tidak disebut otomatis dicoba
+   setelahnya, urut dari kecil. */
 const DEFAULT_PRIORITY = {
   leader: [1, 2, 3],
   bsp:    [2, 3, 1],
@@ -2092,7 +2094,9 @@ function readPriorityConfig(masterRows){
     else if (/staff|lain|other|unit/.test(label)) key = "staff";
     if (!key) return;
     for (let c = 1; c < r.length; c++){
-      const nums = String(r[c] || "").match(/\d+/g);
+      const raw = String(r[c] || "").trim();
+      if (/\ball\b/i.test(raw)){ out[key] = [1, 2, 3]; break; }
+      const nums = raw.match(/\d+/g);
       if (nums && nums.length){ out[key] = nums.map(n => parseInt(n, 10)); break; }
     }
   });

@@ -424,6 +424,7 @@
   .acct-bar .acct-sep{ opacity:.6; }
   .acct-bar .acct-email{ color:var(--ink-soft); word-break:break-all; }
   .acct-bar .acct-role{ color:var(--primary); }
+  .activity-notice{margin:-9px 0 12px;text-align:right;font-size:10px;line-height:1.4;color:var(--ink-faint);}
   .acct-bar .acct-out{
     font:inherit; letter-spacing:inherit; color:var(--ink-faint);
     background:none; border:none; padding:0; cursor:pointer;
@@ -790,7 +791,7 @@
       </div>
     </form>
 
-    <div class="login-note">BINUS Employees Only.</div>
+    <div class="login-note">BINUS Employees Only. Aktivitas section dan durasi tab aktif dicatat.</div>
   </div>
 </div>
 
@@ -814,6 +815,7 @@
 <div class="top-accent"></div>
 <div class="wrap">
   <div class="acct-bar" id="acct-bar"></div>
+  <div class="activity-notice">Log aktivitas: section yang dibuka dan durasi tab aktif dicatat.</div>
   <div class="masthead">
     <div class="brand">Course Scheduling &amp; Student Registration Team</div>
     <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
@@ -1186,6 +1188,7 @@ function openModal(header, sheetKey, members, sectionIdx){
   const teamMembers = members.map((m, index) => ({ member: m, index: index }))
     .filter(item => !isGroupRow(item.member.jabatan));
   teamModalState = { header: header, sheetKey: sheetKey, sectionIdx: sectionIdx };
+  setActivityDetail("Our Team / " + sheetKey);
 
   document.getElementById("modal-title").textContent = header;
   document.getElementById("modal-sub").textContent = `${sheetKey} — ${teamMembers.length} anggota tim`;
@@ -1215,6 +1218,7 @@ function openTeamEditForm(sectionIdx, memberIdx){
   const member = (sectionMembers[sectionIdx] || [])[memberIdx];
   if (!meta || !member || !member._row) return;
   teamModalState = { header: meta.header, sheetKey: meta.sheetKey, sectionIdx: sectionIdx, memberIdx: memberIdx };
+  setActivityDetail("Our Team edit / " + meta.sheetKey);
   const input = (key, label, type, max) => `<label>${label}<input name="${key}" type="${type}" maxlength="${max}" value="${escapeHtml(member[key] || "")}"></label>`;
   document.getElementById("modal-title").textContent = "Edit Team Member";
   document.getElementById("modal-sub").textContent = `${meta.sheetKey} — row ${member._row}`;
@@ -1288,6 +1292,7 @@ async function saveTeamMember(){
 }
 
 function openMemberModal(m){
+  setActivityDetail("Team member details");
   const waDigits = formatWaLink(m.whatsapp);
   const emailValid = isValidEmail(m.email);
 
@@ -1320,16 +1325,18 @@ function openMemberModal(m){
 
 document.getElementById("modal-close").addEventListener("click", () => {
   document.getElementById("modal-overlay").classList.remove("open");
+  restoreActivityRoute();
 });
 document.getElementById("modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "modal-overlay") e.target.classList.remove("open");
+  if (e.target.id === "modal-overlay"){ e.target.classList.remove("open"); restoreActivityRoute(); }
 });
 
 document.getElementById("member-modal-close").addEventListener("click", () => {
   document.getElementById("member-modal-overlay").classList.remove("open");
+  restoreActivityRoute();
 });
 document.getElementById("member-modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "member-modal-overlay") e.target.classList.remove("open");
+  if (e.target.id === "member-modal-overlay"){ e.target.classList.remove("open"); restoreActivityRoute(); }
 });
 
 document.addEventListener("click", (e) => {
@@ -1663,6 +1670,7 @@ function openPicMenu(idx){
   picMode = "view";
   picEditLink = null;
   renderPicModal(idx);
+  setActivityDetail("PIC Menu / " + meta.sheetKey);
   document.getElementById("pic-modal-overlay").classList.add("open");
 }
 
@@ -1863,9 +1871,10 @@ document.addEventListener("submit", (e) => {
 });
 document.getElementById("pic-modal-close").addEventListener("click", () => {
   document.getElementById("pic-modal-overlay").classList.remove("open");
+  restoreActivityRoute();
 });
 document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "pic-modal-overlay") e.target.classList.remove("open");
+  if (e.target.id === "pic-modal-overlay"){ e.target.classList.remove("open"); restoreActivityRoute(); }
 });
 
 /* =========================================================================
@@ -1993,6 +2002,7 @@ function renderLoginInfo(opts){
   const signout = document.getElementById("acct-signout");
   if (signout) signout.addEventListener("click", () => {
     if (!confirm("Sign out from " + saved.email + "?")) return;
+    endActivityTracking();
     try {
       localStorage.removeItem(LOGIN_STORAGE_KEY);
       localStorage.removeItem(DATA_CACHE_KEY);
@@ -2243,7 +2253,10 @@ async function loadAndRender(isInitial, fromCache){
     const catBtns = careerTabs.map(k =>
       `<button class="tab-btn" data-career="${escapeHtml(k)}" type="button" aria-pressed="false">${escapeHtml(k)}</button>`
     ).join("");
-    tabsWrap.innerHTML = `<div class="tabs-scroll">${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
+    const allSectionsBtn = viewVis.isDeveloper
+      ? `<button class="tab-btn" data-career-all type="button" aria-pressed="false">All Sections</button>`
+      : "";
+    tabsWrap.innerHTML = `<div class="tabs-scroll">${allSectionsBtn}${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
 
     const subtabsEl = document.getElementById("subtabs-scroll");
 
@@ -2257,18 +2270,14 @@ async function loadAndRender(isInitial, fromCache){
       return list[0];
     };
 
-    // Terapkan pilihan saat ini (currentSel) ke tampilan:
-    //   Selalu tepat satu section yang tampil (career + secKey).
-    // Tab utama (kategori): SELALU wajib ada satu yang terpilih untuk semua user.
-    // Sub-tab (section): wajib pilih satu juga, KECUALI Leader -- Leader boleh
-    // mematikan sub-tab yang aktif sehingga semua section di kategori itu tampil.
-    // Hanya LEADER yang boleh membiarkan sub-tab tidak terpilih (semua sub section tampil).
-    // Editor Menu dan user lain: wajib pilih salah satu sub-tab.
+    // Leader/Developer boleh melihat semua sub-section; Developer juga dapat
+    // men-toggle tampilan semua kategori sekaligus.
     const canToggleSub = !!viewVis.isLeader;
+    const canToggleCareer = !!viewVis.isDeveloper;
     const applySel = () => {
       const { career, secKey } = currentSel;
       tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
-        const on = b.dataset.career === career;
+        const on = b.hasAttribute("data-career-all") ? !career : (!!career && b.dataset.career === career);
         b.classList.toggle("active", on);
         b.setAttribute("aria-pressed", String(on));
       });
@@ -2284,6 +2293,7 @@ async function loadAndRender(isInitial, fromCache){
       if (list.length <= 1){
         subtabsEl.innerHTML = "";
         subtabsEl.classList.remove("open");
+        setActivityRoute(career ? career + (list.length ? " / " + list[0].label : "") : "All sections and sub-sections");
         return;
       }
       subtabsEl.innerHTML = list.map(item =>
@@ -2301,11 +2311,24 @@ async function loadAndRender(isInitial, fromCache){
           applySel();
         });
       });
+      const selected = list.find(item => item.sheetKey === secKey);
+      setActivityRoute(career ? career + (selected ? " / " + selected.label : " / All sub-sections") : "All sections and sub-sections");
     };
 
     tabsWrap.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        if (currentSel.career === btn.dataset.career) return;   // tab utama: wajib pilih satu (semua user)
+        if (btn.hasAttribute("data-career-all")){
+          currentSel = { email: getCurrentUserEmail(), set: true, career: null, secKey: null };
+          applySel();
+          return;
+        }
+        if (currentSel.career === btn.dataset.career){
+          if (canToggleCareer){
+            currentSel = { email: getCurrentUserEmail(), set: true, career: null, secKey: null };
+            applySel();
+          }
+          return;
+        }
         const list = renderedSecs.filter(s => s.career === btn.dataset.career);
         if (!list.length) return;
         // Leader: sub-tab tidak diklik -> semua sub section di kategori itu tampil.
@@ -2319,20 +2342,25 @@ async function loadAndRender(isInitial, fromCache){
     // Pilihan awal (hanya saat user ini belum pernah memilih). Setelah itu pilihan
     // user dipertahankan walau data di-refresh otomatis.
     const me2 = getCurrentUserEmail();
-    const selValid = currentSel.set && currentSel.email === me2 && !!currentSel.career && (
-      currentSel.secKey
+    const selValid = currentSel.set && currentSel.email === me2 && (
+      (!currentSel.career && canToggleCareer) ||
+      (!!currentSel.career && (currentSel.secKey
         ? renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career)
-        : (canToggleSub && careerTabs.includes(currentSel.career))
+        : (canToggleSub && careerTabs.includes(currentSel.career))))
     );
     if (!selValid){
       const pick = pickByPriority(renderedSecs);
-      // Leader: tab utama terpilih (prioritas Visibility Index), sub-tab TIDAK diklik -> semua sub section tampil.
+      // Developer: semua kategori dan section tampil pertama kali.
+      // Leader: kategori prioritas terpilih dengan semua sub-section terlihat.
       // User lain: langsung ke satu section prioritas pertama.
-      currentSel = { email: me2, set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
+      currentSel = viewVis.isDeveloper
+        ? { email: me2, set: true, career: null, secKey: null }
+        : { email: me2, set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
     }
     applySel();
   } else {
     tabsWrap.innerHTML = "";
+    setActivityRoute("Website overview");
   }
 
   document.querySelectorAll(".team-btn").forEach(btn => {
@@ -2433,6 +2461,87 @@ function logSignIn(email, status, extra, keterangan){
   }).catch(() => { /* diamkan saja kalau gagal, jangan ganggu proses login */ });
 }
 
+// Pencatatan aktivitas menyimpan hanya section/konteks yang aktif dan durasi
+// tab website terlihat (tidak mengirim isi klik/form atau merekam aktivitas di
+// tab lain). Event durasi dikirim saat berpindah section, pindah tab, atau keluar.
+let activityState = { sessionId: "", context: "", contextStartedAt: 0, activeSince: 0, totalActiveMs: 0, ended: false };
+let activityListenersAttached = false;
+let activityBaseRoute = "Website overview";
+function activityNow(){ return Date.now(); }
+function activitySessionId(){
+  try { return crypto.randomUUID().replace(/-/g, ""); }
+  catch (e){ return String(activityNow()) + Math.random().toString(36).slice(2, 12); }
+}
+function sendActivityEvent(event, context, durationSeconds){
+  const saved = readSavedLoginState();
+  if (!saved || !saved.email || !LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return;
+  const payload = {
+    action: "logActivity", event: event, email: saved.email,
+    context: context || "-", durationSeconds: Math.max(0, Math.floor(durationSeconds || 0)),
+    sessionId: activityState.sessionId, device: getDeviceId(),
+    developerToken: saved.developer ? getDeveloperToken() : ""
+  };
+  const body = JSON.stringify(payload);
+  try {
+    if (navigator.sendBeacon && navigator.sendBeacon(LOG_WEBAPP_URL, new Blob([body], { type: "text/plain;charset=UTF-8" }))) return;
+  } catch (e){}
+  fetch(LOG_WEBAPP_URL, {
+    method: "POST", mode: "no-cors", keepalive: true,
+    headers: { "Content-Type": "text/plain;charset=utf-8" }, body: body
+  }).catch(() => {});
+}
+function flushActivityContext(){
+  if (!activityState.context || !activityState.contextStartedAt) return;
+  const seconds = Math.floor((activityNow() - activityState.contextStartedAt) / 1000);
+  if (seconds > 0) sendActivityEvent("section_duration", activityState.context, seconds);
+  activityState.contextStartedAt = 0;
+}
+function startActivityTracking(){
+  if (activityState.sessionId && !activityState.ended) return;
+  activityState = { sessionId: activitySessionId(), context: "", contextStartedAt: 0, activeSince: 0, totalActiveMs: 0, ended: false };
+  if (!activityListenersAttached){
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden){
+        if (activityState.activeSince){ activityState.totalActiveMs += Math.max(0, activityNow() - activityState.activeSince); activityState.activeSince = 0; }
+        flushActivityContext();
+      } else if (!activityState.ended){
+        activityState.activeSince = activityNow();
+        if (activityState.context) activityState.contextStartedAt = activityState.activeSince;
+      }
+    });
+    window.addEventListener("pagehide", () => endActivityTracking());
+    activityListenersAttached = true;
+  }
+  if (!document.hidden){
+    activityState.activeSince = activityNow();
+    if (activityState.context) activityState.contextStartedAt = activityState.activeSince;
+  }
+}
+function setActivityRoute(context){
+  if (!readSavedLoginState()) return;
+  startActivityTracking();
+  const next = String(context || "Website overview").replace(/[\r\n\t]+/g, " ").slice(0, 300);
+  activityBaseRoute = next;
+  setActivityDetail(next);
+}
+function setActivityDetail(context){
+  if (!readSavedLoginState()) return;
+  startActivityTracking();
+  const next = String(context || "Website overview").replace(/[\r\n\t]+/g, " ").slice(0, 300);
+  if (activityState.context === next) return;
+  flushActivityContext();
+  activityState.context = next;
+  activityState.contextStartedAt = (!document.hidden && !activityState.ended) ? activityNow() : 0;
+}
+function restoreActivityRoute(){ setActivityDetail(activityBaseRoute); }
+function endActivityTracking(){
+  if (!activityState.sessionId || activityState.ended) return;
+  flushActivityContext();
+  if (activityState.activeSince){ activityState.totalActiveMs += Math.max(0, activityNow() - activityState.activeSince); activityState.activeSince = 0; }
+  sendActivityEvent("session_end", "Visible website time", Math.floor(activityState.totalActiveMs / 1000));
+  activityState.ended = true;
+}
+
 function getEmailDomain(email){
   const parts = String(email || "").trim().toLowerCase().split("@");
   return parts.length === 2 ? parts[1] : "";
@@ -2487,6 +2596,7 @@ function completeLogin(state, statusText, extraForLog){
   // supaya di sheet jelas ini bukan baris kosong, tapi memang login ini yang
   // baru tersimpan di browser-nya (untuk dipakai auto-login berikutnya).
   logSignIn(state.email, statusText, extraForLog, "Tersimpan");
+  startActivityTracking();
   hideLoginGate();
   main();
 }
@@ -2568,6 +2678,7 @@ async function tryAutoLogin(){
   }
 
   hideLoginGate();
+  startActivityTracking();
   main();
 
   checkLoginRevoked(saved.email).then(revoked => {

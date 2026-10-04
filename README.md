@@ -16,11 +16,11 @@ Data yang ditampilkan adalah Data yang disesuaikan dengan Visibility Index denga
   
   --> email Leader: Semua Visibility Index    
 
-  --> email PIC: sesuai Visibility index  
+  --> email PIC: sesuai Visibility Index  
 
-  --> Department/Unit: Binus Support / BSP / Contact Center: Visibility Index yang terlihat secara berurutan adalah 3 / 2 / 1 
+  --> Department/Unit: Binus Support / BSP / Contact Center / CC: Visibility Index yang terlihat secara berurutan adalah 2 / 3 / 1 
   
-  --> epartment/Unit: selain Binus Support / BSP / Contact Center: Visibility Index yang terlihat secara berurutan 1 / 2 / 3
+  --> Department/Unit: selain Binus Support / BSP / Contact Center / CC: Visibility Index yang terlihat secara berurutan 1 / 2 / 3
   
   --> Dosen: Visibility Index yang terlihat Hanya 1 / 3
 

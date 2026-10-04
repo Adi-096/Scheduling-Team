@@ -364,6 +364,7 @@
 
   /* single-member detail modal */
   .member-modal{ max-width:380px; text-align:center; }
+  #member-modal-overlay .member-modal{ margin:auto; }
   .member-card{ display:flex;flex-direction:column;align-items:center; }
   .member-card .dp{
     width:96px;height:96px;border-radius:50%;
@@ -424,7 +425,7 @@
   .acct-bar .acct-sep{ opacity:.6; }
   .acct-bar .acct-email{ color:var(--ink-soft); word-break:break-all; }
   .acct-bar .acct-role{ color:var(--primary); }
-  .activity-notice{margin:-9px 0 12px;text-align:right;font-size:10px;line-height:1.4;color:var(--ink-faint);}
+  .activity-notice{margin:8px 0 0;text-align:right;font-size:10px;line-height:1.4;color:var(--ink-faint);}
   .acct-bar .acct-out{
     font:inherit; letter-spacing:inherit; color:var(--ink-faint);
     background:none; border:none; padding:0; cursor:pointer;
@@ -815,7 +816,6 @@
 <div class="top-accent"></div>
 <div class="wrap">
   <div class="acct-bar" id="acct-bar"></div>
-  <div class="activity-notice">Log aktivitas: section yang dibuka dan durasi tab aktif dicatat.</div>
   <div class="masthead">
     <div class="brand">Course Scheduling &amp; Student Registration Team</div>
     <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
@@ -828,6 +828,7 @@
   </div>
 
   <footer class="page-footer">This directory automatically syncs in real time with its data source.</footer>
+  <div class="activity-notice">Log aktivitas: section yang dibuka dan durasi tab aktif dicatat.</div>
 </div>
 
 <div class="modal-overlay" id="modal-overlay">

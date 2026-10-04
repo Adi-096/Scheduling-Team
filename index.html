@@ -933,7 +933,7 @@ function parseCSV(text){
 // langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
 // hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
 // dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
-const DATA_CACHE_KEY = "srsc_data_cache_v4";
+const DATA_CACHE_KEY = "srsc_data_cache_v6";
 let cacheSheets = null;
 let cacheExtra = null;
 function loadDataCache(){
@@ -952,6 +952,11 @@ function saveDataCache(store, extra){
   } catch (e){ /* penuh / tidak tersedia -> abaikan */ }
 }
 
+function getAccountPolicyFields(){
+  const saved = readSavedLoginState() || {};
+  return { accountRole: saved.role || "", unit: saved.unit || "" };
+}
+
 // ---- Ambil data dari Apps Script (spreadsheet privat) ----
 // Satu permintaan membawa semuanya: Master, semua sheet tim yang aktif, dan
 // link PIC Menu yang BOLEH dilihat email yang sedang login (disaring di server).
@@ -966,15 +971,15 @@ async function fetchServerData(email){
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
     const token = isDeveloperEmail(email) ? getDeveloperToken() : "";
+    const saved = readSavedLoginState() || {};
     const res = await fetch(LOG_WEBAPP_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "data", email: email || "", developerToken: token, _: Date.now() }),
+      body: JSON.stringify({ action: "data", email: email || "", developerToken: token, accountRole: saved.role || "", unit: saved.unit || "", _: Date.now() }),
       cache: "no-store", signal: ctrl.signal
     });
     const d = await res.json();
     if (!d || !d.ok || !d.master) throw new Error((d && d.error) || "Respons data tidak valid.");
-    const saved = readSavedLoginState();
     if (saved && saved.developer && !d.developer){
       localStorage.removeItem(LOGIN_STORAGE_KEY);
       localStorage.removeItem(DEVELOPER_TOKEN_KEY);
@@ -1159,7 +1164,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
     <h2 class="header">${escapeHtml(header)}</h2>
     ${subheader ? `<p class="subheader">${escapeHtml(subheader)}</p>` : ""}
     ${empty
-      ? `<p class="subheader">No PIC data has been added for this section yet.</p><div class="section-actions">${siteDeveloperFlag ? `<button class="team-btn" data-target="${secId}">Our Team</button>` : ""}<span class="pic-slot" data-pic-slot="${idx}"></span></div>`
+      ? `<p class="subheader">No PIC data has been added for this section yet.</p><div class="section-actions">${siteTeamPermissions.add ? `<button class="team-btn" data-target="${secId}">Our Team</button>` : ""}<span class="pic-slot" data-pic-slot="${idx}"></span></div>`
       : `<div class="section-actions"><button class="team-btn" data-target="${secId}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
           Our Team
@@ -1180,7 +1185,7 @@ function memberCardHtml(m, sectionIdx, memberIdx){
       <div class="task">${escapeHtml(m.task || "-")}</div>
       <hr>
       <div class="task-desc">${escapeHtml(m.desc || "-")}</div>
-      ${siteDeveloperFlag && m._row ? `<div class="team-card-actions"><button type="button" class="team-edit-btn" data-team-edit="${sectionIdx}" data-team-member="${memberIdx}">Edit</button><button type="button" class="team-delete-btn" data-team-delete="${sectionIdx}" data-team-member="${memberIdx}">Delete</button></div>` : ""}
+      ${m._row && (siteTeamPermissions.edit || siteTeamPermissions.delete) ? `<div class="team-card-actions">${siteTeamPermissions.edit ? `<button type="button" class="team-edit-btn" data-team-edit="${sectionIdx}" data-team-member="${memberIdx}">Edit</button>` : ""}${siteTeamPermissions.delete ? `<button type="button" class="team-delete-btn" data-team-delete="${sectionIdx}" data-team-member="${memberIdx}">Delete</button>` : ""}</div>` : ""}
     </div>`;
 }
 
@@ -1188,10 +1193,9 @@ let teamModalState = null;
 let teamEditBusy = false;
 
 function openModal(header, sheetKey, members, sectionIdx){
-  // Baris dengan Jabatan mengandung kata "Group" tidak ikut ditampilkan di popup
-  // "Our Team" untuk pengguna biasa; Developer tetap mendapat seluruh baris.
+  // Baris Group disembunyikan kecuali pengguna memiliki izin Edit/Delete Our Team.
   const teamMembers = members.map((m, index) => ({ member: m, index: index }))
-    .filter(item => siteDeveloperFlag || !isGroupRow(item.member.jabatan));
+    .filter(item => siteTeamPermissions.edit || siteTeamPermissions.delete || !isGroupRow(item.member.jabatan));
   teamModalState = { header: header, sheetKey: sheetKey, sectionIdx: sectionIdx, mode: "view" };
   setActivityDetail("Our Team / " + sheetKey);
 
@@ -1207,7 +1211,7 @@ function openModal(header, sheetKey, members, sectionIdx){
     .sort((a,b) => LEADER_TITLES.indexOf(normJabatan(a.member.jabatan)) - LEADER_TITLES.indexOf(normJabatan(b.member.jabatan)));
 
   const grid = document.getElementById("modal-grid");
-  const toolbar = siteDeveloperFlag
+  const toolbar = siteTeamPermissions.add
     ? `<div class="team-toolbar"><button type="button" class="team-edit-btn" data-team-add="${sectionIdx}">Add Team Member / Task</button></div>`
     : "";
   grid.innerHTML = toolbar + regular.map(item => memberCardHtml(item.member, sectionIdx, item.index)).join("")
@@ -1221,7 +1225,7 @@ function openModal(header, sheetKey, members, sectionIdx){
 }
 
 function openTeamAddForm(sectionIdx){
-  if (!siteDeveloperFlag) return;
+  if (!siteTeamPermissions.add) return;
   const meta = sectionMeta[sectionIdx];
   if (!meta) return;
   teamModalState = { header: meta.header, sheetKey: meta.sheetKey, sectionIdx: sectionIdx, memberIdx: null, mode: "add" };
@@ -1246,7 +1250,7 @@ function openTeamAddForm(sectionIdx){
 }
 
 function openTeamEditForm(sectionIdx, memberIdx){
-  if (!siteDeveloperFlag) return;
+  if (!siteTeamPermissions.edit) return;
   const meta = sectionMeta[sectionIdx];
   const member = (sectionMembers[sectionIdx] || [])[memberIdx];
   if (!meta || !member || !member._row) return;
@@ -1280,8 +1284,9 @@ function setTeamEditStatus(type, text){
 }
 
 async function saveTeamMember(){
-  if (teamEditBusy || !siteDeveloperFlag || !teamModalState) return;
+  if (teamEditBusy || !teamModalState) return;
   const ctx = teamModalState;
+  if ((ctx.mode === "add" && !siteTeamPermissions.add) || (ctx.mode !== "add" && !siteTeamPermissions.edit)) return;
   const meta = sectionMeta[ctx.sectionIdx];
   const member = ctx.mode === "add" ? null : (sectionMembers[ctx.sectionIdx] || [])[ctx.memberIdx];
   const form = document.getElementById("team-edit-form");
@@ -1301,7 +1306,7 @@ async function saveTeamMember(){
     const res = await fetch(LOG_WEBAPP_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: action, actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member ? member._row : null, fields: fields, expected: expected })
+      body: JSON.stringify(Object.assign({ action: action, actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member ? member._row : null, fields: fields, expected: expected }, getAccountPolicyFields()))
     });
     const data = await res.json();
     if (!data || !data.ok){
@@ -1326,7 +1331,7 @@ async function saveTeamMember(){
 }
 
 async function deleteTeamMember(sectionIdx, memberIdx){
-  if (!siteDeveloperFlag || teamEditBusy) return;
+  if (!siteTeamPermissions.delete || teamEditBusy) return;
   const meta = sectionMeta[sectionIdx];
   const member = (sectionMembers[sectionIdx] || [])[memberIdx];
   if (!meta || !member || !member._row) return;
@@ -1337,7 +1342,7 @@ async function deleteTeamMember(sectionIdx, memberIdx){
   try {
     const res = await fetch(LOG_WEBAPP_URL, {
       method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "deleteTeamMember", actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member._row, expected: expected })
+      body: JSON.stringify(Object.assign({ action: "deleteTeamMember", actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member._row, expected: expected }, getAccountPolicyFields()))
     });
     const data = await res.json();
     if (!data || !data.ok) { window.alert((data && data.error) || "Could not delete the team member/task."); return; }
@@ -1543,31 +1548,44 @@ let siteDeveloperFlag = false; // status Developer dari whitelist server
 let siteManagerFlag = false;
 let siteSectionHeadFlag = false;
 let siteSectionHeadCareers = [];
+let sitePicPermissions = { roleKey: "staff", visibilityKey: "staff", view: "none", manage: "none", deleteScope: "none", editorFor: [], sectionHeadCareers: [], managerCareers: [], teamAdd: false, teamEdit: false, teamDelete: false, signOut: false };
+let siteTeamPermissions = { add: false, edit: false, delete: false };
+let siteRolePolicy = null;
 
 function getPicContext(){
-  const ctx = {
-    leader: siteLeaderFlag, developer: siteDeveloperFlag, manager: siteManagerFlag, sectionHead: siteSectionHeadFlag,
-    sectionHeadCareers: new Set(siteSectionHeadCareers.map(normSheetName)), editorSheets: new Set()
+  return {
+    view: sitePicPermissions.view || "none",
+    manage: sitePicPermissions.manage || "none",
+    deleteScope: sitePicPermissions.deleteScope || "none",
+    editorSheets: new Set((sitePicPermissions.editorFor || []).map(normSheetName)),
+    sectionHeadCareers: new Set((sitePicPermissions.sectionHeadCareers || []).map(normSheetName)),
+    managerCareers: new Set((sitePicPermissions.managerCareers || []).map(normSheetName))
   };
-  const email = getCurrentUserEmail();
-  if (!email) return ctx;
-  sectionMeta.forEach((meta, i) => {
-    if ((meta.editors || []).includes(email)) ctx.editorSheets.add(normSheetName(meta.sheetKey));
-  });
-  return ctx;
+}
+
+function picScopeAllows(scope, owner, ctx){
+  const value = String(scope || "none").toLowerCase().replace(/[-_]/g, " ").trim();
+  if (value === "all") return true;
+  if (value === "assigned section") return ctx.editorSheets.has(normSheetName(owner));
+  if (value === "own career"){
+    const meta = sectionMeta.find(x => normSheetName(x.sheetKey) === normSheetName(owner));
+    const career = normSheetName(meta && meta.career);
+    return !!career && (ctx.sectionHeadCareers.has(career) || ctx.managerCareers.has(career));
+  }
+  return false;
 }
 
 function canSeePicLink(link, ctx){
-  if (ctx.developer || ctx.manager || ctx.sectionHead) return true;
-  return ctx.editorSheets.has(link.owner); // Authorized PIC hanya pada section yang ditugaskan
+  return picScopeAllows(ctx.view, link.owner, ctx);
 }
 
 // Link yang boleh dilihat user, per section (dipakai juga saat popup dibuka).
 let picVisible = {};
 let picViewMap = {};
 let picCanManage = false;   // boleh Add/Edit di section yang sedang dibuka
-let picCanDelete = false;   // Delete menu hanya untuk Developer
+let picCanDelete = false;   // Diisi dari Delete Scope Role Policy untuk section aktif.
 let picManageMap = {};
+let picDeleteMap = {};
 let picCurrentIdx = null;
 let picBusy = false;
 let knownSheetsGlobal = new Set();
@@ -1577,6 +1595,7 @@ function applyPicMenus(){
   picVisible = {};
   picViewMap = {};
   picManageMap = {};
+  picDeleteMap = {};
   document.querySelectorAll("[data-pic-slot]").forEach(slot => {
     const idx = Number(slot.dataset.picSlot);
     const meta = sectionMeta[idx];
@@ -1585,17 +1604,14 @@ function applyPicMenus(){
     // Head hanya career scope, Authorized PIC hanya section Editor Menu.
     // Hak Delete menu hanya diberikan kepada Developer di dalam modal.
     const owner = normSheetName(meta && meta.sheetKey);
-    const career = normSheetName(meta && meta.career);
-    const isSectionHeadCareer = !!career && ctx.sectionHeadCareers.has(career);
-    const canView = !!meta && (ctx.developer || ctx.manager || ctx.sectionHead || ctx.editorSheets.has(owner));
-    const canManage = !!meta && (ctx.developer || ctx.manager || isSectionHeadCareer || ctx.editorSheets.has(owner));
+    const canView = !!meta && picScopeAllows(ctx.view, owner, ctx);
+    const canManage = !!meta && picScopeAllows(ctx.manage, owner, ctx);
+    const canDelete = !!meta && picScopeAllows(ctx.deleteScope, owner, ctx);
     picVisible[idx] = list;
     picViewMap[idx] = canView;
     picManageMap[idx] = canManage;
-    // Manager/Section Head dapat membuka menu lintas career; hanya career yang
-    // menjadi scope Section Head yang menyediakan Add/Edit. Authorized PIC hanya
-    // melihat section yang diberikan melalui Editor Menu.
-    slot.innerHTML = (canView && (list.length || canManage || ctx.manager || ctx.sectionHead || ctx.developer))
+    picDeleteMap[idx] = canDelete;
+    slot.innerHTML = canView
       ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
       : "";
   });
@@ -1738,7 +1754,7 @@ function openPicMenu(idx){
   picCanManage = !!picManageMap[idx];
   if (!picViewMap[idx]) return;
   picCurrentIdx = idx;
-  picCanDelete = !!siteDeveloperFlag;
+  picCanDelete = !!picDeleteMap[idx];
   picMode = "view";
   picEditLink = null;
   renderPicModal(idx);
@@ -1747,8 +1763,7 @@ function openPicMenu(idx){
 }
 
 // Kirim perintah tulis (add/edit/delete) ke Apps Script. Hasilnya dibaca balik
-// (JSON). "actor" = email yang melakukan; server memeriksa ulang bahwa email
-// itu memang leader atau "Menu Editor" untuk sheet tersebut.
+// (JSON). Server memeriksa actor terhadap matriks Role Policy dan scope section.
 async function picApi(payload){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL is not configured.");
@@ -1756,7 +1771,7 @@ async function picApi(payload){
   const res = await fetch(LOG_WEBAPP_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(Object.assign({}, payload, { developerToken: getDeveloperToken() }))
+    body: JSON.stringify(Object.assign({}, payload, { developerToken: getDeveloperToken() }, getAccountPolicyFields()))
   });
   let data;
   try { data = await res.json(); }
@@ -2020,28 +2035,56 @@ function resolveViewerVisibility(ctx){
   const saved = readSavedLoginState() || {};
   const asc = ctx.allIdx.slice().sort((a, b) => a - b);
   const P = ctx.priority || DEFAULT_PRIORITY;
-
-  if (ctx.developer) return { allowed: null, order: finishOrder(P.leader, asc), strict: false, isLeader: true, isDeveloper: true };
-  if (ctx.leader) return { allowed: null, order: finishOrder(P.leader, asc), strict: false, isLeader: true, isDeveloper: false };
-
-  if (saved.role === "Dosen" || saved.domain === "binus.ac.id"){
-    const allowed = new Set(DOSEN_ALLOWED_INDEXES);
-    return {
-      allowed: allowed,
-      order: finishOrder(P.dosen.filter(i => allowed.has(i)), DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b)),
-      strict: true
-    };
+  const policies = ctx.rolePolicy || {};
+  let roleKey = ctx.visibilityKey || ctx.roleKey || "";
+  if (!roleKey){
+    if (ctx.developer) roleKey = "developer";
+    else if (ctx.manager) roleKey = "manager";
+    else if (ctx.sectionHead) roleKey = "sectionhead";
+    else if (saved.role === "Dosen" || saved.domain === "binus.ac.id") roleKey = "dosen";
+    else if (ctx.userIdx.size > 0) roleKey = "registeredpic";
+    else {
+    const support = policies.support || {};
+    const terms = Array.isArray(support.matches) && support.matches.length ? support.matches : ["binus support", "bsp", "contact center"];
+    if (terms.some(term => term && String(saved.unit || "").toLowerCase().includes(String(term).toLowerCase()))) roleKey = "support";
+    else roleKey = "staff";
+    }
   }
-
-  if (ctx.userIdx.size > 0){   // PIC: boleh membuka semua index; yang dipilih pertama = index sheet miliknya
-    const own = Array.from(ctx.userIdx).sort((a, b) => a - b);
-    return { allowed: null, order: finishOrder(own, asc), strict: false };
+  const fallback = {
+    developer: { indexes: "all", order: P.leader, layout: "all" },
+    manager: { indexes: "all", order: P.leader, layout: "career" },
+    sectionhead: { indexes: "all", order: P.leader, layout: "career" },
+    registeredpic: { indexes: "all", orderOwnFirst: true, layout: "section" },
+    support: { indexes: "all", order: P.bsp, layout: "section" },
+    staff: { indexes: "all", order: P.staff, layout: "section" },
+    dosen: { indexes: DOSEN_ALLOWED_INDEXES.join(","), order: P.dosen, layout: "section" }
+  };
+  const defaultPolicy = fallback[roleKey] || fallback.staff;
+  const policy = policies[roleKey] || defaultPolicy;
+  const allowed = String(policy.indexes || "all").trim().toLowerCase() === "all"
+    ? null
+    : new Set((String(policy.indexes || "").match(/\d+/g) || []).map(Number));
+  let preferred = Array.isArray(policy.order) ? policy.order.slice() : [];
+  if ((!preferred.length || policies.source === "defaults") && policies.source !== "sheet") {
+    if (roleKey === "developer" || roleKey === "manager" || roleKey === "sectionhead") preferred = P.leader.slice();
+    else if (roleKey === "support") preferred = P.bsp.slice();
+    else if (roleKey === "staff") preferred = P.staff.slice();
+    else if (roleKey === "dosen") preferred = P.dosen.slice();
   }
-
-  if (SUPPORT_UNIT_PATTERN.test(String(saved.unit || ""))){
-    return { allowed: null, order: finishOrder(P.bsp, asc), strict: false };
+  if (policy.orderOwnFirst && ctx.userIdx.size){
+    preferred = Array.from(ctx.userIdx).sort((a, b) => a - b);
   }
-  return { allowed: null, order: finishOrder(P.staff, asc), strict: false };
+  if (allowed) preferred = preferred.filter(i => allowed.has(i));
+  const order = finishOrder(preferred, (allowed ? Array.from(allowed).sort((a, b) => a - b) : asc));
+  return {
+    allowed, order, strict: !!allowed,
+    isLeader: ["manager", "sectionhead"].includes(roleKey),
+    isDeveloper: roleKey === "developer",
+    roleKey,
+    initialLayout: policy.layout || defaultPolicy.layout,
+    canToggleCareer: (policy.layout || defaultPolicy.layout) === "all",
+    canToggleSub: ["all", "career"].includes(policy.layout || defaultPolicy.layout)
+  };
 }
 
 // Info akun yang sedang login: satu baris kecil di paling atas halaman.
@@ -2070,7 +2113,7 @@ function renderLoginInfo(opts){
     if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
   }
   if (!opts.isDeveloper && (opts.isLeader || opts.isPic) && opts.isEditor) parts.push(`<span>Editor Menu</span>`);
-  if (opts.isLeader || opts.isDeveloper){
+  if (opts.canSignOut){
     parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
   }
 
@@ -2097,7 +2140,7 @@ async function loadAndRender(isInitial, fromCache){
 
   const sigParts = [];
   let masterRows;
-  let extra = { links: {}, editorFor: [], leader: false, manager: false, sectionHead: false, sectionHeadCareers: [], developer: false };
+  let extra = { links: {}, editorFor: [], leader: false, manager: false, sectionHead: false, sectionHeadCareers: [], developer: false, picPermissions: null, rolePolicy: null };
 
   // Setiap siklus (kecuali dari cache) mengambil data BARU dari server.
   if (!fromCache) serverDataPromise = null;
@@ -2122,7 +2165,8 @@ async function loadAndRender(isInitial, fromCache){
       extra = {
         links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader,
         manager: !!d.manager, sectionHead: !!d.sectionHead,
-        sectionHeadCareers: d.sectionHeadCareers || [], developer: !!d.developer
+        sectionHeadCareers: d.sectionHeadCareers || [], developer: !!d.developer,
+        picPermissions: d.picPermissions || null, rolePolicy: d.rolePolicy || null
       };
     }
     sigParts.push("extra:" + JSON.stringify(extra));
@@ -2143,6 +2187,13 @@ async function loadAndRender(isInitial, fromCache){
   siteManagerFlag = !!extra.manager;
   siteSectionHeadFlag = !!extra.sectionHead;
   siteSectionHeadCareers = Array.isArray(extra.sectionHeadCareers) ? extra.sectionHeadCareers : [];
+  sitePicPermissions = extra.picPermissions || sitePicPermissions;
+  siteTeamPermissions = {
+    add: !!(sitePicPermissions && sitePicPermissions.teamAdd),
+    edit: !!(sitePicPermissions && sitePicPermissions.teamEdit),
+    delete: !!(sitePicPermissions && sitePicPermissions.teamDelete)
+  };
+  siteRolePolicy = extra.rolePolicy || siteRolePolicy;
   sigParts.push(JSON.stringify(masterRows));
 
   const labelOf = (r) => (r[0] || "").toLowerCase().trim();
@@ -2213,7 +2264,13 @@ async function loadAndRender(isInitial, fromCache){
       } catch (e){ /* sheet gagal dibaca: ditangani di loop utama */ }
     }
   }
-  const viewVis = resolveViewerVisibility({ leader: !!extra.leader, developer: !!extra.developer, userIdx: userIdx, allIdx: allIdx, priority: readPriorityConfig(masterRows) });
+  const viewVis = resolveViewerVisibility({
+    roleKey: sitePicPermissions && sitePicPermissions.roleKey,
+    visibilityKey: sitePicPermissions && sitePicPermissions.visibilityKey,
+    manager: !!extra.manager, sectionHead: !!extra.sectionHead,
+    leader: !!extra.leader, developer: !!extra.developer,
+    userIdx: userIdx, allIdx: allIdx, priority: readPriorityConfig(masterRows), rolePolicy: siteRolePolicy
+  });
   const canSeeIdx = (vi) => {
     if (!visRow) return true;                 // belum ada baris Visibility Index -> tidak difilter
     if (vi === null) return !viewVis.strict;  // sel kosong: terlihat, kecuali untuk Dosen
@@ -2334,14 +2391,14 @@ async function loadAndRender(isInitial, fromCache){
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
-  renderLoginInfo({ isLeader: !!viewVis.isLeader, isDeveloper: !!viewVis.isDeveloper, isManager: !!extra.manager, isSectionHead: !!extra.sectionHead, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
+  renderLoginInfo({ canSignOut: !!sitePicPermissions.signOut, isLeader: !!viewVis.isLeader, isDeveloper: !!viewVis.isDeveloper, isManager: !!extra.manager, isSectionHead: !!extra.sectionHead, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){
     const catBtns = careerTabs.map(k =>
       `<button class="tab-btn" data-career="${escapeHtml(k)}" type="button" aria-pressed="false">${escapeHtml(k)}</button>`
     ).join("");
-    const allSectionsBtn = viewVis.isDeveloper
+    const allSectionsBtn = viewVis.canToggleCareer
       ? `<button class="tab-btn" data-career-all type="button" aria-pressed="false">All Sections</button>`
       : "";
     tabsWrap.innerHTML = `<div class="tabs-scroll">${allSectionsBtn}${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
@@ -2358,10 +2415,9 @@ async function loadAndRender(isInitial, fromCache){
       return list[0];
     };
 
-    // Leader/Developer boleh melihat semua sub-section; Developer juga dapat
-    // men-toggle tampilan semua kategori sekaligus.
-    const canToggleSub = !!viewVis.isLeader;
-    const canToggleCareer = !!viewVis.isDeveloper;
+    // Hak toggle kategori/sub-section mengikuti Initial Layout di Role Policy.
+    const canToggleSub = !!viewVis.canToggleSub;
+    const canToggleCareer = !!viewVis.canToggleCareer;
     const applySel = () => {
       const { career, secKey } = currentSel;
       tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
@@ -2391,8 +2447,8 @@ async function loadAndRender(isInitial, fromCache){
       subtabsEl.querySelectorAll(".subtab-btn").forEach(sBtn => {
         sBtn.addEventListener("click", () => {
           if (currentSel.secKey === sBtn.dataset.sheetKey){
-            if (!canToggleSub) return;       // user biasa: wajib pilih salah satu
-            currentSel.secKey = null;        // Leader/Editor: kembali ke semua section di kategori ini
+            if (!canToggleSub) return;
+            currentSel.secKey = null;        // Kembali menampilkan seluruh sub-section kategori ini.
           } else {
             currentSel.secKey = sBtn.dataset.sheetKey;
           }
@@ -2419,10 +2475,9 @@ async function loadAndRender(isInitial, fromCache){
         }
         const list = renderedSecs.filter(s => s.career === btn.dataset.career);
         if (!list.length) return;
-        // Leader: sub-tab tidak diklik -> semua sub section di kategori itu tampil.
-        // User lain: langsung ke satu section prioritas pertama di kategori itu.
+        // Pilihan sub-section awal mengikuti Initial Layout Role Policy.
         const pick = pickByPriority(list);
-        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
+        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: viewVis.initialLayout === "section" ? pick.sheetKey : null };
         applySel();
       });
     });
@@ -2438,12 +2493,10 @@ async function loadAndRender(isInitial, fromCache){
     );
     if (!selValid){
       const pick = pickByPriority(renderedSecs);
-      // Developer: semua kategori dan section tampil pertama kali.
-      // Leader: kategori prioritas terpilih dengan semua sub-section terlihat.
-      // User lain: langsung ke satu section prioritas pertama.
-      currentSel = viewVis.isDeveloper
+      // Layout awal mengikuti kolom Initial Layout di Role Policy.
+      currentSel = viewVis.initialLayout === "all"
         ? { email: me2, set: true, career: null, secKey: null }
-        : { email: me2, set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
+        : { email: me2, set: true, career: pick.career, secKey: viewVis.initialLayout === "section" ? pick.sheetKey : null };
     }
     applySel();
   } else {

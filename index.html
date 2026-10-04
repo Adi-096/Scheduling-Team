@@ -394,39 +394,25 @@
     margin-top:4px;
   }
 
-  /* info akun yang sedang login (di atas kalimat footer) */
-  .login-info{ display:none; margin-top:40px; justify-content:center; }
-  .login-info.show{ display:flex; }
-  .login-card{
-    display:inline-flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center;
-    max-width:100%; padding:10px 16px;
-    background:var(--surface); border:1px solid var(--line); border-radius:14px;
-    box-shadow:0 1px 3px rgba(43,47,78,0.05);
+  /* info akun yang sedang login: baris tipis & tidak mencolok di paling atas halaman */
+  .acct-bar{
+    display:none; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:6px;
+    margin:-20px 0 18px;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.05em;
+    color:var(--ink-faint); line-height:1.5;
   }
-  .login-avatar{
-    width:34px; height:34px; border-radius:50%; flex:none;
-    background:var(--gradient-brand); color:#fff;
-    display:flex; align-items:center; justify-content:center;
-    font-family:'IBM Plex Mono',monospace; font-size:14px; font-weight:600; text-transform:uppercase;
+  .acct-bar.show{ display:flex; }
+  .acct-bar .acct-sep{ opacity:.6; }
+  .acct-bar .acct-email{ color:var(--ink-soft); word-break:break-all; }
+  .acct-bar .acct-role{ color:var(--primary); }
+  .acct-bar .acct-out{
+    font:inherit; letter-spacing:inherit; color:var(--ink-faint);
+    background:none; border:none; padding:0; cursor:pointer;
+    text-decoration:underline; text-underline-offset:2px;
   }
-  .login-text{ display:flex; flex-direction:column; gap:4px; min-width:0; text-align:left; }
-  .login-label{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); }
-  .login-email{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); word-break:break-all; }
-  .login-badges{ display:flex; gap:6px; flex-wrap:wrap; }
-  .login-badge{
-    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
-    padding:2px 8px; border-radius:10px; background:var(--surface-soft); color:var(--primary); border:1px solid var(--primary-soft);
-  }
-  .login-badge.strong{ background:var(--primary); color:#fff; border-color:var(--primary); }
-  .login-signout{
-    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
-    padding:7px 12px; border-radius:8px; cursor:pointer;
-    background:transparent; color:var(--ink-soft); border:1px solid var(--line);
-    transition:background .15s ease, color .15s ease, border-color .15s ease;
-  }
-  .login-signout:hover{ border-color:#B3401F; color:#B3401F; }
+  .acct-bar .acct-out:hover{ color:#B3401F; }
   footer.page-footer{
-    margin-top:16px;
+    margin-top:48px;
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
     color:var(--ink-faint);letter-spacing:.05em;
     text-align:center;
@@ -685,6 +671,7 @@
   @media (max-width:640px){
     .wrap{ padding:24px 16px 80px; }
     /* masthead: dua teks ditumpuk & rata tengah, rapi dan konsisten */
+    .acct-bar{ justify-content:center; margin:-8px 0 14px; text-align:center; }
     .masthead{
       flex-direction:column; align-items:center; justify-content:center;
       text-align:center; gap:6px; padding-bottom:16px;
@@ -797,6 +784,7 @@
 
 <div class="top-accent"></div>
 <div class="wrap">
+  <div class="acct-bar" id="acct-bar"></div>
   <div class="masthead">
     <div class="brand">Course Scheduling &amp; Student Registration Team</div>
     <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
@@ -807,8 +795,6 @@
   <div id="app">
     <div class="notice loading">Retrieving the latest information, please allow a moment…</div>
   </div>
-
-  <div class="login-info" id="login-info"></div>
 
   <footer class="page-footer">This directory automatically syncs in real time with its data source.</footer>
 </div>
@@ -1834,40 +1820,32 @@ function resolveViewerVisibility(ctx){
   return { allowed: null, order: finishOrder(P.staff, asc), strict: false };
 }
 
-// Kartu info akun yang sedang login (tampil di atas kalimat footer): email, peran
-// (Leader / PIC / Lecturer / Unit), badge Editor Menu, dan tombol Sign out.
+// Info akun yang sedang login: satu baris kecil di paling atas halaman
+// (email · peran · unit/ID · Sign out). Sengaja dibuat tidak mencolok.
 function renderLoginInfo(opts){
-  const box = document.getElementById("login-info");
+  const box = document.getElementById("acct-bar");
   if (!box) return;
   const saved = readSavedLoginState();
-  if (!saved || !saved.email){ box.className = "login-info"; box.innerHTML = ""; return; }
+  if (!saved || !saved.email){ box.className = "acct-bar"; box.innerHTML = ""; return; }
 
-  const badges = [];
+  const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
   if (saved.role === "Dosen"){
-    badges.push(`<span class="login-badge strong">Lecturer</span>`);
-    if (saved.kodeDosen) badges.push(`<span class="login-badge">ID: ${escapeHtml(saved.kodeDosen)}</span>`);
+    parts.push(`<span class="acct-role">Lecturer</span>`);
+    if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
   } else if (opts.isLeader){
-    badges.push(`<span class="login-badge strong">Leader</span>`);
+    parts.push(`<span class="acct-role">Leader</span>`);
   } else if (opts.isPic){
-    badges.push(`<span class="login-badge strong">PIC</span>`);
+    parts.push(`<span class="acct-role">PIC</span>`);
   } else {
-    badges.push(`<span class="login-badge strong">Staff</span>`);
-    if (saved.unit) badges.push(`<span class="login-badge">Unit: ${escapeHtml(saved.unit)}</span>`);
+    parts.push(`<span class="acct-role">Staff</span>`);
+    if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
   }
-  if (opts.isEditor) badges.push(`<span class="login-badge">Editor Menu</span>`);
+  if (opts.isEditor) parts.push(`<span>Editor Menu</span>`);
+  parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
-  box.className = "login-info show";
-  box.innerHTML = `
-    <div class="login-card">
-      <div class="login-avatar" aria-hidden="true">${escapeHtml(String(saved.email).charAt(0))}</div>
-      <div class="login-text">
-        <span class="login-label">Signed in as</span>
-        <span class="login-email">${escapeHtml(saved.email)}</span>
-        <span class="login-badges">${badges.join("")}</span>
-      </div>
-      <button type="button" class="login-signout" id="login-signout">Sign out</button>
-    </div>`;
-  document.getElementById("login-signout").addEventListener("click", () => {
+  box.className = "acct-bar show";
+  box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
+  document.getElementById("acct-signout").addEventListener("click", () => {
     if (!confirm("Sign out from " + saved.email + "?")) return;
     try {
       localStorage.removeItem(LOGIN_STORAGE_KEY);

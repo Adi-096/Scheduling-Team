@@ -499,6 +499,33 @@
   .pic-btn:disabled:hover{ background:var(--surface);color:#B3401F; }
   .pic-btn.danger.solid:disabled:hover{ background:#B3401F;color:#fff; }
   .pic-hint{ font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:14px 0 0; }
+  /* Role Switch (bar akun) */
+  .acct-bar .acct-switch{
+    font:inherit; letter-spacing:inherit; color:var(--primary);
+    background:transparent; border:1px solid var(--line); border-radius:6px;
+    padding:1px 4px; cursor:pointer;
+  }
+  /* Edit kartu Our Team */
+  .card{ position:relative; }
+  .card-edit{
+    position:absolute; top:8px; right:8px; z-index:2;
+    font:inherit; font-size:11px; padding:3px 10px; border-radius:999px;
+    border:1px solid var(--line); background:var(--surface); color:var(--primary); cursor:pointer;
+  }
+  .card-edit:hover{ background:var(--primary); color:#fff; }
+  #tedit-modal-overlay .modal{ margin:auto; }
+  .pic-form textarea{
+    width:100%;box-sizing:border-box;font-family:'Work Sans',sans-serif;font-size:14px;
+    padding:11px 13px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink);outline:none;resize:vertical;min-height:84px;
+    transition:border-color .15s ease;
+  }
+  .pic-form textarea:focus{ border-color:var(--accent); }
+  .tedit-lbl{ font-size:12px;color:var(--ink-soft);margin:2px 0 -4px; }
+  .tedit-ro{
+    font-size:12px;color:var(--ink-faint);line-height:1.55;
+    border:1px dashed var(--line);border-radius:8px;padding:8px 10px;
+  }
   .pic-status{ display:none;font-size:12.5px;line-height:1.5;border-radius:8px;padding:9px 12px; }
   .pic-status.show{ display:block; }
   .pic-status.ok{ color:#17623A;background:#E7F6EE;border:1px solid #BFE3CF; }
@@ -715,9 +742,9 @@
 
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
-<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353404</mso:_dlc_DocId>
-<mso:_dlc_DocIdItemGuid msdt:dt="string">8fc47207-016c-4cc4-b375-a9af2c4b594e</mso:_dlc_DocIdItemGuid>
-<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353404, 3ZXFJ3NKVQQC-643343547-353404</mso:_dlc_DocIdUrl>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">115ec381-ecf8-496f-922c-3ae72a955231</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353195, 3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocIdUrl>
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
@@ -851,6 +878,32 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="tedit-modal-overlay">
+  <div class="modal pic-modal">
+    <button class="modal-close" id="tedit-modal-close" type="button">Tutup ✕</button>
+    <h3>Edit Team Member</h3>
+    <div class="modal-sub" id="tedit-sub"></div>
+    <form id="tedit-form" class="pic-form" autocomplete="off">
+      <div class="tedit-ro" id="tedit-ro"></div>
+      <label class="tedit-lbl" for="tedit-pic">PIC name</label>
+      <input type="text" id="tedit-pic" maxlength="120" required>
+      <label class="tedit-lbl" for="tedit-task">Task</label>
+      <input type="text" id="tedit-task" maxlength="300">
+      <label class="tedit-lbl" for="tedit-desc">Description</label>
+      <textarea id="tedit-desc" maxlength="1000" rows="4"></textarea>
+      <label class="tedit-lbl" for="tedit-dp">Photo URL (DP)</label>
+      <input type="url" id="tedit-dp" placeholder="https://...">
+      <label class="tedit-lbl" for="tedit-wa">WhatsApp</label>
+      <input type="text" id="tedit-wa" maxlength="40" placeholder="+62...">
+      <div class="pic-actions">
+        <button type="button" class="pic-btn" id="tedit-cancel">Cancel</button>
+        <button type="submit" class="pic-btn primary" id="tedit-save">Save changes</button>
+      </div>
+    </form>
+    <div class="pic-status" id="tedit-status" style="margin-top:12px"></div>
+  </div>
+</div>
+
 <script>
 /* =========================================================================
    PENGATURAN
@@ -924,7 +977,7 @@ function parseCSV(text){
 // langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
 // hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
 // dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
-const DATA_CACHE_KEY = "srsc_data_cache_v2";
+const DATA_CACHE_KEY = "srsc_data_cache_v3";
 let cacheSheets = null;
 let cacheExtra = null;
 function loadDataCache(){
@@ -960,6 +1013,7 @@ async function fetchServerData(email){
     const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
     const d = await res.json();
     if (!d || !d.ok || !d.master) throw new Error((d && d.error) || "Respons data tidak valid.");
+    if (!d.policy) throw new Error("Server belum diperbarui: tempel Code.gs terbaru lalu Deploy > Manage deployments > New version.");
     return d;
   } finally {
     clearTimeout(timer);
@@ -1146,9 +1200,23 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
   </section>`;
 }
 
-function memberCardHtml(m){
+let teamEditRefs = [];       // anggota yang punya tombol Edit di popup Our Team yang sedang dibuka
+let lastTeamModal = null;    // { header, sheetKey, members } -> untuk render ulang setelah edit
+let teamEditTarget = null;   // { m, sheetKey, old }
+let teamEditBusy = false;
+
+// Boleh edit kartu di sheet ini? (scope "Our Team > Edit" di Role Policy; server mengecek ulang)
+function canEditTeamSheet(sheetKey){
+  return !viewPerms.viewAs && viewPerms.team.has(normSheetName(sheetKey));
+}
+
+function memberCardHtml(m, canEdit){
+  const editBtn = canEdit
+    ? `<button type="button" class="card-edit" data-tedit="${teamEditRefs.push(m) - 1}" title="Edit ${escapeHtml(m.pic || "")}">✎ Edit</button>`
+    : "";
   return `
     <div class="card">
+      ${editBtn}
       ${m.dp
         ? `<img class="dp" src="${escapeHtml(toDirectImageUrl(m.dp))}" alt="${escapeHtml(m.pic)}" onerror="this.outerHTML='<div class=&quot;dp fallback&quot;>${initials(m.pic)}</div>'">`
         : `<div class="dp fallback">${initials(m.pic)}</div>`}
@@ -1162,6 +1230,10 @@ function memberCardHtml(m){
 }
 
 function openModal(header, sheetKey, members){
+  lastTeamModal = { header: header, sheetKey: sheetKey, members: members };
+  Activity.ctx.sheet = sheetKey;
+  teamEditRefs = [];
+  const canEdit = canEditTeamSheet(sheetKey);
   // Baris dengan Jabatan mengandung "Group" tidak ikut ditampilkan di popup
   // "Our Team" (tapi tetap ada di daftar task pada halaman utama).
   const teamMembers = members.filter(m => !isGroupRow(m.jabatan));
@@ -1178,11 +1250,11 @@ function openModal(header, sheetKey, members){
     .sort((a,b) => LEADER_TITLES.indexOf(normJabatan(a.jabatan)) - LEADER_TITLES.indexOf(normJabatan(b.jabatan)));
 
   const grid = document.getElementById("modal-grid");
-  grid.innerHTML = regular.map(memberCardHtml).join("")
+  grid.innerHTML = regular.map(m => memberCardHtml(m, canEdit)).join("")
     + (leaders.length === 0 ? "" : `
       <div class="leaders-block">
         <div class="leaders-heading">Person In Charge</div>
-        <div class="card-grid">${leaders.map(memberCardHtml).join("")}</div>
+        <div class="card-grid">${leaders.map(m => memberCardHtml(m, canEdit)).join("")}</div>
       </div>`);
 
   document.getElementById("modal-overlay").classList.add("open");
@@ -1245,7 +1317,10 @@ document.addEventListener("click", (e) => {
   if (sec === undefined || idx === undefined) return;
   const members = sectionMembers[Number(sec)];
   const member = members && members[Number(idx)];
-  if (member) openMemberModal(member);
+  if (member){
+    Activity.ctx.sheet = (sectionMeta[Number(sec)] || {}).sheetKey || "";
+    openMemberModal(member);
+  }
 });
 
 document.addEventListener("keydown", (e) => {
@@ -1394,21 +1469,31 @@ let picCurrentIdx = null;
 let picBusy = false;
 let knownSheetsGlobal = new Set();
 
+// Hak efektif pengguna ini (dari Role Policy lewat server). viewAs = sedang berpindah
+// tampilan ke Staff/Dosen lewat Role Switch -> semua hak edit dimatikan.
+let viewPerms = { viewAs: "", create: new Set(), del: new Set(), team: new Set() };
+let picCanCreate = false, picCanDelete = false;
+let picCreateMap = {}, picDeleteMap = {};
+
 function applyPicMenus(){
-  const ctx = getPicContext();
   picVisible = {};
   picManageMap = {};
+  picCreateMap = {};
+  picDeleteMap = {};
   document.querySelectorAll("[data-pic-slot]").forEach(slot => {
     const idx = Number(slot.dataset.picSlot);
     const meta = sectionMeta[idx];
-    const list = ((meta && meta.links) || []).filter(l => canSeePicLink(l, ctx));
-    // Boleh kelola (Add/Edit/Delete) = leader (semua sheet) ATAU PIC yang
-    // ditandai di kolom "Menu Editor" (hanya sheet-nya sendiri).
-    const canManage = !!meta && (ctx.leader || ctx.editorSheets.has(normSheetName(meta.sheetKey)));
+    const key = meta ? normSheetName(meta.sheetKey) : "";
+    // Link sudah disaring server sesuai scope "PIC Menu > View" di Role Policy.
+    const list = (meta && !viewPerms.viewAs) ? (meta.links || []) : [];
+    const canCreate = !!meta && !viewPerms.viewAs && viewPerms.create.has(key);
+    const canDelete = !!meta && !viewPerms.viewAs && viewPerms.del.has(key);
     picVisible[idx] = list;
-    picManageMap[idx] = canManage;
-    // Yang boleh kelola selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
-    slot.innerHTML = (list.length || canManage)
+    picCreateMap[idx] = canCreate;
+    picDeleteMap[idx] = canDelete;
+    picManageMap[idx] = canCreate || canDelete;
+    // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
+    slot.innerHTML = (list.length || canCreate)
       ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
       : "";
   });
@@ -1478,8 +1563,8 @@ function renderPicModal(idx, note){
   const meta = sectionMeta[idx];
   if (!meta) return;
   const links = picVisible[idx] || [];
-  const deleting = picCanManage && picMode === "delete";
-  const picking  = picCanManage && picMode === "edit-pick";
+  const deleting = picCanDelete && picMode === "delete";
+  const picking  = picCanCreate && picMode === "edit-pick";
   document.getElementById("pic-modal-sub").textContent =
     (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
 
@@ -1500,18 +1585,18 @@ function renderPicModal(idx, note){
   // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
   let controlsHtml = "";
   if (picCanManage){
-    if (picMode === "add"){
+    if (picMode === "add" && picCanCreate){
       controlsHtml = `<div class="pic-block-title">Add menu</div>` + picFormHtml(idx, "pic-add-form", null, "Save");
-    } else if (picMode === "edit" && picEditLink){
+    } else if (picMode === "edit" && picEditLink && picCanCreate){
       controlsHtml = `<div class="pic-block-title">Edit menu</div>` + picFormHtml(idx, "pic-edit-form", picEditLink, "Save changes");
-    } else if (picMode === "edit-pick"){
+    } else if (picMode === "edit-pick" && picCanCreate){
       controlsHtml = `
         <p class="pic-hint">Select the menu you want to edit, then click <strong>Edit Menu</strong>.</p>
         <div class="pic-actions">
           <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
           <button type="button" class="pic-btn primary" id="pic-edit-continue" disabled>Edit Menu</button>
         </div>`;
-    } else if (picMode === "delete"){
+    } else if (picMode === "delete" && picCanDelete){
       controlsHtml = `
         <p class="pic-hint">Tick the menus you want to delete, then click <strong>Delete Menu</strong>.</p>
         <div class="pic-actions">
@@ -1521,9 +1606,9 @@ function renderPicModal(idx, note){
     } else {
       controlsHtml = `
         <div class="pic-actions">
-          <button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>
-          ${links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
-          ${links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
+          ${picCanCreate ? `<button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>` : ""}
+          ${picCanCreate && links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
+          ${picCanDelete && links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
         </div>`;
     }
   }
@@ -1547,8 +1632,11 @@ function setPicMode(mode){
 function openPicMenu(idx){
   const meta = sectionMeta[idx];
   if (!meta) return;
-  picCanManage = !!picManageMap[idx];
-  if (!(picVisible[idx] || []).length && !picCanManage) return;
+  picCanCreate = !!picCreateMap[idx];
+  picCanDelete = !!picDeleteMap[idx];
+  picCanManage = picCanCreate || picCanDelete;
+  if (!(picVisible[idx] || []).length && !picCanCreate) return;
+  Activity.ctx.sheet = meta.sheetKey;
   picCurrentIdx = idx;
   picMode = "view";
   picEditLink = null;
@@ -1576,8 +1664,7 @@ async function picApi(payload){
 
 function refreshPicLocal(idx, note){
   const meta = sectionMeta[idx];
-  const ctx = getPicContext();
-  picVisible[idx] = (meta.links || []).filter(l => canSeePicLink(l, ctx));
+  picVisible[idx] = viewPerms.viewAs ? [] : (meta.links || []);
   renderPicModal(idx, note);
 }
 
@@ -1596,7 +1683,7 @@ function readPicForm(){
 }
 
 async function addPicLink(){
-  if (picBusy || !picCanManage || picCurrentIdx === null) return;
+  if (picBusy || !picCanCreate || picCurrentIdx === null) return;
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
   const f = readPicForm();
@@ -1632,7 +1719,7 @@ async function addPicLink(){
 }
 
 async function editPicLink(){
-  if (picBusy || !picCanManage || picCurrentIdx === null || !picEditLink) return;
+  if (picBusy || !picCanCreate || picCurrentIdx === null || !picEditLink) return;
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
   const link = picEditLink;
@@ -1680,7 +1767,7 @@ function updatePicDeleteButton(){
 }
 
 async function deleteSelectedPicLinks(){
-  if (picBusy || !picCanManage || picCurrentIdx === null) return;
+  if (picBusy || !picCanDelete || picCurrentIdx === null) return;
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
   const visible = picVisible[idx] || [];
@@ -1821,37 +1908,43 @@ function finishOrder(preferred, rest){
   return out;
 }
 
-// ctx: { leader:boolean, userIdx:Set<number>, allIdx:number[], priority:{...} }
-// Hasil: { allowed:Set|null (null = semua), order:number[], strict:boolean }
+// ctx: { role, pol (baris Role Policy untuk role efektif), userIdx:Set<number>, allIdx:number[] }
+// Hasil: { allowed:Set|null (null = semua), order:number[], strict:boolean, home, isLeader }
+//   Visibility Index -> pol.vis ("all" atau [1,3])
+//   Index Priority   -> pol.priority ([2] / [2,3,1]) dan pol.ownFirst ("Own First" = index sheet milik sendiri dulu)
+//   Home Page        -> pol.home ("all" | "career" | "single")
+// Semuanya dibaca dari sheet "Role Policy" (bukan lagi baris "Priority ..." di Master).
 function resolveViewerVisibility(ctx){
-  const saved = readSavedLoginState() || {};
+  const pol = ctx.pol || {};
   const asc = ctx.allIdx.slice().sort((a, b) => a - b);
-  const P = ctx.priority || DEFAULT_PRIORITY;
-
-  if (ctx.leader) return { allowed: null, order: finishOrder(P.leader, asc), strict: false, isLeader: true };
-
-  if (saved.role === "Dosen" || saved.domain === "binus.ac.id"){
-    const allowed = new Set(DOSEN_ALLOWED_INDEXES);
-    return {
-      allowed: allowed,
-      order: finishOrder(P.dosen.filter(i => allowed.has(i)), DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b)),
-      strict: true
-    };
-  }
-
-  if (ctx.userIdx.size > 0){   // PIC: boleh membuka semua index; yang dipilih pertama = index sheet miliknya
-    const own = Array.from(ctx.userIdx).sort((a, b) => a - b);
-    return { allowed: null, order: finishOrder(own, asc), strict: false };
-  }
-
-  if (SUPPORT_UNIT_PATTERN.test(String(saved.unit || ""))){
-    return { allowed: null, order: finishOrder(P.bsp, asc), strict: false };
-  }
-  return { allowed: null, order: finishOrder(P.staff, asc), strict: false };
+  const allowed = Array.isArray(pol.vis) ? new Set(pol.vis) : null;
+  const okIdx = (i) => !allowed || allowed.has(i);
+  const own = pol.ownFirst ? Array.from(ctx.userIdx).sort((a, b) => a - b) : [];
+  const pri = Array.isArray(pol.priority) ? pol.priority : [];
+  const order = finishOrder(own.concat(pri).filter(okIdx), asc.filter(okIdx));
+  return {
+    allowed: allowed,
+    order: order,
+    strict: !!allowed,
+    home: pol.home || "single",
+    isLeader: ["developer", "seniormanager", "manager", "sectionhead"].includes(ctx.role)
+  };
 }
 
 // Info akun yang sedang login: satu baris kecil di paling atas halaman
 // (email · peran · unit/ID · Sign out). Sengaja dibuat tidak mencolok.
+const ROLE_LABELS = {
+  developer: "Developer", seniormanager: "Senior Manager", manager: "Manager", sectionhead: "Section Head",
+  authorizedpic: "Authorized PIC", registeredpic: "Registered PIC",
+  bsp: "Staff", staff: "Staff", dosen: "Lecturer"
+};
+const VIEW_AS_KEY = "srsc_view_as";   // "" | "staff" | "dosen"  (Role Switch)
+function getViewAs(){
+  try { const v = localStorage.getItem(VIEW_AS_KEY); return (v === "staff" || v === "dosen") ? v : ""; }
+  catch (e){ return ""; }
+}
+
+// opts: { realRole, baseRole, title, canSwitch, viewAs, canSignOut }
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
@@ -1859,37 +1952,63 @@ function renderLoginInfo(opts){
   if (!saved || !saved.email){ box.className = "acct-bar"; box.innerHTML = ""; return; }
 
   const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
-  if (saved.role === "Dosen"){
+  if (opts.realRole){
+    // Role sesuai spreadsheet; untuk Leader pakai jabatan persis dari sheet tim.
+    const isLead = ["seniormanager", "manager", "sectionhead"].includes(opts.realRole);
+    parts.push(`<span class="acct-role">${escapeHtml(isLead && opts.title ? opts.title : ROLE_LABELS[opts.realRole])}</span>`);
+  } else if (opts.baseRole === "dosen"){
     parts.push(`<span class="acct-role">Lecturer</span>`);
     if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
-  } else if (opts.isDeveloper){
-    parts.push(`<span class="acct-role">Developer</span>`);
-  } else if (opts.isLeader){
-    // Role mengikuti jabatan di sheet: Section Head / Manager / Senior Manager
-    parts.push(`<span class="acct-role">${escapeHtml(opts.title || "Leader")}</span>`);
-  } else if (opts.isPic){
-    // Editor Menu = Authorized PIC; selain itu Registered PIC
-    parts.push(`<span class="acct-role">${opts.isEditor ? "Authorized PIC" : "Registered PIC"}</span>`);
   } else {
     parts.push(`<span class="acct-role">Staff</span>`);
     if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
   }
-  // Tombol Sign out hanya untuk Leader (Section Head / Manager / Senior Manager).
-  // PIC (Authorized / Registered), BSP, Staff / Guest, dan Dosen: tidak ada.
-  const canSignOut = !!opts.isLeader;
-  if (canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
+  // Role Switch = Yes (Role Policy): boleh berpindah tampilan ke Staff atau Dosen.
+  if (opts.canSwitch){
+    parts.push(`<select class="acct-switch" id="acct-switch" aria-label="Switch role view">
+      <option value=""${opts.viewAs === "" ? " selected" : ""}>My role</option>
+      <option value="staff"${opts.viewAs === "staff" ? " selected" : ""}>View as Staff</option>
+      <option value="dosen"${opts.viewAs === "dosen" ? " selected" : ""}>View as Lecturer</option>
+    </select>`);
+  }
+  // Tombol Sign out mengikuti kolom "Sign Out Button" di Role Policy.
+  if (opts.canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
   box.className = "acct-bar show";
   box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
+
+  const sw = document.getElementById("acct-switch");
+  if (sw) sw.addEventListener("change", () => {
+    const v = sw.value;
+    try { if (v) localStorage.setItem(VIEW_AS_KEY, v); else localStorage.removeItem(VIEW_AS_KEY); } catch (e){}
+    Activity.event("role_switch", v ? "View as " + (v === "dosen" ? "Lecturer" : "Staff") : "Back to own role");
+    lastDataSignature = null;
+    currentSel = { email: "", set: false, career: null, secKey: null };
+    loadAndRender(true).catch(() => {});
+    window.scrollTo(0, 0);
+  });
+
   const outBtn = document.getElementById("acct-signout");
   if (outBtn) outBtn.addEventListener("click", () => {
     if (!confirm("Sign out from " + saved.email + "?")) return;
     try {
       localStorage.removeItem(LOGIN_STORAGE_KEY);
       localStorage.removeItem(DATA_CACHE_KEY);
+      localStorage.removeItem(VIEW_AS_KEY);
     } catch (e){}
     location.reload();
   });
+}
+
+// Bentuk data pendamping dari server (link, Role Policy, hak per sheet).
+function extraFromServer(d){
+  return {
+    links: d.links || {}, editorFor: d.editorFor || [],
+    leader: !!d.leader, developer: !!d.developer, title: d.title || "",
+    role: d.role || "", perms: d.perms || {},
+    createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], teamSheets: d.teamSheets || [],
+    policy: d.policy || {}
+  };
 }
 
 async function loadAndRender(isInitial, fromCache){
@@ -1900,7 +2019,7 @@ async function loadAndRender(isInitial, fromCache){
 
   const sigParts = [];
   let masterRows;
-  let extra = { links: {}, editorFor: [], leader: false, developer: false, title: "" };
+  let extra = extraFromServer({});
 
   // Setiap siklus (kecuali dari cache) mengambil data BARU dari server.
   if (!fromCache) serverDataPromise = null;
@@ -1923,9 +2042,10 @@ async function loadAndRender(isInitial, fromCache){
       extra = cacheExtra;
     } else {
       const d = await getServerData();
-      extra = { links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader, developer: !!d.developer, title: d.title || "" };
+      extra = extraFromServer(d);
     }
     sigParts.push("extra:" + JSON.stringify(extra));
+    sigParts.push("viewAs:" + getViewAs());
   } catch (err){
     if (isInitial){
       renderError(`Tidak bisa membaca sheet "${MASTER_SHEET_NAME}".`, [
@@ -2008,7 +2128,16 @@ async function loadAndRender(isInitial, fromCache){
       } catch (e){ /* sheet gagal dibaca: ditangani di loop utama */ }
     }
   }
-  const viewVis = resolveViewerVisibility({ leader: !!extra.leader, userIdx: userIdx, allIdx: allIdx, priority: readPriorityConfig(masterRows) });
+  // Peran efektif: Role Switch (kalau diizinkan) > peran di spreadsheet > Staff/BSP/Dosen dari data sign in.
+  const savedLogin = readSavedLoginState() || {};
+  const realRole = extra.role || "";
+  const canSwitch = !!(extra.perms && extra.perms.roleSwitch);
+  let viewAs = getViewAs();
+  if (viewAs && !canSwitch){ viewAs = ""; try { localStorage.removeItem(VIEW_AS_KEY); } catch (e){} }
+  const baseRole = (savedLogin.role === "Dosen" || savedLogin.domain === DOMAIN_AC_ID) ? "dosen"
+                 : (SUPPORT_UNIT_PATTERN.test(String(savedLogin.unit || "")) ? "bsp" : "staff");
+  const effRole = viewAs || realRole || baseRole;
+  const viewVis = resolveViewerVisibility({ role: effRole, pol: (extra.policy || {})[effRole] || {}, userIdx: userIdx, allIdx: allIdx });
   const canSeeIdx = (vi) => {
     if (!visRow) return true;                 // belum ada baris Visibility Index -> tidak difilter
     if (vi === null) return !viewVis.strict;  // sel kosong: terlihat, kecuali untuk Dosen
@@ -2117,6 +2246,12 @@ async function loadAndRender(isInitial, fromCache){
   sectionMembers = newSectionMembers;
   sectionMeta = newSectionMeta;
   siteLeaderFlag = !!extra.leader;
+  viewPerms = {
+    viewAs: viewAs,
+    create: new Set(extra.createSheets || []),
+    del: new Set(extra.deleteSheets || []),
+    team: new Set(extra.teamSheets || [])
+  };
 
   // Simpan posisi scroll supaya render ulang diam-diam tidak membuat tampilan "melompat".
   // (Tab/section yang dipilih disimpan di variabel currentSel.)
@@ -2124,7 +2259,7 @@ async function loadAndRender(isInitial, fromCache){
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
-  renderLoginInfo({ isDeveloper: !!extra.developer, title: extra.title || "", isLeader: !!viewVis.isLeader, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
+  renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", canSwitch: canSwitch, viewAs: viewAs, canSignOut: !!(extra.perms && extra.perms.signOut) });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){
@@ -2152,9 +2287,12 @@ async function loadAndRender(isInitial, fromCache){
     // mematikan sub-tab yang aktif sehingga semua section di kategori itu tampil.
     // Hanya LEADER yang boleh membiarkan sub-tab tidak terpilih (semua sub section tampil).
     // Editor Menu dan user lain: wajib pilih salah satu sub-tab.
-    const canToggleSub = !!viewVis.isLeader;
+    const homeMode = viewVis.home;                 // dari kolom Home Page di Role Policy
+    const canToggleSub = homeMode !== "single";    // Career + All Sub-Sections / All Sections
+    const homeAll = homeMode === "all";            // All Sections: tanpa tab utama terpilih
     const applySel = () => {
       const { career, secKey } = currentSel;
+      Activity.setPage(secKey || career || "All Sections");
       tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
         const on = b.dataset.career === career;
         b.classList.toggle("active", on);
@@ -2193,13 +2331,17 @@ async function loadAndRender(isInitial, fromCache){
 
     tabsWrap.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        if (currentSel.career === btn.dataset.career) return;   // tab utama: wajib pilih satu (semua user)
+        if (currentSel.career === btn.dataset.career){
+          // All Sections: klik tab yang aktif = kembali menampilkan semua section. Lainnya: wajib pilih satu.
+          if (homeAll){ currentSel = { email: getCurrentUserEmail(), set: true, career: null, secKey: null }; applySel(); }
+          return;
+        }
         const list = renderedSecs.filter(s => s.career === btn.dataset.career);
         if (!list.length) return;
         // Leader: sub-tab tidak diklik -> semua sub section di kategori itu tampil.
         // User lain: langsung ke satu section prioritas pertama di kategori itu.
         const pick = pickByPriority(list);
-        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
+        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: canToggleSub ? null : pick.sheetKey };
         applySel();
       });
     });
@@ -2207,16 +2349,18 @@ async function loadAndRender(isInitial, fromCache){
     // Pilihan awal (hanya saat user ini belum pernah memilih). Setelah itu pilihan
     // user dipertahankan walau data di-refresh otomatis.
     const me2 = getCurrentUserEmail();
-    const selValid = currentSel.set && currentSel.email === me2 && !!currentSel.career && (
+    const selValid = currentSel.set && currentSel.email === me2 && (!currentSel.career ? homeAll : (
       currentSel.secKey
         ? renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career)
         : (canToggleSub && careerTabs.includes(currentSel.career))
-    );
-    if (!selValid){
+    ));
+    if (!selValid && homeAll){
+      currentSel = { email: me2, set: true, career: null, secKey: null };
+    } else if (!selValid){
       const pick = pickByPriority(renderedSecs);
       // Leader: tab utama terpilih (prioritas Visibility Index), sub-tab TIDAK diklik -> semua sub section tampil.
       // User lain: langsung ke satu section prioritas pertama.
-      currentSel = { email: me2, set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
+      currentSel = { email: me2, set: true, career: pick.career, secKey: canToggleSub ? null : pick.sheetKey };
     }
     applySel();
   } else {
@@ -2313,6 +2457,240 @@ function logSignIn(email, status, extra, keterangan){
     body: JSON.stringify({ email: email, status: status || "Berhasil", extra: extra || "", keterangan: keterangan || "", device: getDeviceId() })
   }).catch(() => { /* diamkan saja kalau gagal, jangan ganggu proses login */ });
 }
+
+
+/* =========================================================================
+   PENCATATAN AKTIVITAS -> Sheet "Logs" kolom H-K
+   (Activity Type | Page/Section | Duration (seconds) | Session ID)
+   - section_duration : detik berada di sebuah section (tab/sheet) atau popup
+                        (PIC Menu / Our Team / Team Edit), hanya saat tab terlihat.
+   - session_end      : total detik website terlihat dalam satu sesi (1 baris per sesi).
+   - link_click / contact_click / role_switch : kejadian sesaat (tanpa durasi).
+   Dikirim berkelompok (batch) saat tab disembunyikan / ditutup dan tiap 3 menit,
+   jadi tidak membebani Apps Script. Tidak mengganggu pengguna kalau gagal.
+   ========================================================================= */
+const Activity = (function(){
+  const SID_KEY = "srsc_session_id";
+  const FLUSH_MS = 3 * 60 * 1000;
+  let sid = "";
+  try { sid = sessionStorage.getItem(SID_KEY) || ""; } catch (e){}
+  if (!sid){
+    try {
+      const a = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(a);
+      sid = Array.from(a).map(b => b.toString(16).padStart(2, "0")).join("");
+    } catch (e){ sid = Date.now().toString(16) + Math.random().toString(16).slice(2, 12); }
+    try { sessionStorage.setItem(SID_KEY, sid); } catch (e){}
+  }
+
+  const ctx = { sheet: "" };   // sheet yang sedang dibuka di popup (diisi oleh openModal / openPicMenu / dst.)
+  const queue = [];
+  const stack = [];            // [0] = halaman dasar; sisanya = popup yang sedang terbuka
+  let started = false, totalMs = 0, totalSince = null;
+  const isVisible = () => document.visibilityState === "visible";
+  const top = () => stack[stack.length - 1];
+
+  function emailNow(){
+    const s = readSavedLoginState();
+    return s && s.email ? String(s.email).toLowerCase() : "";
+  }
+  function push(type, page, dur){
+    if (type === "session_end"){
+      for (let i = queue.length - 1; i >= 0; i--) if (queue[i].type === "session_end") queue.splice(i, 1);
+    }
+    queue.push({ type: type, page: String(page || "").slice(0, 200), dur: Math.max(0, Math.round(dur || 0)) });
+    if (queue.length > 200) queue.splice(0, queue.length - 200);
+  }
+  function tick(){
+    const t = Date.now();
+    const cur = top();
+    if (cur && cur.since !== null){ cur.acc += t - cur.since; cur.since = t; }
+    if (totalSince !== null){ totalMs += t - totalSince; totalSince = t; }
+  }
+  function flushPage(p){
+    if (!p || !p.page) return;
+    const sec = Math.floor(p.acc / 1000);
+    if (sec >= 1){ p.acc -= sec * 1000; push("section_duration", p.page, sec); }
+  }
+  function post(){
+    if (!queue.length) return;
+    if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){ queue.length = 0; return; }
+    const email = emailNow();
+    while (queue.length){
+      const batch = queue.splice(0, 50);
+      fetch(LOG_WEBAPP_URL, {
+        method: "POST", mode: "no-cors", keepalive: true,
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "activity", email: email, device: getDeviceId(), session: sid, events: batch })
+      }).catch(() => {});
+    }
+  }
+  function flushAll(){
+    tick();
+    stack.forEach(flushPage);
+    if (totalMs >= 1000) push("session_end", "Visible website time", totalMs / 1000);
+    post();
+  }
+  function pause(){ tick(); const cur = top(); if (cur) cur.since = null; totalSince = null; }
+  function resume(){ const t = Date.now(); const cur = top(); if (cur) cur.since = t; totalSince = t; }
+
+  function setPage(page){
+    if (!started) return;
+    page = String(page || "");
+    if (stack[0].page === page) return;
+    tick();
+    flushPage(stack[0]);
+    stack[0] = { page: page, acc: 0, since: (stack.length === 1 && isVisible()) ? Date.now() : null };
+  }
+  function enter(page){
+    if (!started) return;
+    tick();
+    const cur = top();
+    if (cur){ flushPage(cur); cur.since = null; }
+    stack.push({ page: page, acc: 0, since: isVisible() ? Date.now() : null });
+  }
+  function leave(){
+    if (!started || stack.length < 2) return;
+    tick();
+    flushPage(stack.pop());
+    const cur = top();
+    if (cur && isVisible()) cur.since = Date.now();
+  }
+  function event(type, page){ if (started) push(type, page, 0); }
+
+  function labelFor(id){
+    const s = ctx.sheet || "";
+    if (id === "pic-modal-overlay") return "PIC Menu / " + s;
+    if (id === "member-modal-overlay") return "Member Card / " + s;
+    if (id === "tedit-modal-overlay") return "Team Edit / " + s;
+    return "Our Team / " + s;
+  }
+
+  function start(){
+    if (started) return;
+    started = true;
+    stack.push({ page: "", acc: 0, since: isVisible() ? Date.now() : null });
+    totalSince = isVisible() ? Date.now() : null;
+
+    document.querySelectorAll(".modal-overlay").forEach(el => {
+      let on = false;
+      new MutationObserver(() => {
+        const open = el.classList.contains("open");
+        if (open && !on){ on = true; enter(labelFor(el.id)); }
+        else if (!open && on){ on = false; leave(); }
+      }).observe(el, { attributes: true, attributeFilter: ["class"] });
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (isVisible()) resume(); else { pause(); flushAll(); }
+    });
+    window.addEventListener("pagehide", () => { pause(); flushAll(); });
+    window.addEventListener("pageshow", () => { if (isVisible()) resume(); });
+    setInterval(() => { if (isVisible()) flushAll(); }, FLUSH_MS);
+
+    // Klik link PIC Menu & tombol kontak (Email / WhatsApp)
+    document.addEventListener("click", (e) => {
+      const link = e.target.closest && e.target.closest("#pic-modal-content a[href]");
+      if (link){
+        event("link_click", "PIC Menu / " + ctx.sheet + " > " + (link.textContent || "").replace(/→/g, "").trim());
+        return;
+      }
+      const c = e.target.closest && e.target.closest("a.icon-btn, a.member-action-btn");
+      if (c){
+        const kind = (c.classList.contains("icon-wa") || c.classList.contains("wa")) ? "WhatsApp" : "Email";
+        const sec = c.closest(".section");
+        event("contact_click", kind + " / " + (sec ? sec.dataset.sheet : ctx.sheet));
+      }
+    }, true);
+  }
+
+  return { ctx: ctx, start: start, setPage: setPage, enter: enter, leave: leave, event: event, sessionId: () => sid };
+})();
+
+/* =========================================================================
+   EDIT KARTU "OUR TEAM" (hak: kolom Our Team > Edit di sheet Role Policy)
+   Bisa diubah: PIC (nama), Task, Description, DP (URL foto), WhatsApp.
+   Jabatan & Email tidak bisa diubah dari website.
+   ========================================================================= */
+function setTeditStatus(type, text){
+  const el = document.getElementById("tedit-status");
+  if (!el) return;
+  el.className = "pic-status" + (text ? " show " + type : "");
+  el.textContent = text || "";
+}
+
+function openTeamEdit(m, sheetKey){
+  teamEditTarget = {
+    m: m, sheetKey: sheetKey,
+    old: { jabatan: m.jabatan, pic: m.pic, email: m.email, whatsapp: m.whatsapp, task: m.task, desc: m.desc, dp: m.dp }
+  };
+  Activity.ctx.sheet = sheetKey;
+  document.getElementById("tedit-sub").textContent = sheetKey;
+  document.getElementById("tedit-ro").innerHTML =
+    `<div>Jabatan: <strong>${escapeHtml(m.jabatan || "-")}</strong></div>` +
+    `<div>Email: <strong>${escapeHtml(m.email || "-")}</strong></div>` +
+    `<div>Jabatan &amp; Email hanya bisa diubah langsung di spreadsheet.</div>`;
+  document.getElementById("tedit-pic").value = m.pic || "";
+  document.getElementById("tedit-task").value = m.task || "";
+  document.getElementById("tedit-desc").value = m.desc || "";
+  document.getElementById("tedit-dp").value = m.dp || "";
+  document.getElementById("tedit-wa").value = m.whatsapp || "";
+  setTeditStatus("", "");
+  document.getElementById("tedit-modal-overlay").classList.add("open");
+  document.getElementById("tedit-pic").focus();
+}
+
+function closeTeamEdit(){
+  document.getElementById("tedit-modal-overlay").classList.remove("open");
+  teamEditTarget = null;
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-tedit]");
+  if (!b || !lastTeamModal) return;
+  const m = teamEditRefs[Number(b.dataset.tedit)];
+  if (m && canEditTeamSheet(lastTeamModal.sheetKey)) openTeamEdit(m, lastTeamModal.sheetKey);
+});
+document.getElementById("tedit-modal-close").addEventListener("click", closeTeamEdit);
+document.getElementById("tedit-cancel").addEventListener("click", closeTeamEdit);
+document.getElementById("tedit-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "tedit-modal-overlay") closeTeamEdit();
+});
+
+document.getElementById("tedit-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (teamEditBusy || !teamEditTarget) return;
+  const t = teamEditTarget;
+  const f = {
+    pic: document.getElementById("tedit-pic").value.trim(),
+    task: document.getElementById("tedit-task").value.trim(),
+    desc: document.getElementById("tedit-desc").value.trim(),
+    dp: document.getElementById("tedit-dp").value.trim(),
+    whatsapp: document.getElementById("tedit-wa").value.trim()
+  };
+  if (!f.pic){ setTeditStatus("err", "PIC name cannot be empty."); return; }
+  if (f.dp && (!/^https?:\/\//i.test(f.dp) || !safeHttpUrl(f.dp))){ setTeditStatus("err", "Photo URL must start with https://"); return; }
+  if (!/^[0-9+\-\s()]{0,40}$/.test(f.whatsapp)){ setTeditStatus("err", "WhatsApp may only contain digits, +, -, spaces and parentheses."); return; }
+
+  const btn = document.getElementById("tedit-save");
+  teamEditBusy = true; btn.disabled = true; btn.textContent = "Saving...";
+  setTeditStatus("", "");
+  try {
+    const data = await picApi({ action: "editMember", actor: getCurrentUserEmail(), sheet: t.sheetKey, old: t.old, fields: f });
+    if (!data || !data.ok){
+      setTeditStatus("err", (data && data.error) || "Failed to save changes.");
+    } else {
+      Object.assign(t.m, { pic: f.pic, task: f.task, desc: f.desc, dp: f.dp, whatsapp: f.whatsapp });
+      lastDataSignature = null;   // pengecekan berkala berikutnya menyegarkan daftar di halaman utama
+      closeTeamEdit();
+      if (lastTeamModal) openModal(lastTeamModal.header, lastTeamModal.sheetKey, lastTeamModal.members);
+    }
+  } catch (err){
+    setTeditStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    teamEditBusy = false; btn.disabled = false; btn.textContent = "Save changes";
+  }
+});
 
 function getEmailDomain(email){
   const parts = String(email || "").trim().toLowerCase().split("@");
@@ -2854,6 +3232,7 @@ document.getElementById("kodedosen-back").addEventListener("click", () => {
 })();
 
 async function main(){
+  Activity.start();
   // Kalau ada cache dari kunjungan sebelumnya: tampilkan INSTAN dari cache,
   // lalu segarkan diam-diam dari Google Sheet. Kalau tidak: muat seperti biasa.
   const cached = loadDataCache();

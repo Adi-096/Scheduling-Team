@@ -601,6 +601,7 @@
   .login-step.hidden{ display:none; }
   /* Ikon "mata" di dalam kolom password: tekan & tahan = password terlihat. */
   .pw-wrap{ position:relative;margin-bottom:12px; }
+  .pw-wrap.hidden{ display:none; }
   .login-card .pw-wrap input[type="password"],
   .login-card .pw-wrap input[type="text"]{ margin-bottom:0;padding-right:48px; }
   .login-card .pw-toggle{
@@ -666,16 +667,17 @@
     flex:1;
     margin-bottom:0;
   }
-  /* Langkah PIC: tiga tombol (Back, Continue as Guest, Sign In) -- sedikit lebih
-     kecil supaya muat satu baris; di layar sangat sempit turun ke bawah. */
-  .login-actions-row.pic-choice{ flex-wrap:wrap; }
-  .login-actions-row.pic-choice button{
-    font-size:11.5px; letter-spacing:.04em;
-    padding-left:10px; padding-right:10px; white-space:nowrap;
+
+  .login-card .login-hint{
+    font-family:'Work Sans',sans-serif;font-size:12.5px;color:var(--ink-soft);
+    line-height:1.5;margin:0 0 12px;text-align:left;
   }
-  @media (max-width:420px){
-    .login-actions-row.pic-choice button{ flex:1 1 100%; }
+  /* Tiga tombol sejajar (Back / Continue as Guest / Sign In) */
+  .login-actions-row.three{ gap:8px; }
+  .login-actions-row.three button{
+    padding:12px 6px;font-size:11px;letter-spacing:.04em;line-height:1.25;
   }
+  .login-actions-row.three button#password-guest{ flex:1.5; }
 
   /* ===== Tampilan HP / layar sempit ===== */
   @media (max-width:640px){
@@ -705,9 +707,9 @@
 
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
-<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocId>
-<mso:_dlc_DocIdItemGuid msdt:dt="string">115ec381-ecf8-496f-922c-3ae72a955231</mso:_dlc_DocIdItemGuid>
-<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353195, 3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocIdUrl>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353404</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">8fc47207-016c-4cc4-b375-a9af2c4b594e</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353404, 3ZXFJ3NKVQQC-643343547-353404</mso:_dlc_DocIdUrl>
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
@@ -727,7 +729,7 @@
     <!-- STEP 1: email (semua domain masuk lewat sini dulu) -->
     <form id="login-form" class="login-step" autocomplete="off">
       <input type="email" id="login-email" placeholder="" required>
-      <button type="submit">Sign In</button>
+      <button type="submit">Continue</button>
     </form>
 
     <!-- STEP 2a: khusus domain @binus.edu -> isi Unit -->
@@ -739,19 +741,17 @@
       </div>
     </form>
 
-    <!-- STEP 2a-PIC: email yang terdata sebagai PIC / leader di spreadsheet.
-         Isi Password (menggantikan Department/Unit), lalu pilih:
-           Sign In            -> masuk dengan role sesuai spreadsheet
-           Continue as Guest  -> masuk sebagai user biasa (wajib isi Department/Unit)
-         Kalau sheet-nya tidak memakai password, kolom password disembunyikan. -->
+    <!-- STEP 2a-PIC: khusus email PIC (@binus.edu) yang sheet-nya memakai password
+         -> isi Password (menggantikan Department/Unit) -->
     <form id="password-form" class="login-step hidden" autocomplete="off">
+      <p class="login-hint" id="password-hint">Your email is registered as a PIC / Leader. Enter your password to sign in, or continue as a guest.</p>
       <div class="pw-wrap" id="pw-wrap">
         <input type="password" id="login-password" placeholder="Password" required autocomplete="off">
         <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Hold to show password" title="Hold to show password">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
       </div>
-      <div class="login-actions-row pic-choice">
+      <div class="login-actions-row three">
         <button type="button" class="login-back" id="password-back">&larr; Back</button>
         <button type="button" class="login-back" id="password-guest">Continue as Guest</button>
         <button type="submit">Sign In</button>
@@ -918,14 +918,14 @@ function loadDataCache(){
   try {
     const c = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || "null");
     if (!c || !c.sheets || typeof c.sheets !== "object" || !c.extra) return null;
-    if (c.email !== getCacheIdentity()) return null;
+    if (c.email !== getCurrentUserEmail()) return null;
     return c;
   } catch (e){ return null; }
 }
 function saveDataCache(store, extra){
   try {
     localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({
-      t: Date.now(), email: getCacheIdentity(), sheets: store, extra: extra
+      t: Date.now(), email: getCurrentUserEmail(), sheets: store, extra: extra
     }));
   } catch (e){ /* penuh / tidak tersedia -> abaikan */ }
 }
@@ -954,7 +954,7 @@ async function fetchServerData(email){
 }
 
 function getServerData(){
-  const email = getRoleEmail();   // "" kalau belum login ATAU sesi Guest (tanpa hak PIC)
+  const email = getCurrentUserEmail();   // "" kalau belum login
   if (!serverDataPromise || serverDataEmail !== email){
     serverDataEmail = email;
     serverDataPromise = fetchServerData(email).catch(err => { serverDataPromise = null; throw err; });
@@ -1288,23 +1288,11 @@ function splitEmails(raw){
   return String(raw || "").toLowerCase().split(/[\s,;]+/).filter(isValidEmail);
 }
 
-// Email yang dipakai untuk HAK PIC / leader / editor. Hanya sesi yang masuk lewat
-// "Sign In" sebagai PIC (saved.pic) yang punya hak itu. Sesi "Continue as Guest"
-// (Department/Unit) diperlakukan sebagai user biasa: tidak ada PIC Menu, tidak ada
-// hak leader/editor, meskipun emailnya tercatat di spreadsheet.
-function getRoleEmail(){
-  const saved = readSavedLoginState();
-  return saved && saved.pic && saved.email ? String(saved.email).trim().toLowerCase() : "";
-}
-
-// Penanda cache: email + apakah sesi ini sesi PIC (supaya cache sesi PIC tidak
-// dipakai oleh sesi Guest dengan email yang sama, dan sebaliknya).
-function getCacheIdentity(){
-  return getCurrentUserEmail() + (getRoleEmail() ? "|pic" : "");
-}
-
 function getCurrentUserEmail(){
   const saved = readSavedLoginState();
+  // Guest = pengguna biasa: email TIDAK dipakai untuk mencari peran di spreadsheet
+  // (bukan PIC / Leader / Editor), jadi dianggap tidak punya identitas peran.
+  if (saved && saved.guest) return "";
   return saved && saved.email ? String(saved.email).trim().toLowerCase() : "";
 }
 
@@ -1359,7 +1347,7 @@ let siteLeaderFlag = false;   // status leader menurut server (termasuk sheet no
 
 function getPicContext(){
   const ctx = { sheets: new Set(), leader: false, editorSheets: new Set() };
-  const email = getRoleEmail();
+  const email = getCurrentUserEmail();
   if (!email) return ctx;
   sectionMeta.forEach((meta, i) => {
     if ((meta.editors || []).includes(email)) ctx.editorSheets.add(normSheetName(meta.sheetKey));
@@ -1606,7 +1594,7 @@ async function addPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "addLink", actor: getRoleEmail(),
+      action: "addLink", actor: getCurrentUserEmail(),
       sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis
     });
     if (!data || !data.ok){
@@ -1643,7 +1631,7 @@ async function editPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "editLink", actor: getRoleEmail(),
+      action: "editLink", actor: getCurrentUserEmail(),
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
       name: f.name, url: f.url, desc: f.desc, visible: f.vis
     });
@@ -1696,7 +1684,7 @@ async function deleteSelectedPicLinks(){
   try {
     for (const link of chosen){
       const data = await picApi({
-        action: "deleteLink", actor: getRoleEmail(),
+        action: "deleteLink", actor: getCurrentUserEmail(),
         sheet: meta.sheetKey, name: link.rawName, url: link.rawUrl
       });
       if (data && (data.ok || data.notFound)){
@@ -1985,7 +1973,7 @@ async function loadAndRender(isInitial, fromCache){
   };
   const userIdx = new Set();   // index milik sheet tempat email ini terdaftar (PIC)
   const allIdx = [];
-  const me = getRoleEmail();   // hanya sesi PIC yang memakai index milik sheet-nya
+  const me = getCurrentUserEmail();
   if (visRow){
     for (let c = 1; c < numCols; c++){
       if (!isSheetActive(c)) continue;
@@ -2061,7 +2049,7 @@ async function loadAndRender(isInitial, fromCache){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getRoleEmail()] : [] });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -2262,8 +2250,6 @@ const LOGIN_STORAGE_KEY = "srsc_login_email";
 // Menyimpan sementara email yang sedang diproses di antara Step 1 -> Step 2/3
 // (baru benar-benar dianggap "login" setelah pertanyaan lanjutannya terisi).
 let pendingEmail = "";
-let picNeedsPassword = true;   // sheet PIC memakai password? (kalau tidak, kolom password disembunyikan)
-let guestFromPic = false;      // user memilih Continue as Guest dari langkah PIC
 
 // Kirim catatan "siapa membuka website, kapan, dan hasilnya apa" ke Sheet
 // "Logs" lewat Apps Script. Dipanggil "fire-and-forget": halaman tidak
@@ -2345,16 +2331,15 @@ function goToStep(stepName){
   clearLoginError();
 }
 
-// Atur tampilan langkah PIC: dengan atau tanpa kolom password.
-function setPasswordStep(needsPassword){
-  picNeedsPassword = !!needsPassword;
-  document.getElementById("pw-wrap").style.display = needsPassword ? "" : "none";
-  document.getElementById("login-password").required = !!needsPassword;
-}
+// Status pencarian PIC untuk email yang sedang diproses (dipakai tombol
+// "Continue as Guest" & tombol Back di langkah Department/Unit).
+let pendingPic = null;
+let unitFromPicStep = false;
 
 function resetToEmailStep(){
   pendingEmail = "";
-  guestFromPic = false;
+  pendingPic = null;
+  unitFromPicStep = false;
   document.getElementById("login-unit").value = "";
   document.getElementById("login-password").value = "";
   document.getElementById("login-kodedosen").value = "";
@@ -2362,12 +2347,12 @@ function resetToEmailStep(){
   document.getElementById("login-email").focus();
 }
 
-function completeLogin(state, statusText, extraForLog){
+function completeLogin(state, statusText, extraForLog, keteranganText){
   localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(state));
   // Login pertama kali (status "Berhasil") dikasih keterangan "Tersimpan" --
   // supaya di sheet jelas ini bukan baris kosong, tapi memang login ini yang
   // baru tersimpan di browser-nya (untuk dipakai auto-login berikutnya).
-  logSignIn(state.email, statusText, extraForLog, "Tersimpan");
+  logSignIn(state.email, statusText, extraForLog, keteranganText || "Tersimpan");
   hideLoginGate();
   main();
 }
@@ -2622,14 +2607,21 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     }
 
     if (pic.isPic){
-      // Email terdata sebagai PIC / leader -> Password (kalau sheet-nya memakai
-      // password) + pilihan Sign In / Continue as Guest. Tidak ditanya Unit.
-      setPasswordStep(!!pic.needsPassword);
+      // Email terdata sebagai PIC / Leader -> langkah Password + pilihan Guest.
+      pendingPic = pic;
+      const needsPw = !!pic.needsPassword;
+      document.getElementById("pw-wrap").classList.toggle("hidden", !needsPw);
+      document.getElementById("login-password").required = needsPw;
+      document.getElementById("password-hint").textContent = needsPw
+        ? "Your email is registered as a PIC / Leader. Enter your password to sign in, or continue as a guest."
+        : "Your email is registered as a PIC / Leader. Press Sign In to continue, or continue as a guest.";
       goToStep("password");
-      if (pic.needsPassword) document.getElementById("login-password").focus();
+      if (needsPw) document.getElementById("login-password").focus();
       return;
     }
 
+    // Email tidak terdata -> otomatis masuk sebagai Guest (isi Department/Unit).
+    unitFromPicStep = false;
     goToStep("unit");
     document.getElementById("login-unit").focus();
     return;
@@ -2670,13 +2662,14 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
 // ---- STEP 2a-PIC: Password (untuk email PIC @binus.edu) ----
 document.getElementById("password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  // Sheet tanpa password: Sign In langsung (tanpa cek password).
-  if (!picNeedsPassword){
+  const password = document.getElementById("login-password").value;
+  const needsPw = !pendingPic || pendingPic.needsPassword;
+
+  // PIC / Leader tanpa password di spreadsheet -> langsung Sign In.
+  if (!needsPw){
     completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, pic: true }, "Berhasil", "PIC");
     return;
   }
-
-  const password = document.getElementById("login-password").value;
   if (!password.trim()){
     showLoginError("Password cannot be empty.");
     return;
@@ -2713,10 +2706,11 @@ document.getElementById("password-form").addEventListener("submit", async (e) =>
 });
 document.getElementById("password-back").addEventListener("click", resetToEmailStep);
 
-// Continue as Guest: masuk sebagai user biasa -> wajib isi Department/Unit.
+// Continue as Guest: peran = pengguna biasa (bukan sesuai spreadsheet),
+// wajib mengisi Department/Unit.
 document.getElementById("password-guest").addEventListener("click", () => {
-  guestFromPic = true;
   document.getElementById("login-password").value = "";
+  unitFromPicStep = true;
   goToStep("unit");
   document.getElementById("login-unit").focus();
 });
@@ -2729,16 +2723,15 @@ document.getElementById("unit-form").addEventListener("submit", (e) => {
     showLoginError("Department/Unit cannot be empty.");
     return;
   }
-  completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, unit: unit }, "Berhasil", unit);
+  completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, unit: unit, guest: true }, "Berhasil", unit, "Tersimpan (Guest)");
 });
 document.getElementById("unit-back").addEventListener("click", () => {
-  // Dari Continue as Guest -> kembali ke langkah PIC; selain itu kembali ke email.
-  if (guestFromPic){
-    guestFromPic = false;
-    goToStep("password");
-    return;
+  if (unitFromPicStep && pendingPic){
+    goToStep("password");           // kembali ke langkah Password
+    unitFromPicStep = false;
+  } else {
+    resetToEmailStep();
   }
-  resetToEmailStep();
 });
 
 // ---- STEP 2b: pilih Dosen / Mahasiswa (untuk @binus.ac.id) ----

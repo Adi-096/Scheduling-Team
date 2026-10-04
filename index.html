@@ -436,6 +436,22 @@
     text-decoration:underline; text-underline-offset:2px;
   }
   .acct-bar .acct-out:hover{ color:#B3401F; }
+  .acct-bar .acct-switch{
+    font:inherit;letter-spacing:inherit;color:var(--primary);background:none;
+    border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;
+  }
+  .role-switch-dialog{width:min(440px,calc(100vw - 32px));max-width:none;border:1px solid var(--line);border-radius:14px;padding:0;color:var(--ink);background:var(--surface);box-shadow:0 24px 80px rgba(0,0,0,.24);}
+  .role-switch-dialog::backdrop{background:rgba(17,24,39,.48);backdrop-filter:blur(3px);}
+  .role-switch-dialog form{padding:24px;}
+  .role-switch-dialog h3{margin:0 0 8px;font-family:'Playfair Display',serif;font-size:22px;color:var(--primary);}
+  .role-switch-dialog p{margin:0 0 16px;font-size:13px;line-height:1.5;color:var(--ink-soft);}
+  .role-switch-dialog label{display:block;margin:12px 0 6px;font-size:12px;color:var(--ink-soft);}
+  .role-switch-dialog input,.role-switch-dialog select{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;}
+  .role-switch-dialog .role-switch-error{display:none;margin-top:12px;color:#B3401F;font-size:12px;line-height:1.4;}
+  .role-switch-dialog .role-switch-error.show{display:block;}
+  .role-switch-dialog .role-switch-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+  .role-switch-dialog .role-switch-actions button{padding:10px 14px;border-radius:8px;border:1px solid var(--line);cursor:pointer;font:inherit;}
+  .role-switch-dialog .role-switch-actions .primary{background:var(--primary);border-color:var(--primary);color:#fff;}
   footer.page-footer{
     margin-top:48px;
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
@@ -619,6 +635,22 @@
     color:var(--ink-faint);letter-spacing:.04em;
     margin-top:18px;
   }
+  .login-card .login-recovery-note{
+    font-family:'Work Sans',sans-serif;font-size:11.5px;color:var(--ink-soft);
+    line-height:1.5;margin:13px 0 8px;text-align:left;
+  }
+  .login-card button.login-recovery-btn{
+    margin-top:0;background:transparent;color:var(--primary);
+    border:1px solid var(--line);font-size:11px;letter-spacing:.04em;
+  }
+  .login-card button.login-recovery-btn:hover{background:var(--surface-soft);border-color:var(--accent);}
+  .login-card .login-recovery-status{
+    display:none;margin-top:10px;padding:9px 11px;border-radius:8px;
+    font-family:'Work Sans',sans-serif;font-size:12px;line-height:1.5;
+    text-align:left;color:#17623A;background:#E7F6EE;border:1px solid #BFE3CF;
+  }
+  .login-card .login-recovery-status.show{display:block;}
+  .login-card .login-recovery-status.error{color:#B3401F;background:#FCEEE9;border-color:#F0C9BC;}
 
   /* langkah tambahan (Step 2/3) setelah email tervalidasi: input Unit,
      pilihan Dosen/Mahasiswa, dan input Kode Dosen. Disembunyikan lewat
@@ -745,6 +777,15 @@
       <button type="submit">Sign In</button>
     </form>
 
+    <!-- PIC yang terdata memilih masuk sebagai PIC (pakai password) atau tamu (isi Department/Unit). -->
+    <div id="pic-choice-step" class="login-step hidden">
+      <p class="login-recovery-note" id="pic-choice-summary">This email is registered as a PIC. Choose how you want to continue.</p>
+      <button type="button" id="pic-as-pic-btn">Sign in as PIC</button>
+      <p class="login-recovery-note hidden" id="pic-password-unavailable">PIC sign-in is unavailable because no password is set. You can continue as a guest or contact the website administrator.</p>
+      <button type="button" id="pic-as-guest-btn">Continue as Guest</button>
+      <button type="button" class="login-back" id="pic-choice-back">&larr; Back</button>
+    </div>
+
     <!-- Login Developer: password diverifikasi oleh Apps Script, bukan di browser. -->
     <form id="developer-form" class="login-step hidden" autocomplete="off">
       <input type="password" id="login-developer-password" placeholder="Developer Password" required autocomplete="current-password">
@@ -776,6 +817,7 @@
         <button type="button" class="login-back" id="password-back">&larr; Back</button>
         <button type="submit">Continue</button>
       </div>
+      <p class="login-recovery-note">Forgot your PIC password? SMS recovery is not available until an SMS gateway is configured. Please contact the website administrator for now.</p>
     </form>
 
     <!-- STEP 2b: khusus domain @binus.ac.id -> pilih Dosen / Mahasiswa -->
@@ -809,7 +851,9 @@
     var saved = JSON.parse(localStorage.getItem("srsc_login_email") || "null");
     var eligible = saved && saved.email && (
       (saved.domain === "binus.edu" && (saved.unit || saved.pic)) ||
-      (saved.domain === "binus.ac.id" && saved.role === "Dosen" && saved.kodeDosen) ||
+      (saved.role === "User" && saved.unit) ||
+      (saved.role === "PIC" && saved.pic) ||
+      (saved.role === "Dosen" && saved.kodeDosen) ||
       (saved.developer && localStorage.getItem("srsc_developer_token_v1"))
     );
     if (eligible) document.getElementById("login-gate").classList.add("checking");
@@ -820,6 +864,32 @@
 <div class="top-accent"></div>
 <div class="wrap">
   <div class="acct-bar" id="acct-bar"></div>
+  <dialog class="role-switch-dialog" id="role-switch-dialog" aria-labelledby="role-switch-title">
+    <form id="role-switch-form" autocomplete="off">
+      <h3 id="role-switch-title">Switch Role</h3>
+      <p>Choose a temporary role profile. You can return to your original role at any time.</p>
+      <label for="role-switch-target">Role</label>
+      <select id="role-switch-target" required>
+        <option value="">Choose a role…</option>
+        <option value="dosen">Lecturer (Dosen)</option>
+        <option value="user">User / Department</option>
+        <option value="original">Return to original role</option>
+      </select>
+      <div id="role-switch-user-fields" class="hidden">
+        <label for="role-switch-unit">Department/Unit</label>
+        <input type="text" id="role-switch-unit" autocomplete="organization">
+      </div>
+      <div id="role-switch-dosen-fields" class="hidden">
+        <label for="role-switch-kode">Lecturer ID</label>
+        <input type="text" id="role-switch-kode" autocomplete="off">
+      </div>
+      <div id="role-switch-error" class="role-switch-error" role="alert"></div>
+      <div class="role-switch-actions">
+        <button type="button" id="role-switch-cancel">Cancel</button>
+        <button type="submit" class="primary">Switch</button>
+      </div>
+    </form>
+  </dialog>
   <div class="masthead">
     <div class="brand">Course Scheduling &amp; Student Registration Team</div>
     <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
@@ -2045,10 +2115,12 @@ function resolveViewerVisibility(ctx){
   const policies = ctx.rolePolicy || {};
   let roleKey = ctx.visibilityKey || ctx.roleKey || "";
   if (!roleKey){
-    if (ctx.developer) roleKey = "developer";
+    if (saved.role === "User" || saved.guest) roleKey = "staff";
+    else if (saved.role === "Dosen") roleKey = "dosen";
+    else if (ctx.developer) roleKey = "developer";
     else if (ctx.manager) roleKey = "manager";
     else if (ctx.sectionHead) roleKey = "sectionhead";
-    else if (saved.role === "Dosen" || saved.domain === "binus.ac.id") roleKey = "dosen";
+    else if (saved.domain === "binus.ac.id") roleKey = "dosen";
     else if (ctx.userIdx.size > 0) roleKey = "registeredpic";
     else {
     const support = policies.support || {};
@@ -2096,14 +2168,32 @@ function resolveViewerVisibility(ctx){
 
 // Info akun yang sedang login: satu baris kecil di paling atas halaman.
 // Leader/PIC melihat role; user non-Dosen melihat email dan unit saja.
+function roleSwitchBaseState(state){
+  const base = Object.assign({}, state || {});
+  delete base.switchRoleEligible;
+  delete base.switchRoleBase;
+  return base;
+}
+
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
-  const saved = readSavedLoginState();
+  let saved = readSavedLoginState();
   if (!saved || !saved.email){ box.className = "acct-bar"; box.innerHTML = ""; return; }
 
+  if (opts.canSignOut && !saved.switchRoleEligible){
+    saved.switchRoleEligible = true;
+    saved.switchRoleBase = roleSwitchBaseState(saved);
+    try { localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(saved)); } catch (e){}
+  }
+
   const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
-  if (opts.isDeveloper){
+  if (saved.role === "Dosen"){
+    parts.push(`<span class="acct-role">Lecturer</span>`);
+    if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
+  } else if (saved.role === "User" || saved.guest){
+    if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
+  } else if (opts.isDeveloper){
     parts.push(`<span class="acct-role">Developer</span>`);
   } else if (opts.isLeader){
     const fallbackTitle = opts.isManager ? "Manager" : (opts.isSectionHead ? "Section Head" : "Leader");
@@ -2112,11 +2202,11 @@ function renderLoginInfo(opts){
     parts.push(`<span class="acct-role">Authorized PIC</span>`);
   } else if (opts.isPic){
     parts.push(`<span class="acct-role">PIC</span>`);
-  } else if (saved.role === "Dosen"){
-    parts.push(`<span class="acct-role">Lecturer</span>`);
-    if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
   } else {
     if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
+  }
+  if (saved.switchRoleEligible){
+    parts.push(`<button type="button" class="acct-switch" id="acct-switch-role">Switch Role</button>`);
   }
   if (opts.canSignOut){
     parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
@@ -2124,6 +2214,8 @@ function renderLoginInfo(opts){
 
   box.className = "acct-bar show";
   box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
+  const switchButton = document.getElementById("acct-switch-role");
+  if (switchButton) switchButton.addEventListener("click", openRoleSwitchDialog);
   const signout = document.getElementById("acct-signout");
   if (signout) signout.addEventListener("click", () => {
     if (!confirm("Sign out from " + saved.email + "?")) return;
@@ -2136,6 +2228,100 @@ function renderLoginInfo(opts){
     location.reload();
   });
 }
+
+function syncRoleSwitchFields(){
+  const target = document.getElementById("role-switch-target").value;
+  const userFields = document.getElementById("role-switch-user-fields");
+  const dosenFields = document.getElementById("role-switch-dosen-fields");
+  userFields.classList.toggle("hidden", target !== "user");
+  dosenFields.classList.toggle("hidden", target !== "dosen");
+  document.getElementById("role-switch-unit").required = target === "user";
+  document.getElementById("role-switch-kode").required = target === "dosen";
+  document.getElementById("role-switch-error").classList.remove("show");
+}
+
+function openRoleSwitchDialog(){
+  const saved = readSavedLoginState();
+  const dialog = document.getElementById("role-switch-dialog");
+  if (!saved || !saved.switchRoleEligible || !dialog) return;
+  document.getElementById("role-switch-target").value = "";
+  document.getElementById("role-switch-unit").value = "";
+  document.getElementById("role-switch-kode").value = "";
+  syncRoleSwitchFields();
+  dialog.showModal();
+}
+
+function showRoleSwitchError(message){
+  const error = document.getElementById("role-switch-error");
+  error.textContent = message;
+  error.classList.add("show");
+}
+
+document.getElementById("role-switch-target").addEventListener("change", syncRoleSwitchFields);
+document.getElementById("role-switch-cancel").addEventListener("click", () => document.getElementById("role-switch-dialog").close());
+document.getElementById("role-switch-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const saved = readSavedLoginState();
+  if (!saved || !saved.switchRoleEligible){
+    showRoleSwitchError("Role switching is not available for this account.");
+    return;
+  }
+  const target = document.getElementById("role-switch-target").value;
+  const base = saved.switchRoleBase || roleSwitchBaseState(saved);
+  let next = Object.assign({}, base);
+  let logExtra = "Original role";
+
+  if (target === "user"){
+    const unit = document.getElementById("role-switch-unit").value.trim();
+    if (!unit){ showRoleSwitchError("Department/Unit cannot be empty."); return; }
+    next.role = "User";
+    next.unit = unit;
+    next.guest = true;
+    delete next.pic;
+    delete next.kodeDosen;
+    logExtra = unit;
+  } else if (target === "dosen"){
+    const kode = document.getElementById("role-switch-kode").value.trim();
+    if (!kode){ showRoleSwitchError("Lecturer ID cannot be empty."); return; }
+    const submit = document.querySelector("#role-switch-form button[type='submit']");
+    const originalLabel = submit.textContent;
+    submit.disabled = true;
+    submit.textContent = "Checking…";
+    const result = await checkKodeDosenTerdaftar(kode);
+    submit.disabled = false;
+    submit.textContent = originalLabel;
+    if (!result.ok){ showRoleSwitchError("Could not verify the lecturer ID. Check your connection and try again."); return; }
+    if (!result.found){ showRoleSwitchError("Lecturer ID not found."); return; }
+    next.role = "Dosen";
+    next.kodeDosen = kode;
+    next.guest = false;
+    delete next.pic;
+    delete next.unit;
+    logExtra = kode;
+  } else if (target !== "original"){
+    showRoleSwitchError("Choose a role to continue.");
+    return;
+  }
+
+  if (target === "original"){
+    delete next.switchRoleEligible;
+    delete next.switchRoleBase;
+  } else {
+    next.switchRoleEligible = true;
+    next.switchRoleBase = base;
+  }
+  endActivityTracking();
+  logSignIn(saved.email, "Berhasil", logExtra, "Role switched");
+  try {
+    localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(next));
+    localStorage.removeItem(DATA_CACHE_KEY);
+  } catch (err){
+    showRoleSwitchError("This browser could not save the selected role.");
+    return;
+  }
+  document.getElementById("role-switch-dialog").close();
+  location.reload();
+});
 
 async function loadAndRender(isInitial, fromCache){
   // Kalau ada popup yang sedang dibuka pengguna, tunda dulu pengecekan diam-diam
@@ -2557,13 +2743,17 @@ const PIC_LOOKUP_FAIL_OPEN = true;
 // seperti sebelumnya), supaya Unit / Kode Dosen ikut diingat untuk
 // auto-login berikutnya. Contoh isi:
 //   { email, domain: "binus.edu", unit: "..." }
-//   { email, domain: "binus.edu", pic: true }          <- email PIC (tanpa Unit)
+//   { email, domain: "binus.edu", role: "PIC", pic: true }
+//   { email, domain: "binus.edu", role: "User", guest: true, unit: "..." }
 //   { email, domain: "binus.ac.id", role: "Dosen", kodeDosen: "..." }
+// Leader/Developer yang switch role menyimpan switchRoleBase untuk pemulihan role awal.
 const LOGIN_STORAGE_KEY = "srsc_login_email";
 
 // Menyimpan sementara email yang sedang diproses di antara Step 1 -> Step 2/3
 // (baru benar-benar dianggap "login" setelah pertanyaan lanjutannya terisi).
 let pendingEmail = "";
+let pendingPicGuest = false;
+let pendingPicNeedsPassword = false;
 
 // Kirim catatan "siapa membuka website, kapan, dan hasilnya apa" ke Sheet
 // "Logs" lewat Apps Script. Dipanggil "fire-and-forget": halaman tidak
@@ -2714,6 +2904,7 @@ function hideLoginGate(){
 // tampilan: sembunyikan semua dulu, baru tampilkan satu yang relevan.
 const STEP_EL = {
   email: document.getElementById("login-form"),
+  picChoice: document.getElementById("pic-choice-step"),
   developer: document.getElementById("developer-form"),
   unit: document.getElementById("unit-form"),
   password: document.getElementById("password-form"),
@@ -2729,6 +2920,8 @@ function goToStep(stepName){
 
 function resetToEmailStep(){
   pendingEmail = "";
+  pendingPicGuest = false;
+  pendingPicNeedsPassword = false;
   document.getElementById("login-unit").value = "";
   document.getElementById("login-password").value = "";
   document.getElementById("login-developer-password").value = "";
@@ -2810,16 +3003,20 @@ async function tryAutoLogin(){
 
   let extraForLog;
   if (saved.developer && isDeveloperEmail(saved.email) && getDeveloperToken()){
-    extraForLog = "Developer";
+    extraForLog = saved.role === "Dosen" ? (saved.kodeDosen || "Dosen") : (saved.role === "User" ? (saved.unit || "User") : "Developer");
   } else if (saved.developer){
     localStorage.removeItem(LOGIN_STORAGE_KEY);
     localStorage.removeItem(DEVELOPER_TOKEN_KEY);
     localStorage.removeItem(DATA_CACHE_KEY);
     return false;
+  } else if (saved.role === "User" && saved.unit){
+    extraForLog = saved.unit;
+  } else if (saved.role === "PIC" && saved.pic){
+    extraForLog = "PIC";
+  } else if (saved.role === "Dosen" && saved.kodeDosen){
+    extraForLog = saved.kodeDosen;
   } else if (saved.domain === DOMAIN_EDU && (saved.unit || saved.pic)){
     extraForLog = saved.unit || "PIC";
-  } else if (saved.domain === DOMAIN_AC_ID && saved.role === "Dosen" && saved.kodeDosen){
-    extraForLog = saved.kodeDosen;
   } else {
     return false;
   }
@@ -2954,9 +3151,12 @@ async function localPicLookup(email){
 // bukan di browser).
 async function verifyPicPassword(email, password){
   try {
-    const url = LOG_WEBAPP_URL + "?action=verifyPicPassword&email=" + encodeURIComponent(email) +
-                "&password=" + encodeURIComponent(password) + "&_=" + Date.now();
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    const res = await fetch(LOG_WEBAPP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "verifyPicPassword", email: email, password: password, _: Date.now() }),
+      cache: "no-store"
+    });
     const data = await res.json();
     return { ok: true, valid: !!data.valid, locked: !!data.locked };
   } catch (err){
@@ -3000,9 +3200,9 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     return;
   }
 
-  if (domain === DOMAIN_EDU){
-    // Cek dulu: apakah email ini PIC? PIC tidak ditanya Unit -- diganti Password
-    // (kalau sheet-nya memakai password) atau langsung masuk (kalau tidak).
+  if (domain === DOMAIN_EDU || domain === DOMAIN_AC_ID){
+    // Cari PIC pada semua domain BINUS yang didukung. PIC selalu memilih
+    // profilnya sendiri: password untuk PIC atau Department/Unit sebagai Guest.
     const submitBtn = document.querySelector("#login-form button[type='submit']");
     const originalLabel = submitBtn.textContent;
     submitBtn.disabled = true;
@@ -3017,33 +3217,30 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
 
     if (!pic.ok){
       if (PIC_LOOKUP_FAIL_OPEN){
-        // Gagal cek PIC -> perlakukan seperti karyawan biasa (tanya Unit).
-        console.warn("Pengecekan PIC gagal -> lanjut ke Department/Unit.");
-        goToStep("unit");
-        document.getElementById("login-unit").focus();
+        console.warn("Pengecekan PIC gagal -> lanjut ke alur login domain.");
+      } else {
+        showLoginError("Failed to verify your account. Please check your internet connection and try again.");
         return;
       }
-      showLoginError("Failed to verify your account. Please check your internet connection and try again.");
+    }
+
+    if (pic.ok && pic.isPic){
+      pendingPicNeedsPassword = !!pic.needsPassword;
+      pendingPicGuest = false;
+      document.getElementById("pic-as-pic-btn").classList.toggle("hidden", !pendingPicNeedsPassword);
+      document.getElementById("pic-password-unavailable").classList.toggle("hidden", pendingPicNeedsPassword);
+      document.getElementById("pic-choice-summary").textContent = pendingPicNeedsPassword
+        ? "This email is registered as a PIC. Sign in with the PIC password, or continue as a guest."
+        : "This email is registered as a PIC but no PIC password is set. Continue as a guest or contact the website administrator to enable PIC sign-in.";
+      goToStep("picChoice");
       return;
     }
 
-    if (pic.isPic && pic.needsPassword){
-      goToStep("password");
-      document.getElementById("login-password").focus();
+    if (domain === DOMAIN_EDU){
+      goToStep("unit");
+      document.getElementById("login-unit").focus();
       return;
     }
-
-    if (pic.isPic){
-      completeLogin({ email: email, domain: DOMAIN_EDU, pic: true }, "Berhasil", "PIC");
-      return;
-    }
-
-    goToStep("unit");
-    document.getElementById("login-unit").focus();
-    return;
-  }
-
-  if (domain === DOMAIN_AC_ID){
     goToStep("role");
     return;
   }
@@ -3103,7 +3300,7 @@ document.getElementById("developer-back").addEventListener("click", resetToEmail
   document.addEventListener("visibilitychange", hide);
 })();
 
-// ---- STEP 2a-PIC: Password (untuk email PIC @binus.edu) ----
+// ---- STEP 2a-PIC: password diperlukan hanya untuk masuk sebagai PIC ----
 document.getElementById("password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const password = document.getElementById("login-password").value;
@@ -3139,11 +3336,25 @@ document.getElementById("password-form").addEventListener("submit", async (e) =>
     return;
   }
 
-  completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, pic: true }, "Berhasil", "PIC");
+  completeLogin({ email: pendingEmail, domain: getEmailDomain(pendingEmail), role: "PIC", pic: true }, "Berhasil", "PIC");
 });
-document.getElementById("password-back").addEventListener("click", resetToEmailStep);
+document.getElementById("password-back").addEventListener("click", () => goToStep("picChoice"));
+document.getElementById("pic-as-pic-btn").addEventListener("click", () => {
+  if (!pendingPicNeedsPassword){
+    showLoginError("PIC sign-in is unavailable because no password is set. Continue as Guest or contact the website administrator.");
+    return;
+  }
+  goToStep("password");
+  document.getElementById("login-password").focus();
+});
+document.getElementById("pic-as-guest-btn").addEventListener("click", () => {
+  pendingPicGuest = true;
+  goToStep("unit");
+  document.getElementById("login-unit").focus();
+});
+document.getElementById("pic-choice-back").addEventListener("click", resetToEmailStep);
 
-// ---- STEP 2a: Unit (untuk @binus.edu) ----
+// ---- STEP Unit: karyawan biasa atau PIC yang memilih masuk sebagai Guest ----
 document.getElementById("unit-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const unit = document.getElementById("login-unit").value.trim();
@@ -3151,9 +3362,14 @@ document.getElementById("unit-form").addEventListener("submit", (e) => {
     showLoginError("Department/Unit cannot be empty.");
     return;
   }
-  completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, unit: unit }, "Berhasil", unit);
+  const state = { email: pendingEmail, domain: getEmailDomain(pendingEmail), unit: unit };
+  if (pendingPicGuest){ state.role = "User"; state.guest = true; }
+  completeLogin(state, "Berhasil", unit);
 });
-document.getElementById("unit-back").addEventListener("click", resetToEmailStep);
+document.getElementById("unit-back").addEventListener("click", () => {
+  if (pendingPicGuest){ pendingPicGuest = false; goToStep("picChoice"); }
+  else resetToEmailStep();
+});
 
 // ---- STEP 2b: pilih Dosen / Mahasiswa (untuk @binus.ac.id) ----
 document.getElementById("role-mahasiswa-btn").addEventListener("click", () => {

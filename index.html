@@ -1938,38 +1938,54 @@ const ROLE_LABELS = {
   authorizedpic: "Authorized PIC", registeredpic: "Registered PIC",
   bsp: "Staff", staff: "Staff", dosen: "Lecturer"
 };
-const VIEW_AS_KEY = "srsc_view_as";   // "" | "staff" | "dosen"  (Role Switch)
+const VIEW_AS_KEY = "srsc_view_as";   // "" | kunci role di ROLE_ORDER  (Role Switch)
+
+// Urutan role dari yang tertinggi ke terendah. Role Switch menawarkan role DI BAWAH role sendiri:
+// Developer -> Senior Manager ... Lecturer; Manager -> Section Head ... Lecturer; dst.
+const ROLE_ORDER = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic", "bsp", "staff", "dosen"];
+const SWITCH_LABELS = Object.assign({}, ROLE_LABELS, { bsp: "Binus Support" });   // di daftar pilihan, BSP disebut jelas
+function rolesBelow(role){
+  const i = ROLE_ORDER.indexOf(role);
+  return i < 0 ? [] : ROLE_ORDER.slice(i + 1);
+}
 function getViewAs(){
-  try { const v = localStorage.getItem(VIEW_AS_KEY); return (v === "staff" || v === "dosen") ? v : ""; }
+  try { const v = localStorage.getItem(VIEW_AS_KEY); return ROLE_ORDER.includes(v) ? v : ""; }
   catch (e){ return ""; }
 }
 
-// opts: { realRole, baseRole, title, canSwitch, viewAs, canSignOut }
+// Isi Login Card (bar akun) mengikuti kolom "Login Card View" di Role Policy milik role asli.
+// Item yang dipilih tapi tidak punya nilai (mis. Lecturer Code untuk Manager) tidak ditampilkan.
+const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kalau server belum mengirim kolom ini
+
+// opts: { realRole, baseRole, title, job, card, canSwitch, viewAs, canSignOut }
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
   const saved = readSavedLoginState();
   if (!saved || !saved.email){ box.className = "acct-bar"; box.innerHTML = ""; return; }
 
-  const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
-  if (opts.realRole){
-    // Role sesuai spreadsheet; untuk Leader pakai jabatan persis dari sheet tim.
-    const isLead = ["seniormanager", "manager", "sectionhead"].includes(opts.realRole);
-    parts.push(`<span class="acct-role">${escapeHtml(isLead && opts.title ? opts.title : ROLE_LABELS[opts.realRole])}</span>`);
-  } else if (opts.baseRole === "dosen"){
-    parts.push(`<span class="acct-role">Lecturer</span>`);
-    if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
-  } else {
-    parts.push(`<span class="acct-role">Staff</span>`);
-    if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
-  }
-  // Role Switch = Yes (Role Policy): boleh berpindah tampilan ke Staff atau Dosen.
+  const ownRole = opts.realRole || opts.baseRole;
+  const card = Array.isArray(opts.card) && opts.card.length ? opts.card : LOGIN_CARD_FALLBACK;
+  const roleText = (opts.realRole && ["seniormanager", "manager", "sectionhead"].includes(opts.realRole) && opts.title)
+    ? opts.title : (ROLE_LABELS[ownRole] || "");
+  const items = {
+    email: saved.email ? `<span class="acct-email">${escapeHtml(saved.email)}</span>` : "",
+    role:  roleText ? `<span class="acct-role">${escapeHtml(roleText)}</span>` : "",
+    job:   opts.job ? `<span class="acct-job">${escapeHtml(opts.job)}</span>` : "",
+    code:  saved.kodeDosen ? `<span>${escapeHtml(saved.kodeDosen)}</span>` : "",
+    unit:  saved.unit ? `<span>${escapeHtml(saved.unit)}</span>` : ""
+  };
+  const parts = ["email", "role", "job", "code", "unit"].filter(k => card.includes(k) && items[k]).map(k => items[k]);
+
+  // Role Switch = Yes (Role Policy): boleh berpindah tampilan ke role di bawah role sendiri.
   if (opts.canSwitch){
-    parts.push(`<select class="acct-switch" id="acct-switch" aria-label="Switch role view">
-      <option value=""${opts.viewAs === "" ? " selected" : ""}>My role</option>
-      <option value="staff"${opts.viewAs === "staff" ? " selected" : ""}>View as Staff</option>
-      <option value="dosen"${opts.viewAs === "dosen" ? " selected" : ""}>View as Lecturer</option>
-    </select>`);
+    const below = rolesBelow(ownRole);
+    if (below.length){
+      parts.push(`<select class="acct-switch" id="acct-switch" aria-label="Switch role view">
+        <option value=""${opts.viewAs === "" ? " selected" : ""}>My role</option>
+        ${below.map(k => `<option value="${k}"${opts.viewAs === k ? " selected" : ""}>View as ${escapeHtml(SWITCH_LABELS[k])}</option>`).join("")}
+      </select>`);
+    }
   }
   // Tombol Sign out mengikuti kolom "Sign Out Button" di Role Policy.
   if (opts.canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
@@ -1981,7 +1997,7 @@ function renderLoginInfo(opts){
   if (sw) sw.addEventListener("change", () => {
     const v = sw.value;
     try { if (v) localStorage.setItem(VIEW_AS_KEY, v); else localStorage.removeItem(VIEW_AS_KEY); } catch (e){}
-    Activity.event("role_switch", v ? "View as " + (v === "dosen" ? "Lecturer" : "Staff") : "Back to own role");
+    Activity.event("role_switch", v ? "View as " + (SWITCH_LABELS[v] || v) : "Back to own role");
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
     loadAndRender(true).catch(() => {});
@@ -2004,7 +2020,7 @@ function renderLoginInfo(opts){
 function extraFromServer(d){
   return {
     links: d.links || {}, editorFor: d.editorFor || [],
-    leader: !!d.leader, developer: !!d.developer, title: d.title || "",
+    leader: !!d.leader, developer: !!d.developer, title: d.title || "", job: d.jobTitle || "",
     role: d.role || "", perms: d.perms || {},
     createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], teamSheets: d.teamSheets || [],
     policy: d.policy || {}
@@ -2132,10 +2148,13 @@ async function loadAndRender(isInitial, fromCache){
   const savedLogin = readSavedLoginState() || {};
   const realRole = extra.role || "";
   const canSwitch = !!(extra.perms && extra.perms.roleSwitch);
-  let viewAs = getViewAs();
-  if (viewAs && !canSwitch){ viewAs = ""; try { localStorage.removeItem(VIEW_AS_KEY); } catch (e){} }
   const baseRole = (savedLogin.role === "Dosen" || savedLogin.domain === DOMAIN_AC_ID) ? "dosen"
                  : (SUPPORT_UNIT_PATTERN.test(String(savedLogin.unit || "")) ? "bsp" : "staff");
+  // Role Switch hanya boleh ke role DI BAWAH role sendiri; pilihan lama yang tidak berlaku lagi dibuang.
+  let viewAs = getViewAs();
+  if (viewAs && (!canSwitch || !rolesBelow(realRole || baseRole).includes(viewAs))){
+    viewAs = ""; try { localStorage.removeItem(VIEW_AS_KEY); } catch (e){}
+  }
   const effRole = viewAs || realRole || baseRole;
   const viewVis = resolveViewerVisibility({ role: effRole, pol: (extra.policy || {})[effRole] || {}, userIdx: userIdx, allIdx: allIdx });
   const canSeeIdx = (vi) => {
@@ -2259,7 +2278,8 @@ async function loadAndRender(isInitial, fromCache){
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
-  renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", canSwitch: canSwitch, viewAs: viewAs, canSignOut: !!(extra.perms && extra.perms.signOut) });
+  renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", job: extra.job || "",
+                    card: ((extra.policy || {})[realRole || baseRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, canSignOut: !!(extra.perms && extra.perms.signOut) });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){
@@ -2862,7 +2882,7 @@ async function lookupPicLogin(email){
         console.warn("picLogin: respons tidak dikenali (Apps Script belum diperbarui?)", data);
         return { ok: true, isPic: false };
       }
-      return { ok: true, isPic: data.isPic, needsPassword: !!data.needsPassword, title: String(data.title || "") };
+      return { ok: true, isPic: data.isPic, needsPassword: !!data.needsPassword };
     } finally {
       clearTimeout(timer);
     }
@@ -2898,30 +2918,22 @@ function startLoginPrefetch(){
   picIndexPromise = (async () => {
     const d = await getServerData();      // belum login -> tanpa link PIC Menu
     const emails = {};
-    const jabs = {};   // email -> nama jabatan/posisi (leader tertinggi diutamakan)
     Object.keys(d.sheets || {}).forEach(name => {
       const rows = d.sheets[name];
       if (!rows || rows.length < 2) return;
       const key = normSheetName(name);
-      const hdr = rows[0].map(normalizeHeader);
-      const cEml = hdr.findIndex(h => h.includes("email") || h.includes("e-mail"));
-      const cJab = hdr.findIndex(h => h.includes("jabatan") || h.includes("posisi"));
+      const cEml = rows[0].map(normalizeHeader).findIndex(h => h.includes("email") || h.includes("e-mail"));
       if (cEml < 0) return;
       rows.slice(1).forEach(r => {
-        const rawJab = cJab >= 0 ? String(r[cJab] || "").trim() : "";
         splitEmails(r[cEml]).forEach(em => {
           const list = emails[em] || (emails[em] = []);
           if (!list.includes(key)) list.push(key);
-          if (rawJab){
-            const cur = jabs[em] ? LEADER_TITLES.indexOf(normJabatan(jabs[em])) : -2;
-            if (!jabs[em] || LEADER_TITLES.indexOf(normJabatan(rawJab)) > cur) jabs[em] = rawJab;
-          }
         });
       });
     });
     const hasPw = {};
     (d.pwSheets || []).forEach(k => { hasPw[k] = true; });
-    return { emails: emails, jabs: jabs, hasPw: hasPw, inactive: new Set(d.inactive || []), devs: new Set(d.devs || []) };
+    return { emails: emails, hasPw: hasPw, inactive: new Set(d.inactive || []), devs: new Set(d.devs || []) };
   })();
   picIndexPromise.catch(() => {});
 }
@@ -2948,7 +2960,7 @@ async function localPicLookup(email){
     if (idx.devs.size > 0){
       const hd = await sha256Hex(em);
       if (hd === null) return null;   // tidak bisa hash -> biarkan server yang memutuskan
-      if (idx.devs.has(hd)) return { ok: true, isPic: true, needsPassword: true, title: "Developer" };
+      if (idx.devs.has(hd)) return { ok: true, isPic: true, needsPassword: true };
     }
     // Email yang juga tercatat di sheet NONAKTIF tidak ada di data lokal ->
     // biarkan server yang memutuskan (lebih lambat, tapi benar).
@@ -2957,7 +2969,7 @@ async function localPicLookup(email){
       if (h === null || idx.inactive.has(h)) return null;
     }
     const sheets = idx.emails[em] || [];
-    return { ok: true, isPic: sheets.length > 0, needsPassword: sheets.some(k => idx.hasPw[k]), title: (idx.jabs && idx.jabs[em]) || "" };
+    return { ok: true, isPic: sheets.length > 0, needsPassword: sheets.some(k => idx.hasPw[k]) };
   } catch (err){
     return null;
   }
@@ -3026,14 +3038,9 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
       const needsPw = !!pic.needsPassword;
       document.getElementById("pw-wrap").classList.toggle("hidden", !needsPw);
       document.getElementById("login-password").required = needsPw;
-      // Sebut jabatan/posisi di spreadsheet (atau "Developer"); kalau tidak diketahui, teks umum.
-      const titleTxt = String(pic.title || "").trim();
-      const who = titleTxt
-        ? `${/^[aeiou]/i.test(titleTxt) ? "an" : "a"} ${titleTxt}`
-        : "a PIC / Leader";
       document.getElementById("password-hint").textContent = needsPw
-        ? `Your email is registered as ${who}. Enter your password to sign in, or continue as a guest.`
-        : `Your email is registered as ${who}. Press Sign In to continue, or continue as a guest.`;
+        ? "Your email is registered as a PIC / Leader. Enter your password to sign in, or continue as a guest."
+        : "Your email is registered as a PIC / Leader. Press Sign In to continue, or continue as a guest.";
       goToStep("password");
       if (needsPw) document.getElementById("login-password").focus();
       return;

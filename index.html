@@ -1820,8 +1820,8 @@ function resolveViewerVisibility(ctx){
   return { allowed: null, order: finishOrder(P.staff, asc), strict: false };
 }
 
-// Info akun yang sedang login: satu baris kecil di paling atas halaman
-// (email · peran · unit/ID · Sign out). Sengaja dibuat tidak mencolok.
+// Info akun yang sedang login: satu baris kecil di paling atas halaman.
+// Leader/PIC melihat role; user non-Dosen melihat email dan unit saja.
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
@@ -1837,10 +1837,9 @@ function renderLoginInfo(opts){
   } else if (opts.isPic){
     parts.push(`<span class="acct-role">PIC</span>`);
   } else {
-    parts.push(`<span class="acct-role">Staff</span>`);
     if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
   }
-  if (opts.isEditor) parts.push(`<span>Editor Menu</span>`);
+  if ((opts.isLeader || opts.isPic) && opts.isEditor) parts.push(`<span>Editor Menu</span>`);
   parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
   box.className = "acct-bar show";

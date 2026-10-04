@@ -1852,17 +1852,21 @@ function renderLoginInfo(opts){
   } else if (opts.isLeader){
     parts.push(`<span class="acct-role">Leader</span>`);
   } else if (opts.isPic){
-    parts.push(`<span class="acct-role">PIC</span>`);
+    // Editor Menu = Authorized PIC; selain itu Registered PIC
+    parts.push(`<span class="acct-role">${opts.isEditor ? "Authorized PIC" : "Registered PIC"}</span>`);
   } else {
     parts.push(`<span class="acct-role">Staff</span>`);
     if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
   }
-  if (opts.isEditor) parts.push(`<span>Editor Menu</span>`);
-  parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
+  // Tombol Sign out hanya untuk Leader (Section Head / Manager / Senior Manager).
+  // PIC (Authorized / Registered), BSP, Staff / Guest, dan Dosen: tidak ada.
+  const canSignOut = !!opts.isLeader;
+  if (canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
   box.className = "acct-bar show";
   box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
-  document.getElementById("acct-signout").addEventListener("click", () => {
+  const outBtn = document.getElementById("acct-signout");
+  if (outBtn) outBtn.addEventListener("click", () => {
     if (!confirm("Sign out from " + saved.email + "?")) return;
     try {
       localStorage.removeItem(LOGIN_STORAGE_KEY);

@@ -425,7 +425,7 @@
   .acct-bar .acct-sep{ opacity:.6; }
   .acct-bar .acct-email{ color:var(--ink-soft); word-break:break-all; }
   .acct-bar .acct-role{ color:var(--primary); }
-  .activity-notice{margin:8px 0 0;text-align:right;font-size:10px;line-height:1.4;color:var(--ink-faint);}
+  .activity-notice{margin:8px 0 0;text-align:center;font-size:10px;line-height:1.4;color:var(--ink-faint);}
   .acct-bar .acct-out{
     font:inherit; letter-spacing:inherit; color:var(--ink-faint);
     background:none; border:none; padding:0; cursor:pointer;
@@ -828,7 +828,7 @@
   </div>
 
   <footer class="page-footer">This directory automatically syncs in real time with its data source.</footer>
-  <div class="activity-notice">Log aktivitas: section yang dibuka dan durasi tab aktif dicatat.</div>
+  <div class="activity-notice">Activity logging: sections viewed and time spent with this tab active are recorded.</div>
 </div>
 
 <div class="modal-overlay" id="modal-overlay">
@@ -1155,7 +1155,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
     <h2 class="header">${escapeHtml(header)}</h2>
     ${subheader ? `<p class="subheader">${escapeHtml(subheader)}</p>` : ""}
     ${empty
-      ? `<p class="subheader">Belum ada data PIC yang diisi untuk bagian ini.</p>`
+      ? `<p class="subheader">No PIC data has been added for this section yet.</p>`
       : `<div class="section-actions"><button class="team-btn" data-target="${secId}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
           Our Team

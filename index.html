@@ -394,8 +394,39 @@
     margin-top:4px;
   }
 
+  /* info akun yang sedang login (di atas kalimat footer) */
+  .login-info{ display:none; margin-top:40px; justify-content:center; }
+  .login-info.show{ display:flex; }
+  .login-card{
+    display:inline-flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center;
+    max-width:100%; padding:10px 16px;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 1px 3px rgba(43,47,78,0.05);
+  }
+  .login-avatar{
+    width:34px; height:34px; border-radius:50%; flex:none;
+    background:var(--gradient-brand); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono',monospace; font-size:14px; font-weight:600; text-transform:uppercase;
+  }
+  .login-text{ display:flex; flex-direction:column; gap:4px; min-width:0; text-align:left; }
+  .login-label{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); }
+  .login-email{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink); word-break:break-all; }
+  .login-badges{ display:flex; gap:6px; flex-wrap:wrap; }
+  .login-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+    padding:2px 8px; border-radius:10px; background:var(--surface-soft); color:var(--primary); border:1px solid var(--primary-soft);
+  }
+  .login-badge.strong{ background:var(--primary); color:#fff; border-color:var(--primary); }
+  .login-signout{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    padding:7px 12px; border-radius:8px; cursor:pointer;
+    background:transparent; color:var(--ink-soft); border:1px solid var(--line);
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .login-signout:hover{ border-color:#B3401F; color:#B3401F; }
   footer.page-footer{
-    margin-top:48px;
+    margin-top:16px;
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
     color:var(--ink-faint);letter-spacing:.05em;
     text-align:center;
@@ -776,6 +807,8 @@
   <div id="app">
     <div class="notice loading">Retrieving the latest information, please allow a moment…</div>
   </div>
+
+  <div class="login-info" id="login-info"></div>
 
   <footer class="page-footer">This directory automatically syncs in real time with its data source.</footer>
 </div>
@@ -1721,6 +1754,23 @@ document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
    ========================================================================= */
 const SUPPORT_UNIT_PATTERN = /\bbinus\s*support\b|\bbsp\b|\bcontact\s*center\b/i;
 const DOSEN_ALLOWED_INDEXES = [1, 3];
+
+/* ---- URUTAN PRIORITAS (mana yang tampil pertama kali) ----------------------
+   CARA TERMUDAH MENGUBAH: lewat sheet Master, TANPA edit kode. Tambahkan baris
+   baru dengan label di Kolom A dan urutannya di Kolom B, contoh:
+        Priority BSP      |  2/3/1
+        Priority Staff    |  1/2/3
+        Priority Leader   |  1/2/3
+        Priority Dosen    |  1/3
+   (pemisah boleh "/", "," atau spasi). Baris yang tidak ada -> pakai nilai
+   bawaan di bawah ini. "BSP" = Binus Support / BSP / Contact Center.
+   Index yang tidak disebut otomatis dicoba setelahnya, urut dari kecil. */
+const DEFAULT_PRIORITY = {
+  leader: [1, 2, 3],
+  bsp:    [2, 3, 1],
+  staff:  [1, 2, 3],
+  dosen:  [1, 3]
+};
 let currentSel = { email: "", set: false, career: null, secKey: null };   // pilihan tab user saat ini (career=null -> semua section)
 
 function parseVisIndex(raw){
@@ -1728,29 +1778,103 @@ function parseVisIndex(raw){
   return m ? parseInt(m[0], 10) : null;
 }
 
-// ctx: { leader:boolean, userIdx:Set<number>, allIdx:number[] }
+// Baca override urutan prioritas dari baris "Priority ..." di sheet Master.
+function readPriorityConfig(masterRows){
+  const out = Object.assign({}, DEFAULT_PRIORITY);
+  (masterRows || []).forEach(r => {
+    const label = String(r[0] || "").toLowerCase().trim();
+    if (!label.startsWith("priority") && !label.startsWith("prioritas")) return;
+    let key = null;
+    if (/leader/.test(label)) key = "leader";
+    else if (/bsp|support|contact/.test(label)) key = "bsp";
+    else if (/dosen|lecturer/.test(label)) key = "dosen";
+    else if (/staff|lain|other|unit/.test(label)) key = "staff";
+    if (!key) return;
+    for (let c = 1; c < r.length; c++){
+      const nums = String(r[c] || "").match(/\d+/g);
+      if (nums && nums.length){ out[key] = nums.map(n => parseInt(n, 10)); break; }
+    }
+  });
+  return out;
+}
+
+// Gabungkan urutan pilihan + sisanya (tanpa duplikat).
+function finishOrder(preferred, rest){
+  const seen = new Set(), out = [];
+  preferred.concat(rest).forEach(i => { if (!seen.has(i)){ seen.add(i); out.push(i); } });
+  return out;
+}
+
+// ctx: { leader:boolean, userIdx:Set<number>, allIdx:number[], priority:{...} }
 // Hasil: { allowed:Set|null (null = semua), order:number[], strict:boolean }
 function resolveViewerVisibility(ctx){
   const saved = readSavedLoginState() || {};
-  const asc  = ctx.allIdx.slice().sort((a, b) => a - b);
-  const desc = ctx.allIdx.slice().sort((a, b) => b - a);
+  const asc = ctx.allIdx.slice().sort((a, b) => a - b);
+  const P = ctx.priority || DEFAULT_PRIORITY;
 
-  if (ctx.leader) return { allowed: null, order: asc, strict: false, isLeader: true };
+  if (ctx.leader) return { allowed: null, order: finishOrder(P.leader, asc), strict: false, isLeader: true };
 
   if (saved.role === "Dosen" || saved.domain === "binus.ac.id"){
-    return { allowed: new Set(DOSEN_ALLOWED_INDEXES), order: DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b), strict: true };
+    const allowed = new Set(DOSEN_ALLOWED_INDEXES);
+    return {
+      allowed: allowed,
+      order: finishOrder(P.dosen.filter(i => allowed.has(i)), DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b)),
+      strict: true
+    };
   }
 
   if (ctx.userIdx.size > 0){   // PIC: boleh membuka semua index; yang dipilih pertama = index sheet miliknya
     const own = Array.from(ctx.userIdx).sort((a, b) => a - b);
-    const rest = asc.filter(i => !ctx.userIdx.has(i));
-    return { allowed: null, order: own.concat(rest), strict: false };
+    return { allowed: null, order: finishOrder(own, asc), strict: false };
   }
 
   if (SUPPORT_UNIT_PATTERN.test(String(saved.unit || ""))){
-    return { allowed: null, order: desc, strict: false };
+    return { allowed: null, order: finishOrder(P.bsp, asc), strict: false };
   }
-  return { allowed: null, order: asc, strict: false };
+  return { allowed: null, order: finishOrder(P.staff, asc), strict: false };
+}
+
+// Kartu info akun yang sedang login (tampil di atas kalimat footer): email, peran
+// (Leader / PIC / Lecturer / Unit), badge Editor Menu, dan tombol Sign out.
+function renderLoginInfo(opts){
+  const box = document.getElementById("login-info");
+  if (!box) return;
+  const saved = readSavedLoginState();
+  if (!saved || !saved.email){ box.className = "login-info"; box.innerHTML = ""; return; }
+
+  const badges = [];
+  if (saved.role === "Dosen"){
+    badges.push(`<span class="login-badge strong">Lecturer</span>`);
+    if (saved.kodeDosen) badges.push(`<span class="login-badge">ID: ${escapeHtml(saved.kodeDosen)}</span>`);
+  } else if (opts.isLeader){
+    badges.push(`<span class="login-badge strong">Leader</span>`);
+  } else if (opts.isPic){
+    badges.push(`<span class="login-badge strong">PIC</span>`);
+  } else {
+    badges.push(`<span class="login-badge strong">Staff</span>`);
+    if (saved.unit) badges.push(`<span class="login-badge">Unit: ${escapeHtml(saved.unit)}</span>`);
+  }
+  if (opts.isEditor) badges.push(`<span class="login-badge">Editor Menu</span>`);
+
+  box.className = "login-info show";
+  box.innerHTML = `
+    <div class="login-card">
+      <div class="login-avatar" aria-hidden="true">${escapeHtml(String(saved.email).charAt(0))}</div>
+      <div class="login-text">
+        <span class="login-label">Signed in as</span>
+        <span class="login-email">${escapeHtml(saved.email)}</span>
+        <span class="login-badges">${badges.join("")}</span>
+      </div>
+      <button type="button" class="login-signout" id="login-signout">Sign out</button>
+    </div>`;
+  document.getElementById("login-signout").addEventListener("click", () => {
+    if (!confirm("Sign out from " + saved.email + "?")) return;
+    try {
+      localStorage.removeItem(LOGIN_STORAGE_KEY);
+      localStorage.removeItem(DATA_CACHE_KEY);
+    } catch (e){}
+    location.reload();
+  });
 }
 
 async function loadAndRender(isInitial, fromCache){
@@ -1869,7 +1993,7 @@ async function loadAndRender(isInitial, fromCache){
       } catch (e){ /* sheet gagal dibaca: ditangani di loop utama */ }
     }
   }
-  const viewVis = resolveViewerVisibility({ leader: !!extra.leader, userIdx: userIdx, allIdx: allIdx });
+  const viewVis = resolveViewerVisibility({ leader: !!extra.leader, userIdx: userIdx, allIdx: allIdx, priority: readPriorityConfig(masterRows) });
   const canSeeIdx = (vi) => {
     if (!visRow) return true;                 // belum ada baris Visibility Index -> tidak difilter
     if (vi === null) return !viewVis.strict;  // sel kosong: terlihat, kecuali untuk Dosen
@@ -1985,6 +2109,7 @@ async function loadAndRender(isInitial, fromCache){
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
+  renderLoginInfo({ isLeader: !!viewVis.isLeader, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){

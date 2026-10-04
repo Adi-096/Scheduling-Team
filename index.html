@@ -342,33 +342,9 @@
     line-height:1.55;
     white-space:pre-line;
   }
-  .team-card-actions{width:100%;display:flex;justify-content:center;margin-top:14px;}
-  .team-toolbar{width:100%;display:flex;justify-content:flex-end;margin-bottom:16px;}
-  .team-card-actions{gap:8px;flex-wrap:wrap;}
-  .team-edit-btn{
-    font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;
-    text-transform:uppercase;color:var(--primary);background:var(--surface);
-    border:1px solid var(--primary);border-radius:7px;padding:8px 13px;cursor:pointer;
-  }
-  .team-edit-btn:hover{background:var(--primary);color:#fff;}
-  .team-delete-btn{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#B3401F;background:var(--surface);border:1px solid #DFA394;border-radius:7px;padding:8px 13px;cursor:pointer;}
-  .team-delete-btn:hover{background:#B3401F;color:#fff;}
-  .team-edit-form{max-width:600px;margin:0 auto;display:flex;flex-direction:column;gap:11px;}
-  .team-edit-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-soft);}
-  .team-edit-form input,.team-edit-form textarea{
-    width:100%;font:14px 'Work Sans',sans-serif;padding:10px 12px;
-    border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);
-  }
-  .team-edit-form textarea{min-height:88px;resize:vertical;}
-  .team-edit-form input:focus,.team-edit-form textarea:focus{outline:none;border-color:var(--accent);}
-  .team-edit-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;}
-  .team-edit-status{display:none;border-radius:8px;padding:9px 12px;font-size:12.5px;line-height:1.5;}
-  .team-edit-status.show{display:block;}
-  .team-edit-status.err{color:#B3401F;background:#FCEEE9;border:1px solid #F0C9BC;}
 
   /* single-member detail modal */
   .member-modal{ max-width:380px; text-align:center; }
-  #member-modal-overlay .member-modal{ margin:auto; }
   .member-card{ display:flex;flex-direction:column;align-items:center; }
   .member-card .dp{
     width:96px;height:96px;border-radius:50%;
@@ -429,29 +405,12 @@
   .acct-bar .acct-sep{ opacity:.6; }
   .acct-bar .acct-email{ color:var(--ink-soft); word-break:break-all; }
   .acct-bar .acct-role{ color:var(--primary); }
-  .activity-notice{margin:8px 0 0;text-align:center;font-size:10px;line-height:1.4;color:var(--ink-faint);}
   .acct-bar .acct-out{
     font:inherit; letter-spacing:inherit; color:var(--ink-faint);
     background:none; border:none; padding:0; cursor:pointer;
     text-decoration:underline; text-underline-offset:2px;
   }
   .acct-bar .acct-out:hover{ color:#B3401F; }
-  .acct-bar .acct-switch{
-    font:inherit;letter-spacing:inherit;color:var(--primary);background:none;
-    border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;
-  }
-  .role-switch-dialog{width:min(440px,calc(100vw - 32px));max-width:none;border:1px solid var(--line);border-radius:14px;padding:0;color:var(--ink);background:var(--surface);box-shadow:0 24px 80px rgba(0,0,0,.24);}
-  .role-switch-dialog::backdrop{background:rgba(17,24,39,.48);backdrop-filter:blur(3px);}
-  .role-switch-dialog form{padding:24px;}
-  .role-switch-dialog h3{margin:0 0 8px;font-family:'Playfair Display',serif;font-size:22px;color:var(--primary);}
-  .role-switch-dialog p{margin:0 0 16px;font-size:13px;line-height:1.5;color:var(--ink-soft);}
-  .role-switch-dialog label{display:block;margin:12px 0 6px;font-size:12px;color:var(--ink-soft);}
-  .role-switch-dialog input,.role-switch-dialog select{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;}
-  .role-switch-dialog .role-switch-error{display:none;margin-top:12px;color:#B3401F;font-size:12px;line-height:1.4;}
-  .role-switch-dialog .role-switch-error.show{display:block;}
-  .role-switch-dialog .role-switch-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
-  .role-switch-dialog .role-switch-actions button{padding:10px 14px;border-radius:8px;border:1px solid var(--line);cursor:pointer;font:inherit;}
-  .role-switch-dialog .role-switch-actions .primary{background:var(--primary);border-color:var(--primary);color:#fff;}
   footer.page-footer{
     margin-top:48px;
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
@@ -635,22 +594,6 @@
     color:var(--ink-faint);letter-spacing:.04em;
     margin-top:18px;
   }
-  .login-card .login-recovery-note{
-    font-family:'Work Sans',sans-serif;font-size:11.5px;color:var(--ink-soft);
-    line-height:1.5;margin:13px 0 8px;text-align:left;
-  }
-  .login-card button.login-recovery-btn{
-    margin-top:0;background:transparent;color:var(--primary);
-    border:1px solid var(--line);font-size:11px;letter-spacing:.04em;
-  }
-  .login-card button.login-recovery-btn:hover{background:var(--surface-soft);border-color:var(--accent);}
-  .login-card .login-recovery-status{
-    display:none;margin-top:10px;padding:9px 11px;border-radius:8px;
-    font-family:'Work Sans',sans-serif;font-size:12px;line-height:1.5;
-    text-align:left;color:#17623A;background:#E7F6EE;border:1px solid #BFE3CF;
-  }
-  .login-card .login-recovery-status.show{display:block;}
-  .login-card .login-recovery-status.error{color:#B3401F;background:#FCEEE9;border-color:#F0C9BC;}
 
   /* langkah tambahan (Step 2/3) setelah email tervalidasi: input Unit,
      pilihan Dosen/Mahasiswa, dan input Kode Dosen. Disembunyikan lewat
@@ -723,6 +666,16 @@
     flex:1;
     margin-bottom:0;
   }
+  /* Langkah PIC: tiga tombol (Back, Continue as Guest, Sign In) -- sedikit lebih
+     kecil supaya muat satu baris; di layar sangat sempit turun ke bawah. */
+  .login-actions-row.pic-choice{ flex-wrap:wrap; }
+  .login-actions-row.pic-choice button{
+    font-size:11.5px; letter-spacing:.04em;
+    padding-left:10px; padding-right:10px; white-space:nowrap;
+  }
+  @media (max-width:420px){
+    .login-actions-row.pic-choice button{ flex:1 1 100%; }
+  }
 
   /* ===== Tampilan HP / layar sempit ===== */
   @media (max-width:640px){
@@ -777,24 +730,6 @@
       <button type="submit">Sign In</button>
     </form>
 
-    <!-- PIC yang terdata memilih masuk sebagai PIC (pakai password) atau tamu (isi Department/Unit). -->
-    <div id="pic-choice-step" class="login-step hidden">
-      <p class="login-recovery-note" id="pic-choice-summary">This email is registered as a PIC. Choose how you want to continue.</p>
-      <button type="button" id="pic-as-pic-btn">Sign in as PIC</button>
-      <p class="login-recovery-note hidden" id="pic-password-unavailable">PIC sign-in is unavailable because no password is set. You can continue as a guest or contact the website administrator.</p>
-      <button type="button" id="pic-as-guest-btn">Continue as Guest</button>
-      <button type="button" class="login-back" id="pic-choice-back">&larr; Back</button>
-    </div>
-
-    <!-- Login Developer: password diverifikasi oleh Apps Script, bukan di browser. -->
-    <form id="developer-form" class="login-step hidden" autocomplete="off">
-      <input type="password" id="login-developer-password" placeholder="Developer Password" required autocomplete="current-password">
-      <div class="login-actions-row">
-        <button type="button" class="login-back" id="developer-back">&larr; Back</button>
-        <button type="submit">Verify &amp; Sign In</button>
-      </div>
-    </form>
-
     <!-- STEP 2a: khusus domain @binus.edu -> isi Unit -->
     <form id="unit-form" class="login-step hidden" autocomplete="off">
       <input type="text" id="login-unit" placeholder="Department/Unit" required>
@@ -804,20 +739,23 @@
       </div>
     </form>
 
-    <!-- STEP 2a-PIC: khusus email PIC (@binus.edu) yang sheet-nya memakai password
-         -> isi Password (menggantikan Department/Unit) -->
+    <!-- STEP 2a-PIC: email yang terdata sebagai PIC / leader di spreadsheet.
+         Isi Password (menggantikan Department/Unit), lalu pilih:
+           Sign In            -> masuk dengan role sesuai spreadsheet
+           Continue as Guest  -> masuk sebagai user biasa (wajib isi Department/Unit)
+         Kalau sheet-nya tidak memakai password, kolom password disembunyikan. -->
     <form id="password-form" class="login-step hidden" autocomplete="off">
-      <div class="pw-wrap">
+      <div class="pw-wrap" id="pw-wrap">
         <input type="password" id="login-password" placeholder="Password" required autocomplete="off">
         <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Hold to show password" title="Hold to show password">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
       </div>
-      <div class="login-actions-row">
+      <div class="login-actions-row pic-choice">
         <button type="button" class="login-back" id="password-back">&larr; Back</button>
-        <button type="submit">Continue</button>
+        <button type="button" class="login-back" id="password-guest">Continue as Guest</button>
+        <button type="submit">Sign In</button>
       </div>
-      <p class="login-recovery-note">Forgot your PIC password? SMS recovery is not available until an SMS gateway is configured. Please contact the website administrator for now.</p>
     </form>
 
     <!-- STEP 2b: khusus domain @binus.ac.id -> pilih Dosen / Mahasiswa -->
@@ -838,7 +776,7 @@
       </div>
     </form>
 
-    <div class="login-note">BINUS Employees Only. Aktivitas section dan durasi tab aktif dicatat.</div>
+    <div class="login-note">BINUS Employees Only.</div>
   </div>
 </div>
 
@@ -851,10 +789,7 @@
     var saved = JSON.parse(localStorage.getItem("srsc_login_email") || "null");
     var eligible = saved && saved.email && (
       (saved.domain === "binus.edu" && (saved.unit || saved.pic)) ||
-      (saved.role === "User" && saved.unit) ||
-      (saved.role === "PIC" && saved.pic) ||
-      (saved.role === "Dosen" && saved.kodeDosen) ||
-      (saved.developer && localStorage.getItem("srsc_developer_token_v1"))
+      (saved.domain === "binus.ac.id" && saved.role === "Dosen" && saved.kodeDosen)
     );
     if (eligible) document.getElementById("login-gate").classList.add("checking");
   } catch (e) { /* data rusak / localStorage tidak tersedia -> tampilkan form biasa */ }
@@ -864,32 +799,6 @@
 <div class="top-accent"></div>
 <div class="wrap">
   <div class="acct-bar" id="acct-bar"></div>
-  <dialog class="role-switch-dialog" id="role-switch-dialog" aria-labelledby="role-switch-title">
-    <form id="role-switch-form" autocomplete="off">
-      <h3 id="role-switch-title">Switch Role</h3>
-      <p>Choose a temporary role profile. You can return to your original role at any time.</p>
-      <label for="role-switch-target">Role</label>
-      <select id="role-switch-target" required>
-        <option value="">Choose a role…</option>
-        <option value="dosen">Lecturer (Dosen)</option>
-        <option value="user">User / Department</option>
-        <option value="original">Return to original role</option>
-      </select>
-      <div id="role-switch-user-fields" class="hidden">
-        <label for="role-switch-unit">Department/Unit</label>
-        <input type="text" id="role-switch-unit" autocomplete="organization">
-      </div>
-      <div id="role-switch-dosen-fields" class="hidden">
-        <label for="role-switch-kode">Lecturer ID</label>
-        <input type="text" id="role-switch-kode" autocomplete="off">
-      </div>
-      <div id="role-switch-error" class="role-switch-error" role="alert"></div>
-      <div class="role-switch-actions">
-        <button type="button" id="role-switch-cancel">Cancel</button>
-        <button type="submit" class="primary">Switch</button>
-      </div>
-    </form>
-  </dialog>
   <div class="masthead">
     <div class="brand">Course Scheduling &amp; Student Registration Team</div>
     <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
@@ -902,7 +811,6 @@
   </div>
 
   <footer class="page-footer">This directory automatically syncs in real time with its data source.</footer>
-  <div class="activity-notice">Activity logging: sections viewed and time spent with this tab active are recorded.</div>
 </div>
 
 <div class="modal-overlay" id="modal-overlay">
@@ -1003,28 +911,23 @@ function parseCSV(text){
 // langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
 // hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
 // dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
-const DATA_CACHE_KEY = "srsc_data_cache_v8";
+const DATA_CACHE_KEY = "srsc_data_cache_v2";
 let cacheSheets = null;
 let cacheExtra = null;
 function loadDataCache(){
   try {
     const c = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || "null");
     if (!c || !c.sheets || typeof c.sheets !== "object" || !c.extra) return null;
-    if (c.email !== getCurrentUserEmail()) return null;
+    if (c.email !== getCacheIdentity()) return null;
     return c;
   } catch (e){ return null; }
 }
 function saveDataCache(store, extra){
   try {
     localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({
-      t: Date.now(), email: getCurrentUserEmail(), sheets: store, extra: extra
+      t: Date.now(), email: getCacheIdentity(), sheets: store, extra: extra
     }));
   } catch (e){ /* penuh / tidak tersedia -> abaikan */ }
-}
-
-function getAccountPolicyFields(){
-  const saved = readSavedLoginState() || {};
-  return { accountRole: saved.role || "", unit: saved.unit || "" };
 }
 
 // ---- Ambil data dari Apps Script (spreadsheet privat) ----
@@ -1037,26 +940,13 @@ async function fetchServerData(email){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL belum diatur.");
   }
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&_=" + Date.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
-    const token = isDeveloperEmail(email) ? getDeveloperToken() : "";
-    const saved = readSavedLoginState() || {};
-    const res = await fetch(LOG_WEBAPP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "data", email: email || "", developerToken: token, accountRole: saved.role || "", unit: saved.unit || "", _: Date.now() }),
-      cache: "no-store", signal: ctrl.signal
-    });
+    const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
     const d = await res.json();
     if (!d || !d.ok || !d.master) throw new Error((d && d.error) || "Respons data tidak valid.");
-    if (saved && saved.developer && !d.developer){
-      localStorage.removeItem(LOGIN_STORAGE_KEY);
-      localStorage.removeItem(DEVELOPER_TOKEN_KEY);
-      localStorage.removeItem(DATA_CACHE_KEY);
-      location.reload();
-      throw new Error("Developer session expired. Please sign in again.");
-    }
     return d;
   } finally {
     clearTimeout(timer);
@@ -1064,7 +954,7 @@ async function fetchServerData(email){
 }
 
 function getServerData(){
-  const email = getCurrentUserEmail();   // "" kalau belum login
+  const email = getRoleEmail();   // "" kalau belum login ATAU sesi Guest (tanpa hak PIC)
   if (!serverDataPromise || serverDataEmail !== email){
     serverDataEmail = email;
     serverDataPromise = fetchServerData(email).catch(err => { serverDataPromise = null; throw err; });
@@ -1234,7 +1124,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
     <h2 class="header">${escapeHtml(header)}</h2>
     ${subheader ? `<p class="subheader">${escapeHtml(subheader)}</p>` : ""}
     ${empty
-      ? `<p class="subheader">No PIC data has been added for this section yet.</p><div class="section-actions">${siteTeamPermissions.add ? `<button class="team-btn" data-target="${secId}">Our Team</button>` : ""}<span class="pic-slot" data-pic-slot="${idx}"></span></div>`
+      ? `<p class="subheader">Belum ada data PIC yang diisi untuk bagian ini.</p>`
       : `<div class="section-actions"><button class="team-btn" data-target="${secId}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
           Our Team
@@ -1243,7 +1133,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
   </section>`;
 }
 
-function memberCardHtml(m, sectionIdx, memberIdx){
+function memberCardHtml(m){
   return `
     <div class="card">
       ${m.dp
@@ -1255,19 +1145,13 @@ function memberCardHtml(m, sectionIdx, memberIdx){
       <div class="task">${escapeHtml(m.task || "-")}</div>
       <hr>
       <div class="task-desc">${escapeHtml(m.desc || "-")}</div>
-  ${m._row && (canEditTeamSection(sectionIdx) || siteTeamPermissions.delete) ? `<div class="team-card-actions">${canEditTeamSection(sectionIdx) ? `<button type="button" class="team-edit-btn" data-team-edit="${sectionIdx}" data-team-member="${memberIdx}">Edit</button>` : ""}${siteTeamPermissions.delete ? `<button type="button" class="team-delete-btn" data-team-delete="${sectionIdx}" data-team-member="${memberIdx}">Delete</button>` : ""}</div>` : ""}
     </div>`;
 }
 
-let teamModalState = null;
-let teamEditBusy = false;
-
-function openModal(header, sheetKey, members, sectionIdx){
-  // Baris Group disembunyikan kecuali pengguna memiliki izin Edit/Delete Our Team.
-  const teamMembers = members.map((m, index) => ({ member: m, index: index }))
-    .filter(item => canEditTeamSection(sectionIdx) || siteTeamPermissions.delete || !isGroupRow(item.member.jabatan));
-  teamModalState = { header: header, sheetKey: sheetKey, sectionIdx: sectionIdx, mode: "view" };
-  setActivityDetail("Our Team / " + sheetKey);
+function openModal(header, sheetKey, members){
+  // Baris dengan Jabatan mengandung "Group" tidak ikut ditampilkan di popup
+  // "Our Team" (tapi tetap ada di daftar task pada halaman utama).
+  const teamMembers = members.filter(m => !isGroupRow(m.jabatan));
 
   document.getElementById("modal-title").textContent = header;
   document.getElementById("modal-sub").textContent = `${sheetKey} — ${teamMembers.length} anggota tim`;
@@ -1275,163 +1159,23 @@ function openModal(header, sheetKey, members, sectionIdx){
   // Pisahkan anggota biasa dari leader (Senior Manager/Manager/Section Head).
   // Leader ditampilkan terpisah, di blok "Person In Charge" paling bawah,
   // urut sesuai hierarki: Section Head -> Manager -> Senior Manager.
-  const regular = teamMembers.filter(item => !LEADER_TITLES.includes(normJabatan(item.member.jabatan)));
+  const regular = teamMembers.filter(m => !LEADER_TITLES.includes(normJabatan(m.jabatan)));
   const leaders = teamMembers
-    .filter(item => LEADER_TITLES.includes(normJabatan(item.member.jabatan)))
-    .sort((a,b) => LEADER_TITLES.indexOf(normJabatan(a.member.jabatan)) - LEADER_TITLES.indexOf(normJabatan(b.member.jabatan)));
+    .filter(m => LEADER_TITLES.includes(normJabatan(m.jabatan)))
+    .sort((a,b) => LEADER_TITLES.indexOf(normJabatan(a.jabatan)) - LEADER_TITLES.indexOf(normJabatan(b.jabatan)));
 
   const grid = document.getElementById("modal-grid");
-  const toolbar = siteTeamPermissions.add
-    ? `<div class="team-toolbar"><button type="button" class="team-edit-btn" data-team-add="${sectionIdx}">Add Team Member / Task</button></div>`
-    : "";
-  grid.innerHTML = toolbar + regular.map(item => memberCardHtml(item.member, sectionIdx, item.index)).join("")
+  grid.innerHTML = regular.map(memberCardHtml).join("")
     + (leaders.length === 0 ? "" : `
       <div class="leaders-block">
         <div class="leaders-heading">Person In Charge</div>
-        <div class="card-grid">${leaders.map(item => memberCardHtml(item.member, sectionIdx, item.index)).join("")}</div>
+        <div class="card-grid">${leaders.map(memberCardHtml).join("")}</div>
       </div>`);
 
   document.getElementById("modal-overlay").classList.add("open");
 }
 
-function openTeamAddForm(sectionIdx){
-  if (!siteTeamPermissions.add) return;
-  const meta = sectionMeta[sectionIdx];
-  if (!meta) return;
-  teamModalState = { header: meta.header, sheetKey: meta.sheetKey, sectionIdx: sectionIdx, memberIdx: null, mode: "add" };
-  setActivityDetail("Our Team add / " + meta.sheetKey);
-  document.getElementById("modal-title").textContent = "Add Team Member / Task";
-  document.getElementById("modal-sub").textContent = `${meta.sheetKey} — ${meta.career || "No career"}`;
-  document.getElementById("modal-grid").innerHTML = `
-    <form class="team-edit-form" id="team-edit-form" autocomplete="off">
-      <label>Name<input name="pic" type="text" maxlength="200"></label>
-      <label>Position / Jabatan<input name="jabatan" type="text" maxlength="120"></label>
-      <label>Task<input name="task" type="text" maxlength="300"></label>
-      <label>Task description<textarea name="desc" maxlength="2000"></textarea></label>
-      <label>Email<input name="email" type="text" maxlength="500"></label>
-      <label>WhatsApp / Phone<input name="whatsapp" type="text" maxlength="100"></label>
-      <label>Photo URL<input name="dp" type="url" maxlength="2000"></label>
-      <div class="team-edit-actions">
-        <button class="pic-btn" type="button" data-team-edit-cancel>Cancel</button>
-        <button class="pic-btn primary" type="submit" id="team-edit-save">Add</button>
-      </div>
-      <div class="team-edit-status" id="team-edit-status" role="status"></div>
-    </form>`;
-}
-
-function openTeamEditForm(sectionIdx, memberIdx){
-  if (!canEditTeamSection(sectionIdx)) return;
-  const meta = sectionMeta[sectionIdx];
-  const member = (sectionMembers[sectionIdx] || [])[memberIdx];
-  if (!meta || !member || !member._row) return;
-  teamModalState = { header: meta.header, sheetKey: meta.sheetKey, sectionIdx: sectionIdx, memberIdx: memberIdx, mode: "edit" };
-  setActivityDetail("Our Team edit / " + meta.sheetKey);
-  const input = (key, label, type, max) => `<label>${label}<input name="${key}" type="${type}" maxlength="${max}" value="${escapeHtml(member[key] || "")}"></label>`;
-  document.getElementById("modal-title").textContent = "Edit Team Member";
-  document.getElementById("modal-sub").textContent = `${meta.sheetKey} — row ${member._row}`;
-  document.getElementById("modal-grid").innerHTML = `
-    <form class="team-edit-form" id="team-edit-form" autocomplete="off">
-      ${input("pic", "Name", "text", 200)}
-      ${input("jabatan", "Position / Jabatan", "text", 120)}
-      ${input("task", "Task", "text", 300)}
-      <label>Task description<textarea name="desc" maxlength="2000">${escapeHtml(member.desc || "")}</textarea></label>
-      ${input("email", "Email", "text", 500)}
-      ${input("whatsapp", "WhatsApp / Phone", "text", 100)}
-      ${input("dp", "Photo URL", "url", 2000)}
-      <div class="team-edit-actions">
-        <button class="pic-btn" type="button" data-team-edit-cancel>Cancel</button>
-        <button class="pic-btn primary" type="submit" id="team-edit-save">Save changes</button>
-      </div>
-      <div class="team-edit-status" id="team-edit-status" role="status"></div>
-    </form>`;
-}
-
-function setTeamEditStatus(type, text){
-  const el = document.getElementById("team-edit-status");
-  if (!el) return;
-  el.className = "team-edit-status" + (text ? " show " + type : "");
-  el.textContent = text || "";
-}
-
-async function saveTeamMember(){
-  if (teamEditBusy || !teamModalState) return;
-  const ctx = teamModalState;
-  if ((ctx.mode === "add" && !siteTeamPermissions.add) || (ctx.mode !== "add" && !canEditTeamSection(ctx.sectionIdx))) return;
-  const meta = sectionMeta[ctx.sectionIdx];
-  const member = ctx.mode === "add" ? null : (sectionMembers[ctx.sectionIdx] || [])[ctx.memberIdx];
-  const form = document.getElementById("team-edit-form");
-  if (!meta || (ctx.mode !== "add" && !member) || !form) return;
-  const fields = {};
-  ["jabatan", "pic", "email", "whatsapp", "task", "desc", "dp"].forEach(key => {
-    fields[key] = String(new FormData(form).get(key) || "").trim();
-  });
-  const expected = {};
-  if (ctx.mode !== "add") ["jabatan", "pic", "email", "whatsapp", "task", "desc", "dp"].forEach(key => { expected[key] = member[key] || ""; });
-  const btn = document.getElementById("team-edit-save");
-  teamEditBusy = true;
-  if (btn){ btn.disabled = true; btn.textContent = "Saving..."; }
-  setTeamEditStatus("", "");
-  try {
-    const action = ctx.mode === "add" ? "addTeamMember" : "editTeamMember";
-    const res = await fetch(LOG_WEBAPP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(Object.assign({ action: action, actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member ? member._row : null, fields: fields, expected: expected }, getAccountPolicyFields()))
-    });
-    const data = await res.json();
-    if (!data || !data.ok){
-      setTeamEditStatus("err", (data && data.error) || "Could not save team member.");
-      return;
-    }
-    const sectionKey = meta.sheetKey;
-    const sectionHeader = meta.header;
-    document.getElementById("modal-overlay").classList.remove("open");
-    lastDataSignature = null;
-    await loadAndRender(false, false);
-    const freshIdx = sectionMeta.findIndex(item => normSheetName(item.sheetKey) === normSheetName(sectionKey));
-    if (freshIdx >= 0) openModal(sectionHeader, sectionMeta[freshIdx].sheetKey, sectionMembers[freshIdx], freshIdx);
-    window.alert(ctx.mode === "add" ? "Team member/task added successfully." : "Our Team member updated successfully.");
-  } catch (err){
-    setTeamEditStatus("err", "Could not reach the server: " + err.message);
-  } finally {
-    teamEditBusy = false;
-    const saveBtn = document.getElementById("team-edit-save");
-    if (saveBtn){ saveBtn.disabled = false; saveBtn.textContent = ctx.mode === "add" ? "Add" : "Save changes"; }
-  }
-}
-
-async function deleteTeamMember(sectionIdx, memberIdx){
-  if (!siteTeamPermissions.delete || teamEditBusy) return;
-  const meta = sectionMeta[sectionIdx];
-  const member = (sectionMembers[sectionIdx] || [])[memberIdx];
-  if (!meta || !member || !member._row) return;
-  if (!window.confirm(`Delete this team member/task from ${meta.sheetKey}?`)) return;
-  const expected = {};
-  ["jabatan", "pic", "email", "whatsapp", "task", "desc", "dp"].forEach(key => { expected[key] = member[key] || ""; });
-  teamEditBusy = true;
-  try {
-    const res = await fetch(LOG_WEBAPP_URL, {
-      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(Object.assign({ action: "deleteTeamMember", actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member._row, expected: expected }, getAccountPolicyFields()))
-    });
-    const data = await res.json();
-    if (!data || !data.ok) { window.alert((data && data.error) || "Could not delete the team member/task."); return; }
-    const sectionKey = meta.sheetKey;
-    const sectionHeader = meta.header;
-    document.getElementById("modal-overlay").classList.remove("open");
-    lastDataSignature = null;
-    await loadAndRender(false, false);
-    const freshIdx = sectionMeta.findIndex(item => normSheetName(item.sheetKey) === normSheetName(sectionKey));
-    if (freshIdx >= 0) openModal(sectionHeader, sectionMeta[freshIdx].sheetKey, sectionMembers[freshIdx], freshIdx);
-  } catch (err){
-    window.alert("Could not reach the server: " + err.message);
-  } finally {
-    teamEditBusy = false;
-  }
-}
-
 function openMemberModal(m){
-  setActivityDetail("Team member details");
   const waDigits = formatWaLink(m.whatsapp);
   const emailValid = isValidEmail(m.email);
 
@@ -1464,35 +1208,16 @@ function openMemberModal(m){
 
 document.getElementById("modal-close").addEventListener("click", () => {
   document.getElementById("modal-overlay").classList.remove("open");
-  restoreActivityRoute();
 });
 document.getElementById("modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "modal-overlay"){ e.target.classList.remove("open"); restoreActivityRoute(); }
+  if (e.target.id === "modal-overlay") e.target.classList.remove("open");
 });
 
 document.getElementById("member-modal-close").addEventListener("click", () => {
   document.getElementById("member-modal-overlay").classList.remove("open");
-  restoreActivityRoute();
 });
 document.getElementById("member-modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "member-modal-overlay"){ e.target.classList.remove("open"); restoreActivityRoute(); }
-});
-
-document.addEventListener("click", (e) => {
-  const addBtn = e.target.closest("[data-team-add]");
-  if (addBtn){ openTeamAddForm(Number(addBtn.dataset.teamAdd)); return; }
-  const editBtn = e.target.closest("[data-team-edit]");
-  if (editBtn){
-    e.preventDefault();
-    openTeamEditForm(Number(editBtn.dataset.teamEdit), Number(editBtn.dataset.teamMember));
-    return;
-  }
-  const deleteBtn = e.target.closest("[data-team-delete]");
-  if (deleteBtn){ deleteTeamMember(Number(deleteBtn.dataset.teamDelete), Number(deleteBtn.dataset.teamMember)); return; }
-  if (e.target.closest("[data-team-edit-cancel]") && teamModalState){
-    const state = teamModalState;
-    openModal(state.header, state.sheetKey, sectionMembers[state.sectionIdx] || [], state.sectionIdx);
-  }
+  if (e.target.id === "member-modal-overlay") e.target.classList.remove("open");
 });
 
 // Klik pada setiap item di daftar link (task-list) -> buka popup detail PIC.
@@ -1563,6 +1288,21 @@ function splitEmails(raw){
   return String(raw || "").toLowerCase().split(/[\s,;]+/).filter(isValidEmail);
 }
 
+// Email yang dipakai untuk HAK PIC / leader / editor. Hanya sesi yang masuk lewat
+// "Sign In" sebagai PIC (saved.pic) yang punya hak itu. Sesi "Continue as Guest"
+// (Department/Unit) diperlakukan sebagai user biasa: tidak ada PIC Menu, tidak ada
+// hak leader/editor, meskipun emailnya tercatat di spreadsheet.
+function getRoleEmail(){
+  const saved = readSavedLoginState();
+  return saved && saved.pic && saved.email ? String(saved.email).trim().toLowerCase() : "";
+}
+
+// Penanda cache: email + apakah sesi ini sesi PIC (supaya cache sesi PIC tidak
+// dipakai oleh sesi Guest dengan email yang sama, dan sebaliknya).
+function getCacheIdentity(){
+  return getCurrentUserEmail() + (getRoleEmail() ? "|pic" : "");
+}
+
 function getCurrentUserEmail(){
   const saved = readSavedLoginState();
   return saved && saved.email ? String(saved.email).trim().toLowerCase() : "";
@@ -1611,59 +1351,44 @@ function mapServerLinks(arr){
   })).filter(l => l.url);
 }
 
-// Role PIC Menu dari server. Editor Menu di Master menjadi Authorized PIC
-// dengan akses terbatas ke section yang ditetapkan.
+// Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
+// Editor menu: email-email (boleh banyak, dipisah koma) di baris "Editor Menu" sheet
+// Master, pada kolom sheet yang bersangkutan -> boleh Add/Edit/Delete menu
+// untuk sheet itu saja. (Leader boleh untuk semua sheet.)
 let siteLeaderFlag = false;   // status leader menurut server (termasuk sheet nonaktif)
-let siteDeveloperFlag = false; // status Developer dari whitelist server
-let siteManagerFlag = false;
-let siteSectionHeadFlag = false;
-let siteSectionHeadCareers = [];
-let sitePicPermissions = { roleKey: "staff", visibilityKey: "staff", view: "none", manage: "none", deleteScope: "none", editorFor: [], sectionHeadCareers: [], managerCareers: [], teamAdd: false, teamEdit: false, teamEditScope: "none", teamDelete: false, signOut: false, jobTitle: "" };
-let siteTeamPermissions = { add: false, edit: false, editScope: "none", delete: false };
-let siteRolePolicy = null;
 
 function getPicContext(){
-  return {
-    view: sitePicPermissions.view || "none",
-    manage: sitePicPermissions.manage || "none",
-    deleteScope: sitePicPermissions.deleteScope || "none",
-    editorSheets: new Set((sitePicPermissions.editorFor || []).map(normSheetName)),
-    sectionHeadCareers: new Set((sitePicPermissions.sectionHeadCareers || []).map(normSheetName)),
-    managerCareers: new Set((sitePicPermissions.managerCareers || []).map(normSheetName)),
-    registeredPicCareers: new Set((sitePicPermissions.picCareers || []).map(normSheetName))
-  };
-}
-
-function picScopeAllows(scope, owner, ctx){
-  const value = String(scope || "none").toLowerCase().replace(/[-_]/g, " ").trim();
-  if (value === "all") return true;
-  if (value === "assigned section") return ctx.editorSheets.has(normSheetName(owner));
-  if (value === "own career"){
-    const meta = sectionMeta.find(x => normSheetName(x.sheetKey) === normSheetName(owner));
-    const career = normSheetName(meta && meta.career);
-    return !!career && (ctx.sectionHeadCareers.has(career) || ctx.managerCareers.has(career) || ctx.registeredPicCareers.has(career));
-  }
-  return false;
-}
-
-function canEditTeamSection(sectionIdx){
-  const meta = sectionMeta[Number(sectionIdx)];
-  if (!meta) return false;
-  const scope = siteTeamPermissions.editScope || (siteTeamPermissions.edit ? "all" : "none");
-  return picScopeAllows(scope, meta.sheetKey, getPicContext());
+  const ctx = { sheets: new Set(), leader: false, editorSheets: new Set() };
+  const email = getRoleEmail();
+  if (!email) return ctx;
+  sectionMeta.forEach((meta, i) => {
+    if ((meta.editors || []).includes(email)) ctx.editorSheets.add(normSheetName(meta.sheetKey));
+  });
+  sectionMembers.forEach((members, i) => {
+    const key = normSheetName((sectionMeta[i] || {}).sheetKey);
+    members.forEach(m => {
+      if (!splitEmails(m.email).includes(email)) return;
+      ctx.sheets.add(key);
+      if (LEADER_TITLES.includes(normJabatan(m.jabatan))) ctx.leader = true;
+    });
+  });
+  if (siteLeaderFlag) ctx.leader = true;
+  return ctx;
 }
 
 function canSeePicLink(link, ctx){
-  return picScopeAllows(ctx.view, link.owner, ctx);
+  if (ctx.leader) return true;                         // leader: semua link
+  if (ctx.editorSheets.has(link.owner)) return true;   // editor menu: semua link di sheet yang dikelolanya
+  if (ctx.sheets.size === 0) return false;             // bukan PIC terdata
+  if (ctx.sheets.has(link.owner)) return true;         // PIC sheet pemilik link
+  if (link.visibleAll) return true;                    // "Master": semua PIC
+  return link.visibleTo.some(n => ctx.sheets.has(n));  // PIC sheet yang ditunjuk
 }
 
 // Link yang boleh dilihat user, per section (dipakai juga saat popup dibuka).
 let picVisible = {};
-let picViewMap = {};
-let picCanManage = false;   // boleh Add/Edit di section yang sedang dibuka
-let picCanDelete = false;   // Diisi dari Delete Scope Role Policy untuk section aktif.
+let picCanManage = false;   // boleh Add/Edit/Delete di section yang sedang dibuka
 let picManageMap = {};
-let picDeleteMap = {};
 let picCurrentIdx = null;
 let picBusy = false;
 let knownSheetsGlobal = new Set();
@@ -1671,25 +1396,18 @@ let knownSheetsGlobal = new Set();
 function applyPicMenus(){
   const ctx = getPicContext();
   picVisible = {};
-  picViewMap = {};
   picManageMap = {};
-  picDeleteMap = {};
   document.querySelectorAll("[data-pic-slot]").forEach(slot => {
     const idx = Number(slot.dataset.picSlot);
     const meta = sectionMeta[idx];
     const list = ((meta && meta.links) || []).filter(l => canSeePicLink(l, ctx));
-    // Hak lihat dan Add/Edit dihitung terpisah: Registered PIC pada own career,
-    // Authorized PIC pada section Editor Menu; Leader mengikuti career scope.
-    // Hak Delete menu hanya diberikan kepada Developer di dalam modal.
-    const owner = normSheetName(meta && meta.sheetKey);
-    const canView = !!meta && picScopeAllows(ctx.view, owner, ctx);
-    const canManage = !!meta && picScopeAllows(ctx.manage, owner, ctx);
-    const canDelete = !!meta && picScopeAllows(ctx.deleteScope, owner, ctx);
+    // Boleh kelola (Add/Edit/Delete) = leader (semua sheet) ATAU PIC yang
+    // ditandai di kolom "Menu Editor" (hanya sheet-nya sendiri).
+    const canManage = !!meta && (ctx.leader || ctx.editorSheets.has(normSheetName(meta.sheetKey)));
     picVisible[idx] = list;
-    picViewMap[idx] = canView;
     picManageMap[idx] = canManage;
-    picDeleteMap[idx] = canDelete;
-    slot.innerHTML = canView
+    // Yang boleh kelola selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
+    slot.innerHTML = (list.length || canManage)
       ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
       : "";
   });
@@ -1759,7 +1477,7 @@ function renderPicModal(idx, note){
   const meta = sectionMeta[idx];
   if (!meta) return;
   const links = picVisible[idx] || [];
-  const deleting = picCanDelete && picMode === "delete";
+  const deleting = picCanManage && picMode === "delete";
   const picking  = picCanManage && picMode === "edit-pick";
   document.getElementById("pic-modal-sub").textContent =
     (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
@@ -1804,7 +1522,7 @@ function renderPicModal(idx, note){
         <div class="pic-actions">
           <button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>
           ${links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
-          ${picCanDelete && links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
+          ${links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
         </div>`;
     }
   }
@@ -1820,7 +1538,6 @@ function renderPicModal(idx, note){
 
 function setPicMode(mode){
   if (picBusy || picCurrentIdx === null) return;
-  if ((mode === "delete" && !picCanDelete) || (["add", "edit", "edit-pick"].includes(mode) && !picCanManage)) return;
   picMode = mode;
   if (mode !== "edit") picEditLink = null;
   renderPicModal(picCurrentIdx);
@@ -1830,18 +1547,17 @@ function openPicMenu(idx){
   const meta = sectionMeta[idx];
   if (!meta) return;
   picCanManage = !!picManageMap[idx];
-  if (!picViewMap[idx]) return;
+  if (!(picVisible[idx] || []).length && !picCanManage) return;
   picCurrentIdx = idx;
-  picCanDelete = !!picDeleteMap[idx];
   picMode = "view";
   picEditLink = null;
   renderPicModal(idx);
-  setActivityDetail("PIC Menu / " + meta.sheetKey);
   document.getElementById("pic-modal-overlay").classList.add("open");
 }
 
 // Kirim perintah tulis (add/edit/delete) ke Apps Script. Hasilnya dibaca balik
-// (JSON). Server memeriksa actor terhadap matriks Role Policy dan scope section.
+// (JSON). "actor" = email yang melakukan; server memeriksa ulang bahwa email
+// itu memang leader atau "Menu Editor" untuk sheet tersebut.
 async function picApi(payload){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL is not configured.");
@@ -1849,7 +1565,7 @@ async function picApi(payload){
   const res = await fetch(LOG_WEBAPP_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(Object.assign({}, payload, { developerToken: getDeveloperToken() }, getAccountPolicyFields()))
+    body: JSON.stringify(payload)
   });
   let data;
   try { data = await res.json(); }
@@ -1890,7 +1606,7 @@ async function addPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "addLink", actor: getCurrentUserEmail(),
+      action: "addLink", actor: getRoleEmail(),
       sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis
     });
     if (!data || !data.ok){
@@ -1927,7 +1643,7 @@ async function editPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "editLink", actor: getCurrentUserEmail(),
+      action: "editLink", actor: getRoleEmail(),
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
       name: f.name, url: f.url, desc: f.desc, visible: f.vis
     });
@@ -1955,7 +1671,6 @@ async function editPicLink(){
 
 // Tombol "Delete Menu" aktif hanya kalau ada yang dicentang.
 function updatePicDeleteButton(){
-  if (!picCanDelete) return;
   const btn = document.getElementById("pic-delete-confirm");
   if (!btn) return;
   const n = document.querySelectorAll("[data-pic-check]:checked").length;
@@ -1964,7 +1679,7 @@ function updatePicDeleteButton(){
 }
 
 async function deleteSelectedPicLinks(){
-  if (picBusy || !picCanDelete || picCurrentIdx === null) return;
+  if (picBusy || !picCanManage || picCurrentIdx === null) return;
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
   const visible = picVisible[idx] || [];
@@ -1981,7 +1696,7 @@ async function deleteSelectedPicLinks(){
   try {
     for (const link of chosen){
       const data = await picApi({
-        action: "deleteLink", actor: getCurrentUserEmail(),
+        action: "deleteLink", actor: getRoleEmail(),
         sheet: meta.sheetKey, name: link.rawName, url: link.rawUrl
       });
       if (data && (data.ok || data.notFound)){
@@ -2033,14 +1748,12 @@ document.addEventListener("submit", (e) => {
   const id = e.target && e.target.id;
   if (id === "pic-add-form"){ e.preventDefault(); addPicLink(); }
   else if (id === "pic-edit-form"){ e.preventDefault(); editPicLink(); }
-  else if (id === "team-edit-form"){ e.preventDefault(); saveTeamMember(); }
 });
 document.getElementById("pic-modal-close").addEventListener("click", () => {
   document.getElementById("pic-modal-overlay").classList.remove("open");
-  restoreActivityRoute();
 });
 document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "pic-modal-overlay"){ e.target.classList.remove("open"); restoreActivityRoute(); }
+  if (e.target.id === "pic-modal-overlay") e.target.classList.remove("open");
 });
 
 /* =========================================================================
@@ -2066,8 +1779,7 @@ const DOSEN_ALLOWED_INDEXES = [1, 3];
         Priority Dosen    |  1/3
    (pemisah boleh "/", "," atau spasi). Baris yang tidak ada -> pakai nilai
    bawaan di bawah ini. "BSP" = Binus Support / BSP / Contact Center.
-   Pilihan All berarti urutan 1,2,3. Index yang tidak disebut otomatis dicoba
-   setelahnya, urut dari kecil. */
+   Index yang tidak disebut otomatis dicoba setelahnya, urut dari kecil. */
 const DEFAULT_PRIORITY = {
   leader: [1, 2, 3],
   bsp:    [2, 3, 1],
@@ -2094,9 +1806,7 @@ function readPriorityConfig(masterRows){
     else if (/staff|lain|other|unit/.test(label)) key = "staff";
     if (!key) return;
     for (let c = 1; c < r.length; c++){
-      const raw = String(r[c] || "").trim();
-      if (/\ball\b/i.test(raw)){ out[key] = [1, 2, 3]; break; }
-      const nums = raw.match(/\d+/g);
+      const nums = String(r[c] || "").match(/\d+/g);
       if (nums && nums.length){ out[key] = nums.map(n => parseInt(n, 10)); break; }
     }
   });
@@ -2116,216 +1826,63 @@ function resolveViewerVisibility(ctx){
   const saved = readSavedLoginState() || {};
   const asc = ctx.allIdx.slice().sort((a, b) => a - b);
   const P = ctx.priority || DEFAULT_PRIORITY;
-  const policies = ctx.rolePolicy || {};
-  let roleKey = ctx.visibilityKey || ctx.roleKey || "";
-  if (!roleKey){
-    if (saved.role === "User" || saved.guest) roleKey = "staff";
-    else if (saved.role === "Dosen") roleKey = "dosen";
-    else if (ctx.developer) roleKey = "developer";
-    else if (ctx.manager) roleKey = "manager";
-    else if (ctx.sectionHead) roleKey = "sectionhead";
-    else if (saved.domain === "binus.ac.id") roleKey = "dosen";
-    else if (ctx.userIdx.size > 0) roleKey = "registeredpic";
-    else {
-    const support = policies.support || {};
-    const terms = Array.isArray(support.matches) && support.matches.length ? support.matches : ["binus support", "bsp", "contact center"];
-    if (terms.some(term => term && String(saved.unit || "").toLowerCase().includes(String(term).toLowerCase()))) roleKey = "support";
-    else roleKey = "staff";
-    }
+
+  if (ctx.leader) return { allowed: null, order: finishOrder(P.leader, asc), strict: false, isLeader: true };
+
+  if (saved.role === "Dosen" || saved.domain === "binus.ac.id"){
+    const allowed = new Set(DOSEN_ALLOWED_INDEXES);
+    return {
+      allowed: allowed,
+      order: finishOrder(P.dosen.filter(i => allowed.has(i)), DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b)),
+      strict: true
+    };
   }
-  const fallback = {
-    developer: { indexes: "all", order: P.leader, layout: "all" },
-    manager: { indexes: "all", order: P.leader, layout: "career" },
-    sectionhead: { indexes: "all", order: P.leader, layout: "career" },
-    registeredpic: { indexes: "all", orderOwnFirst: true, layout: "section" },
-    support: { indexes: "all", order: P.bsp, layout: "section" },
-    staff: { indexes: "all", order: P.staff, layout: "section" },
-    dosen: { indexes: DOSEN_ALLOWED_INDEXES.join(","), order: P.dosen, layout: "section" }
-  };
-  const defaultPolicy = fallback[roleKey] || fallback.staff;
-  const policy = policies[roleKey] || defaultPolicy;
-  const allowed = String(policy.indexes || "all").trim().toLowerCase() === "all"
-    ? null
-    : new Set((String(policy.indexes || "").match(/\d+/g) || []).map(Number));
-  let preferred = Array.isArray(policy.order) ? policy.order.slice() : [];
-  if ((!preferred.length || policies.source === "defaults") && policies.source !== "sheet") {
-    if (roleKey === "developer" || roleKey === "manager" || roleKey === "sectionhead") preferred = P.leader.slice();
-    else if (roleKey === "support") preferred = P.bsp.slice();
-    else if (roleKey === "staff") preferred = P.staff.slice();
-    else if (roleKey === "dosen") preferred = P.dosen.slice();
+
+  if (ctx.userIdx.size > 0){   // PIC: boleh membuka semua index; yang dipilih pertama = index sheet miliknya
+    const own = Array.from(ctx.userIdx).sort((a, b) => a - b);
+    return { allowed: null, order: finishOrder(own, asc), strict: false };
   }
-  if (policy.orderOwnFirst && ctx.userIdx.size){
-    preferred = Array.from(ctx.userIdx).sort((a, b) => a - b);
+
+  if (SUPPORT_UNIT_PATTERN.test(String(saved.unit || ""))){
+    return { allowed: null, order: finishOrder(P.bsp, asc), strict: false };
   }
-  if (allowed) preferred = preferred.filter(i => allowed.has(i));
-  const order = finishOrder(preferred, (allowed ? Array.from(allowed).sort((a, b) => a - b) : asc));
-  return {
-    allowed, order, strict: !!allowed,
-    isLeader: ["manager", "sectionhead"].includes(roleKey),
-    isDeveloper: roleKey === "developer",
-    roleKey,
-    initialLayout: policy.layout || defaultPolicy.layout,
-    canToggleCareer: (policy.layout || defaultPolicy.layout) === "all",
-    canToggleSub: ["all", "career"].includes(policy.layout || defaultPolicy.layout)
-  };
+  return { allowed: null, order: finishOrder(P.staff, asc), strict: false };
 }
 
-// Info akun yang sedang login: satu baris kecil di paling atas halaman.
-// Leader/PIC melihat role; user non-Dosen melihat email dan unit saja.
-function roleSwitchBaseState(state){
-  const base = Object.assign({}, state || {});
-  delete base.switchRoleEligible;
-  delete base.switchRoleBase;
-  return base;
-}
-
+// Info akun yang sedang login: satu baris kecil di paling atas halaman
+// (email · peran · unit/ID · Sign out). Sengaja dibuat tidak mencolok.
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
-  let saved = readSavedLoginState();
+  const saved = readSavedLoginState();
   if (!saved || !saved.email){ box.className = "acct-bar"; box.innerHTML = ""; return; }
-
-  if (opts.canSignOut && !saved.switchRoleEligible){
-    saved.switchRoleEligible = true;
-    saved.switchRoleBase = roleSwitchBaseState(saved);
-    try { localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(saved)); } catch (e){}
-  }
 
   const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
   if (saved.role === "Dosen"){
     parts.push(`<span class="acct-role">Lecturer</span>`);
     if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
-  } else if (saved.role === "User" || saved.guest){
-    if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
-  } else if (opts.isDeveloper){
-    parts.push(`<span class="acct-role">Developer</span>`);
   } else if (opts.isLeader){
-    const fallbackTitle = opts.isManager ? "Manager" : (opts.isSectionHead ? "Section Head" : "Leader");
-    parts.push(`<span class="acct-role">${escapeHtml(opts.jobTitle || fallbackTitle)}</span>`);
-  } else if (opts.isEditor){
-    parts.push(`<span class="acct-role">Authorized PIC</span>`);
+    parts.push(`<span class="acct-role">Leader</span>`);
   } else if (opts.isPic){
     parts.push(`<span class="acct-role">PIC</span>`);
   } else {
+    parts.push(`<span class="acct-role">Staff</span>`);
     if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
   }
-  if (saved.switchRoleEligible){
-    parts.push(`<button type="button" class="acct-switch" id="acct-switch-role">Switch Role</button>`);
-  }
-  if (opts.canSignOut){
-    parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
-  }
+  if (opts.isEditor) parts.push(`<span>Editor Menu</span>`);
+  parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
   box.className = "acct-bar show";
   box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
-  const switchButton = document.getElementById("acct-switch-role");
-  if (switchButton) switchButton.addEventListener("click", openRoleSwitchDialog);
-  const signout = document.getElementById("acct-signout");
-  if (signout) signout.addEventListener("click", () => {
+  document.getElementById("acct-signout").addEventListener("click", () => {
     if (!confirm("Sign out from " + saved.email + "?")) return;
-    endActivityTracking();
     try {
       localStorage.removeItem(LOGIN_STORAGE_KEY);
       localStorage.removeItem(DATA_CACHE_KEY);
-      localStorage.removeItem(DEVELOPER_TOKEN_KEY);
     } catch (e){}
     location.reload();
   });
 }
-
-function syncRoleSwitchFields(){
-  const target = document.getElementById("role-switch-target").value;
-  const userFields = document.getElementById("role-switch-user-fields");
-  const dosenFields = document.getElementById("role-switch-dosen-fields");
-  userFields.classList.toggle("hidden", target !== "user");
-  dosenFields.classList.toggle("hidden", target !== "dosen");
-  document.getElementById("role-switch-unit").required = target === "user";
-  document.getElementById("role-switch-kode").required = target === "dosen";
-  document.getElementById("role-switch-error").classList.remove("show");
-}
-
-function openRoleSwitchDialog(){
-  const saved = readSavedLoginState();
-  const dialog = document.getElementById("role-switch-dialog");
-  if (!saved || !saved.switchRoleEligible || !dialog) return;
-  document.getElementById("role-switch-target").value = "";
-  document.getElementById("role-switch-unit").value = "";
-  document.getElementById("role-switch-kode").value = "";
-  syncRoleSwitchFields();
-  dialog.showModal();
-}
-
-function showRoleSwitchError(message){
-  const error = document.getElementById("role-switch-error");
-  error.textContent = message;
-  error.classList.add("show");
-}
-
-document.getElementById("role-switch-target").addEventListener("change", syncRoleSwitchFields);
-document.getElementById("role-switch-cancel").addEventListener("click", () => document.getElementById("role-switch-dialog").close());
-document.getElementById("role-switch-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const saved = readSavedLoginState();
-  if (!saved || !saved.switchRoleEligible){
-    showRoleSwitchError("Role switching is not available for this account.");
-    return;
-  }
-  const target = document.getElementById("role-switch-target").value;
-  const base = saved.switchRoleBase || roleSwitchBaseState(saved);
-  let next = Object.assign({}, base);
-  let logExtra = "Original role";
-
-  if (target === "user"){
-    const unit = document.getElementById("role-switch-unit").value.trim();
-    if (!unit){ showRoleSwitchError("Department/Unit cannot be empty."); return; }
-    next.role = "User";
-    next.unit = unit;
-    next.guest = true;
-    delete next.pic;
-    delete next.kodeDosen;
-    logExtra = unit;
-  } else if (target === "dosen"){
-    const kode = document.getElementById("role-switch-kode").value.trim();
-    if (!kode){ showRoleSwitchError("Lecturer ID cannot be empty."); return; }
-    const submit = document.querySelector("#role-switch-form button[type='submit']");
-    const originalLabel = submit.textContent;
-    submit.disabled = true;
-    submit.textContent = "Checking…";
-    const result = await checkKodeDosenTerdaftar(kode);
-    submit.disabled = false;
-    submit.textContent = originalLabel;
-    if (!result.ok){ showRoleSwitchError("Could not verify the lecturer ID. Check your connection and try again."); return; }
-    if (!result.found){ showRoleSwitchError("Lecturer ID not found."); return; }
-    next.role = "Dosen";
-    next.kodeDosen = kode;
-    next.guest = false;
-    delete next.pic;
-    delete next.unit;
-    logExtra = kode;
-  } else if (target !== "original"){
-    showRoleSwitchError("Choose a role to continue.");
-    return;
-  }
-
-  if (target === "original"){
-    delete next.switchRoleEligible;
-    delete next.switchRoleBase;
-  } else {
-    next.switchRoleEligible = true;
-    next.switchRoleBase = base;
-  }
-  endActivityTracking();
-  logSignIn(saved.email, "Berhasil", logExtra, "Role switched");
-  try {
-    localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(next));
-    localStorage.removeItem(DATA_CACHE_KEY);
-  } catch (err){
-    showRoleSwitchError("This browser could not save the selected role.");
-    return;
-  }
-  document.getElementById("role-switch-dialog").close();
-  location.reload();
-});
 
 async function loadAndRender(isInitial, fromCache){
   // Kalau ada popup yang sedang dibuka pengguna, tunda dulu pengecekan diam-diam
@@ -2335,7 +1892,7 @@ async function loadAndRender(isInitial, fromCache){
 
   const sigParts = [];
   let masterRows;
-  let extra = { links: {}, editorFor: [], leader: false, manager: false, sectionHead: false, sectionHeadCareers: [], developer: false, picPermissions: null, rolePolicy: null };
+  let extra = { links: {}, editorFor: [], leader: false };
 
   // Setiap siklus (kecuali dari cache) mengambil data BARU dari server.
   if (!fromCache) serverDataPromise = null;
@@ -2352,17 +1909,13 @@ async function loadAndRender(isInitial, fromCache){
 
   try {
     masterRows = await rowsOf(MASTER_SHEET_NAME);
-    // Data pendamping per email: izin lihat/edit PIC Menu dan role dihitung di server.
+    // Data pendamping per email: link PIC Menu yang boleh dilihat, sheet yang
+    // boleh dikelola (Editor Menu), dan status leader -- dihitung di server.
     if (fromCache && cacheExtra){
       extra = cacheExtra;
     } else {
       const d = await getServerData();
-      extra = {
-        links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader,
-        manager: !!d.manager, sectionHead: !!d.sectionHead,
-        sectionHeadCareers: d.sectionHeadCareers || [], developer: !!d.developer,
-        picPermissions: d.picPermissions || null, rolePolicy: d.rolePolicy || null
-      };
+      extra = { links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader };
     }
     sigParts.push("extra:" + JSON.stringify(extra));
   } catch (err){
@@ -2377,19 +1930,6 @@ async function loadAndRender(isInitial, fromCache){
     // tampilan yang sudah ada dibiarkan apa adanya; dicoba lagi siklus berikutnya.
     return;
   }
-  siteLeaderFlag = !!extra.leader;
-  siteDeveloperFlag = !!extra.developer;
-  siteManagerFlag = !!extra.manager;
-  siteSectionHeadFlag = !!extra.sectionHead;
-  siteSectionHeadCareers = Array.isArray(extra.sectionHeadCareers) ? extra.sectionHeadCareers : [];
-  sitePicPermissions = extra.picPermissions || sitePicPermissions;
-  siteTeamPermissions = {
-    add: !!(sitePicPermissions && sitePicPermissions.teamAdd),
-    edit: !!(sitePicPermissions && sitePicPermissions.teamEdit),
-    editScope: (sitePicPermissions && sitePicPermissions.teamEditScope) || ((sitePicPermissions && sitePicPermissions.teamEdit) ? "all" : "none"),
-    delete: !!(sitePicPermissions && sitePicPermissions.teamDelete)
-  };
-  siteRolePolicy = extra.rolePolicy || siteRolePolicy;
   sigParts.push(JSON.stringify(masterRows));
 
   const labelOf = (r) => (r[0] || "").toLowerCase().trim();
@@ -2445,7 +1985,7 @@ async function loadAndRender(isInitial, fromCache){
   };
   const userIdx = new Set();   // index milik sheet tempat email ini terdaftar (PIC)
   const allIdx = [];
-  const me = getCurrentUserEmail();
+  const me = getRoleEmail();   // hanya sesi PIC yang memakai index milik sheet-nya
   if (visRow){
     for (let c = 1; c < numCols; c++){
       if (!isSheetActive(c)) continue;
@@ -2460,13 +2000,7 @@ async function loadAndRender(isInitial, fromCache){
       } catch (e){ /* sheet gagal dibaca: ditangani di loop utama */ }
     }
   }
-  const viewVis = resolveViewerVisibility({
-    roleKey: sitePicPermissions && sitePicPermissions.roleKey,
-    visibilityKey: sitePicPermissions && sitePicPermissions.visibilityKey,
-    manager: !!extra.manager, sectionHead: !!extra.sectionHead,
-    leader: !!extra.leader, developer: !!extra.developer,
-    userIdx: userIdx, allIdx: allIdx, priority: readPriorityConfig(masterRows), rolePolicy: siteRolePolicy
-  });
+  const viewVis = resolveViewerVisibility({ leader: !!extra.leader, userIdx: userIdx, allIdx: allIdx, priority: readPriorityConfig(masterRows) });
   const canSeeIdx = (vi) => {
     if (!visRow) return true;                 // belum ada baris Visibility Index -> tidak difilter
     if (vi === null) return !viewVis.strict;  // sel kosong: terlihat, kecuali untuk Dosen
@@ -2516,8 +2050,7 @@ async function loadAndRender(isInitial, fromCache){
     if (rows.length < 1) rows = [[]];
 
     const cols = detectColumns(rows[0]);
-    const members = rows.slice(1).map((r, rowIndex) => ({
-      _row: rowIndex + 2,
+    const members = rows.slice(1).map(r => ({
       jabatan: (cols.jabatan >= 0 ? r[cols.jabatan] : "") || "",
       pic:     (cols.pic >= 0 ? r[cols.pic] : "") || "",
       email:   (cols.email >= 0 ? r[cols.email] : "") || "",
@@ -2528,7 +2061,7 @@ async function loadAndRender(isInitial, fromCache){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, career: career, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getRoleEmail()] : [] });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -2576,10 +2109,6 @@ async function loadAndRender(isInitial, fromCache){
   sectionMembers = newSectionMembers;
   sectionMeta = newSectionMeta;
   siteLeaderFlag = !!extra.leader;
-  siteDeveloperFlag = !!extra.developer;
-  siteManagerFlag = !!extra.manager;
-  siteSectionHeadFlag = !!extra.sectionHead;
-  siteSectionHeadCareers = Array.isArray(extra.sectionHeadCareers) ? extra.sectionHeadCareers : [];
 
   // Simpan posisi scroll supaya render ulang diam-diam tidak membuat tampilan "melompat".
   // (Tab/section yang dipilih disimpan di variabel currentSel.)
@@ -2587,17 +2116,14 @@ async function loadAndRender(isInitial, fromCache){
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
-  renderLoginInfo({ canSignOut: !!sitePicPermissions.signOut, jobTitle: sitePicPermissions.jobTitle || "", isLeader: !!viewVis.isLeader, isDeveloper: !!viewVis.isDeveloper, isManager: !!extra.manager, isSectionHead: !!extra.sectionHead, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
+  renderLoginInfo({ isLeader: !!viewVis.isLeader, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){
     const catBtns = careerTabs.map(k =>
       `<button class="tab-btn" data-career="${escapeHtml(k)}" type="button" aria-pressed="false">${escapeHtml(k)}</button>`
     ).join("");
-    const allSectionsBtn = viewVis.canToggleCareer
-      ? `<button class="tab-btn" data-career-all type="button" aria-pressed="false">All Sections</button>`
-      : "";
-    tabsWrap.innerHTML = `<div class="tabs-scroll">${allSectionsBtn}${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
+    tabsWrap.innerHTML = `<div class="tabs-scroll">${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
 
     const subtabsEl = document.getElementById("subtabs-scroll");
 
@@ -2611,13 +2137,18 @@ async function loadAndRender(isInitial, fromCache){
       return list[0];
     };
 
-    // Hak toggle kategori/sub-section mengikuti Initial Layout di Role Policy.
-    const canToggleSub = !!viewVis.canToggleSub;
-    const canToggleCareer = !!viewVis.canToggleCareer;
+    // Terapkan pilihan saat ini (currentSel) ke tampilan:
+    //   Selalu tepat satu section yang tampil (career + secKey).
+    // Tab utama (kategori): SELALU wajib ada satu yang terpilih untuk semua user.
+    // Sub-tab (section): wajib pilih satu juga, KECUALI Leader -- Leader boleh
+    // mematikan sub-tab yang aktif sehingga semua section di kategori itu tampil.
+    // Hanya LEADER yang boleh membiarkan sub-tab tidak terpilih (semua sub section tampil).
+    // Editor Menu dan user lain: wajib pilih salah satu sub-tab.
+    const canToggleSub = !!viewVis.isLeader;
     const applySel = () => {
       const { career, secKey } = currentSel;
       tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
-        const on = b.hasAttribute("data-career-all") ? !career : (!!career && b.dataset.career === career);
+        const on = b.dataset.career === career;
         b.classList.toggle("active", on);
         b.setAttribute("aria-pressed", String(on));
       });
@@ -2633,7 +2164,6 @@ async function loadAndRender(isInitial, fromCache){
       if (list.length <= 1){
         subtabsEl.innerHTML = "";
         subtabsEl.classList.remove("open");
-        setActivityRoute(career ? career + (list.length ? " / " + list[0].label : "") : "All sections and sub-sections");
         return;
       }
       subtabsEl.innerHTML = list.map(item =>
@@ -2643,37 +2173,25 @@ async function loadAndRender(isInitial, fromCache){
       subtabsEl.querySelectorAll(".subtab-btn").forEach(sBtn => {
         sBtn.addEventListener("click", () => {
           if (currentSel.secKey === sBtn.dataset.sheetKey){
-            if (!canToggleSub) return;
-            currentSel.secKey = null;        // Kembali menampilkan seluruh sub-section kategori ini.
+            if (!canToggleSub) return;       // user biasa: wajib pilih salah satu
+            currentSel.secKey = null;        // Leader/Editor: kembali ke semua section di kategori ini
           } else {
             currentSel.secKey = sBtn.dataset.sheetKey;
           }
           applySel();
         });
       });
-      const selected = list.find(item => item.sheetKey === secKey);
-      setActivityRoute(career ? career + (selected ? " / " + selected.label : " / All sub-sections") : "All sections and sub-sections");
     };
 
     tabsWrap.querySelectorAll(".tab-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        if (btn.hasAttribute("data-career-all")){
-          currentSel = { email: getCurrentUserEmail(), set: true, career: null, secKey: null };
-          applySel();
-          return;
-        }
-        if (currentSel.career === btn.dataset.career){
-          if (canToggleCareer){
-            currentSel = { email: getCurrentUserEmail(), set: true, career: null, secKey: null };
-            applySel();
-          }
-          return;
-        }
+        if (currentSel.career === btn.dataset.career) return;   // tab utama: wajib pilih satu (semua user)
         const list = renderedSecs.filter(s => s.career === btn.dataset.career);
         if (!list.length) return;
-        // Pilihan sub-section awal mengikuti Initial Layout Role Policy.
+        // Leader: sub-tab tidak diklik -> semua sub section di kategori itu tampil.
+        // User lain: langsung ke satu section prioritas pertama di kategori itu.
         const pick = pickByPriority(list);
-        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: viewVis.initialLayout === "section" ? pick.sheetKey : null };
+        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
         applySel();
       });
     });
@@ -2681,23 +2199,20 @@ async function loadAndRender(isInitial, fromCache){
     // Pilihan awal (hanya saat user ini belum pernah memilih). Setelah itu pilihan
     // user dipertahankan walau data di-refresh otomatis.
     const me2 = getCurrentUserEmail();
-    const selValid = currentSel.set && currentSel.email === me2 && (
-      (!currentSel.career && canToggleCareer) ||
-      (!!currentSel.career && (currentSel.secKey
+    const selValid = currentSel.set && currentSel.email === me2 && !!currentSel.career && (
+      currentSel.secKey
         ? renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career)
-        : (canToggleSub && careerTabs.includes(currentSel.career))))
+        : (canToggleSub && careerTabs.includes(currentSel.career))
     );
     if (!selValid){
       const pick = pickByPriority(renderedSecs);
-      // Layout awal mengikuti kolom Initial Layout di Role Policy.
-      currentSel = viewVis.initialLayout === "all"
-        ? { email: me2, set: true, career: null, secKey: null }
-        : { email: me2, set: true, career: pick.career, secKey: viewVis.initialLayout === "section" ? pick.sheetKey : null };
+      // Leader: tab utama terpilih (prioritas Visibility Index), sub-tab TIDAK diklik -> semua sub section tampil.
+      // User lain: langsung ke satu section prioritas pertama.
+      currentSel = { email: me2, set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
     }
     applySel();
   } else {
     tabsWrap.innerHTML = "";
-    setActivityRoute("Website overview");
   }
 
   document.querySelectorAll(".team-btn").forEach(btn => {
@@ -2706,7 +2221,7 @@ async function loadAndRender(isInitial, fromCache){
       const members = sectionMembers[idx];
       const headerEl = btn.closest(".section").querySelector(".header");
       const sheetName = btn.closest(".section").dataset.sheet || "";
-      openModal(headerEl.textContent, sheetName, members, idx);
+      openModal(headerEl.textContent, sheetName, members);
     });
   });
 
@@ -2727,13 +2242,6 @@ async function loadAndRender(isInitial, fromCache){
 // pertanyaan lanjutan yang berbeda — lihat STEP_EL & handler di bawah).
 const DOMAIN_EDU = "binus.edu";       // karyawan -> ditanya Unit
 const DOMAIN_AC_ID = "binus.ac.id";   // dosen/mahasiswa -> ditanya peran dulu
-const DEVELOPER_EMAILS = new Set(["tri.mulyadi01@binus.edu", "triputramulyadi@binus.ac.id"]);
-const DEVELOPER_TOKEN_KEY = "srsc_developer_token_v1";
-function isDeveloperEmail(email){ return DEVELOPER_EMAILS.has(String(email || "").trim().toLowerCase()); }
-function getDeveloperToken(){
-  try { return localStorage.getItem(DEVELOPER_TOKEN_KEY) || ""; }
-  catch (e){ return ""; }
-}
 
 // Kalau pengecekan "apakah email ini PIC?" ke Apps Script GAGAL (Apps Script
 // error / belum diperbarui / kuota habis / internet putus):
@@ -2747,17 +2255,15 @@ const PIC_LOOKUP_FAIL_OPEN = true;
 // seperti sebelumnya), supaya Unit / Kode Dosen ikut diingat untuk
 // auto-login berikutnya. Contoh isi:
 //   { email, domain: "binus.edu", unit: "..." }
-//   { email, domain: "binus.edu", role: "PIC", pic: true }
-//   { email, domain: "binus.edu", role: "User", guest: true, unit: "..." }
+//   { email, domain: "binus.edu", pic: true }          <- email PIC (tanpa Unit)
 //   { email, domain: "binus.ac.id", role: "Dosen", kodeDosen: "..." }
-// Leader/Developer yang switch role menyimpan switchRoleBase untuk pemulihan role awal.
 const LOGIN_STORAGE_KEY = "srsc_login_email";
 
 // Menyimpan sementara email yang sedang diproses di antara Step 1 -> Step 2/3
 // (baru benar-benar dianggap "login" setelah pertanyaan lanjutannya terisi).
 let pendingEmail = "";
-let pendingPicGuest = false;
-let pendingPicNeedsPassword = false;
+let picNeedsPassword = true;   // sheet PIC memakai password? (kalau tidak, kolom password disembunyikan)
+let guestFromPic = false;      // user memilih Continue as Guest dari langkah PIC
 
 // Kirim catatan "siapa membuka website, kapan, dan hasilnya apa" ke Sheet
 // "Logs" lewat Apps Script. Dipanggil "fire-and-forget": halaman tidak
@@ -2802,87 +2308,6 @@ function logSignIn(email, status, extra, keterangan){
   }).catch(() => { /* diamkan saja kalau gagal, jangan ganggu proses login */ });
 }
 
-// Pencatatan aktivitas menyimpan hanya section/konteks yang aktif dan durasi
-// tab website terlihat (tidak mengirim isi klik/form atau merekam aktivitas di
-// tab lain). Event durasi dikirim saat berpindah section, pindah tab, atau keluar.
-let activityState = { sessionId: "", context: "", contextStartedAt: 0, activeSince: 0, totalActiveMs: 0, ended: false };
-let activityListenersAttached = false;
-let activityBaseRoute = "Website overview";
-function activityNow(){ return Date.now(); }
-function activitySessionId(){
-  try { return crypto.randomUUID().replace(/-/g, ""); }
-  catch (e){ return String(activityNow()) + Math.random().toString(36).slice(2, 12); }
-}
-function sendActivityEvent(event, context, durationSeconds){
-  const saved = readSavedLoginState();
-  if (!saved || !saved.email || !LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return;
-  const payload = {
-    action: "logActivity", event: event, email: saved.email,
-    context: context || "-", durationSeconds: Math.max(0, Math.floor(durationSeconds || 0)),
-    sessionId: activityState.sessionId, device: getDeviceId(),
-    developerToken: saved.developer ? getDeveloperToken() : ""
-  };
-  const body = JSON.stringify(payload);
-  try {
-    if (navigator.sendBeacon && navigator.sendBeacon(LOG_WEBAPP_URL, new Blob([body], { type: "text/plain;charset=UTF-8" }))) return;
-  } catch (e){}
-  fetch(LOG_WEBAPP_URL, {
-    method: "POST", mode: "no-cors", keepalive: true,
-    headers: { "Content-Type": "text/plain;charset=utf-8" }, body: body
-  }).catch(() => {});
-}
-function flushActivityContext(){
-  if (!activityState.context || !activityState.contextStartedAt) return;
-  const seconds = Math.floor((activityNow() - activityState.contextStartedAt) / 1000);
-  if (seconds > 0) sendActivityEvent("section_duration", activityState.context, seconds);
-  activityState.contextStartedAt = 0;
-}
-function startActivityTracking(){
-  if (activityState.sessionId && !activityState.ended) return;
-  activityState = { sessionId: activitySessionId(), context: "", contextStartedAt: 0, activeSince: 0, totalActiveMs: 0, ended: false };
-  if (!activityListenersAttached){
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden){
-        if (activityState.activeSince){ activityState.totalActiveMs += Math.max(0, activityNow() - activityState.activeSince); activityState.activeSince = 0; }
-        flushActivityContext();
-      } else if (!activityState.ended){
-        activityState.activeSince = activityNow();
-        if (activityState.context) activityState.contextStartedAt = activityState.activeSince;
-      }
-    });
-    window.addEventListener("pagehide", () => endActivityTracking());
-    activityListenersAttached = true;
-  }
-  if (!document.hidden){
-    activityState.activeSince = activityNow();
-    if (activityState.context) activityState.contextStartedAt = activityState.activeSince;
-  }
-}
-function setActivityRoute(context){
-  if (!readSavedLoginState()) return;
-  startActivityTracking();
-  const next = String(context || "Website overview").replace(/[\r\n\t]+/g, " ").slice(0, 300);
-  activityBaseRoute = next;
-  setActivityDetail(next);
-}
-function setActivityDetail(context){
-  if (!readSavedLoginState()) return;
-  startActivityTracking();
-  const next = String(context || "Website overview").replace(/[\r\n\t]+/g, " ").slice(0, 300);
-  if (activityState.context === next) return;
-  flushActivityContext();
-  activityState.context = next;
-  activityState.contextStartedAt = (!document.hidden && !activityState.ended) ? activityNow() : 0;
-}
-function restoreActivityRoute(){ setActivityDetail(activityBaseRoute); }
-function endActivityTracking(){
-  if (!activityState.sessionId || activityState.ended) return;
-  flushActivityContext();
-  if (activityState.activeSince){ activityState.totalActiveMs += Math.max(0, activityNow() - activityState.activeSince); activityState.activeSince = 0; }
-  sendActivityEvent("session_end", "Visible website time", Math.floor(activityState.totalActiveMs / 1000));
-  activityState.ended = true;
-}
-
 function getEmailDomain(email){
   const parts = String(email || "").trim().toLowerCase().split("@");
   return parts.length === 2 ? parts[1] : "";
@@ -2908,8 +2333,6 @@ function hideLoginGate(){
 // tampilan: sembunyikan semua dulu, baru tampilkan satu yang relevan.
 const STEP_EL = {
   email: document.getElementById("login-form"),
-  picChoice: document.getElementById("pic-choice-step"),
-  developer: document.getElementById("developer-form"),
   unit: document.getElementById("unit-form"),
   password: document.getElementById("password-form"),
   role: document.getElementById("role-step"),
@@ -2922,13 +2345,18 @@ function goToStep(stepName){
   clearLoginError();
 }
 
+// Atur tampilan langkah PIC: dengan atau tanpa kolom password.
+function setPasswordStep(needsPassword){
+  picNeedsPassword = !!needsPassword;
+  document.getElementById("pw-wrap").style.display = needsPassword ? "" : "none";
+  document.getElementById("login-password").required = !!needsPassword;
+}
+
 function resetToEmailStep(){
   pendingEmail = "";
-  pendingPicGuest = false;
-  pendingPicNeedsPassword = false;
+  guestFromPic = false;
   document.getElementById("login-unit").value = "";
   document.getElementById("login-password").value = "";
-  document.getElementById("login-developer-password").value = "";
   document.getElementById("login-kodedosen").value = "";
   goToStep("email");
   document.getElementById("login-email").focus();
@@ -2940,7 +2368,6 @@ function completeLogin(state, statusText, extraForLog){
   // supaya di sheet jelas ini bukan baris kosong, tapi memang login ini yang
   // baru tersimpan di browser-nya (untuk dipakai auto-login berikutnya).
   logSignIn(state.email, statusText, extraForLog, "Tersimpan");
-  startActivityTracking();
   hideLoginGate();
   main();
 }
@@ -3006,33 +2433,20 @@ async function tryAutoLogin(){
   if (!saved) return false;
 
   let extraForLog;
-  if (saved.developer && isDeveloperEmail(saved.email) && getDeveloperToken()){
-    extraForLog = saved.role === "Dosen" ? (saved.kodeDosen || "Dosen") : (saved.role === "User" ? (saved.unit || "User") : "Developer");
-  } else if (saved.developer){
-    localStorage.removeItem(LOGIN_STORAGE_KEY);
-    localStorage.removeItem(DEVELOPER_TOKEN_KEY);
-    localStorage.removeItem(DATA_CACHE_KEY);
-    return false;
-  } else if (saved.role === "User" && saved.unit){
-    extraForLog = saved.unit;
-  } else if (saved.role === "PIC" && saved.pic){
-    extraForLog = "PIC";
-  } else if (saved.role === "Dosen" && saved.kodeDosen){
-    extraForLog = saved.kodeDosen;
-  } else if (saved.domain === DOMAIN_EDU && (saved.unit || saved.pic)){
+  if (saved.domain === DOMAIN_EDU && (saved.unit || saved.pic)){
     extraForLog = saved.unit || "PIC";
+  } else if (saved.domain === DOMAIN_AC_ID && saved.role === "Dosen" && saved.kodeDosen){
+    extraForLog = saved.kodeDosen;
   } else {
     return false;
   }
 
   hideLoginGate();
-  startActivityTracking();
   main();
 
   checkLoginRevoked(saved.email).then(revoked => {
     if (revoked){
       localStorage.removeItem(LOGIN_STORAGE_KEY);
-      localStorage.removeItem(DEVELOPER_TOKEN_KEY);
       location.reload();
       return;
     }
@@ -3155,32 +2569,14 @@ async function localPicLookup(email){
 // bukan di browser).
 async function verifyPicPassword(email, password){
   try {
-    const res = await fetch(LOG_WEBAPP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "verifyPicPassword", email: email, password: password, _: Date.now() }),
-      cache: "no-store"
-    });
+    const url = LOG_WEBAPP_URL + "?action=verifyPicPassword&email=" + encodeURIComponent(email) +
+                "&password=" + encodeURIComponent(password) + "&_=" + Date.now();
+    const res = await fetch(url, { method: "GET", cache: "no-store" });
     const data = await res.json();
     return { ok: true, valid: !!data.valid, locked: !!data.locked };
   } catch (err){
     console.warn("verifyPicPassword gagal:", err && err.name, err && err.message);
     return { ok: false, valid: false, locked: false };
-  }
-}
-
-async function verifyDeveloperPassword(email, password){
-  try {
-    const res = await fetch(LOG_WEBAPP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "developerLogin", email: email, password: password })
-    });
-    const data = await res.json();
-    return data || { ok: false, error: "Unexpected server response." };
-  } catch (err){
-    console.warn("Developer login verification failed:", err && err.name, err && err.message);
-    return { ok: false, error: "Could not verify Developer password. Check your connection and Apps Script deployment." };
   }
 }
 
@@ -3198,15 +2594,9 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   const domain = getEmailDomain(email);
   pendingEmail = email;
 
-  if (isDeveloperEmail(email)){
-    goToStep("developer");
-    document.getElementById("login-developer-password").focus();
-    return;
-  }
-
-  if (domain === DOMAIN_EDU || domain === DOMAIN_AC_ID){
-    // Cari PIC pada semua domain BINUS yang didukung. PIC selalu memilih
-    // profilnya sendiri: password untuk PIC atau Department/Unit sebagai Guest.
+  if (domain === DOMAIN_EDU){
+    // Cek dulu: apakah email ini PIC? PIC tidak ditanya Unit -- diganti Password
+    // (kalau sheet-nya memakai password) atau langsung masuk (kalau tidak).
     const submitBtn = document.querySelector("#login-form button[type='submit']");
     const originalLabel = submitBtn.textContent;
     submitBtn.disabled = true;
@@ -3221,30 +2611,31 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
 
     if (!pic.ok){
       if (PIC_LOOKUP_FAIL_OPEN){
-        console.warn("Pengecekan PIC gagal -> lanjut ke alur login domain.");
-      } else {
-        showLoginError("Failed to verify your account. Please check your internet connection and try again.");
+        // Gagal cek PIC -> perlakukan seperti karyawan biasa (tanya Unit).
+        console.warn("Pengecekan PIC gagal -> lanjut ke Department/Unit.");
+        goToStep("unit");
+        document.getElementById("login-unit").focus();
         return;
       }
-    }
-
-    if (pic.ok && pic.isPic){
-      pendingPicNeedsPassword = !!pic.needsPassword;
-      pendingPicGuest = false;
-      document.getElementById("pic-as-pic-btn").classList.toggle("hidden", !pendingPicNeedsPassword);
-      document.getElementById("pic-password-unavailable").classList.toggle("hidden", pendingPicNeedsPassword);
-      document.getElementById("pic-choice-summary").textContent = pendingPicNeedsPassword
-        ? "This email is registered as a PIC. Sign in with the PIC password, or continue as a guest."
-        : "This email is registered as a PIC but no PIC password is set. Continue as a guest or contact the website administrator to enable PIC sign-in.";
-      goToStep("picChoice");
+      showLoginError("Failed to verify your account. Please check your internet connection and try again.");
       return;
     }
 
-    if (domain === DOMAIN_EDU){
-      goToStep("unit");
-      document.getElementById("login-unit").focus();
+    if (pic.isPic){
+      // Email terdata sebagai PIC / leader -> Password (kalau sheet-nya memakai
+      // password) + pilihan Sign In / Continue as Guest. Tidak ditanya Unit.
+      setPasswordStep(!!pic.needsPassword);
+      goToStep("password");
+      if (pic.needsPassword) document.getElementById("login-password").focus();
       return;
     }
+
+    goToStep("unit");
+    document.getElementById("login-unit").focus();
+    return;
+  }
+
+  if (domain === DOMAIN_AC_ID){
     goToStep("role");
     return;
   }
@@ -3252,34 +2643,6 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   logSignIn(email, "Ditolak", "", "domain tidak diizinkan");
   showLoginError("Access denied. Please use a valid email address.");
 });
-
-document.getElementById("developer-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const input = document.getElementById("login-developer-password");
-  const password = input.value;
-  if (!password.trim()){
-    showLoginError("Developer Password cannot be empty.");
-    return;
-  }
-  const btn = document.querySelector("#developer-form button[type='submit']");
-  const originalLabel = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Verifying...";
-  clearLoginError();
-  const result = await verifyDeveloperPassword(pendingEmail, password);
-  btn.disabled = false;
-  btn.textContent = originalLabel;
-  if (!result.ok || !result.developer || !result.token){
-    input.value = "";
-    showLoginError((result && result.error) || "Developer access could not be verified.");
-    return;
-  }
-  try { localStorage.setItem(DEVELOPER_TOKEN_KEY, result.token); }
-  catch (err){ showLoginError("This browser cannot store the secure Developer session."); return; }
-  input.value = "";
-  completeLogin({ email: pendingEmail, domain: getEmailDomain(pendingEmail), developer: true }, "Berhasil", "Developer");
-});
-document.getElementById("developer-back").addEventListener("click", resetToEmailStep);
 
 // ---- Ikon "mata": tekan & tahan = tampilkan password, lepas = sembunyikan ----
 (function(){
@@ -3304,9 +2667,15 @@ document.getElementById("developer-back").addEventListener("click", resetToEmail
   document.addEventListener("visibilitychange", hide);
 })();
 
-// ---- STEP 2a-PIC: password diperlukan hanya untuk masuk sebagai PIC ----
+// ---- STEP 2a-PIC: Password (untuk email PIC @binus.edu) ----
 document.getElementById("password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  // Sheet tanpa password: Sign In langsung (tanpa cek password).
+  if (!picNeedsPassword){
+    completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, pic: true }, "Berhasil", "PIC");
+    return;
+  }
+
   const password = document.getElementById("login-password").value;
   if (!password.trim()){
     showLoginError("Password cannot be empty.");
@@ -3340,25 +2709,19 @@ document.getElementById("password-form").addEventListener("submit", async (e) =>
     return;
   }
 
-  completeLogin({ email: pendingEmail, domain: getEmailDomain(pendingEmail), role: "PIC", pic: true }, "Berhasil", "PIC");
+  completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, pic: true }, "Berhasil", "PIC");
 });
-document.getElementById("password-back").addEventListener("click", () => goToStep("picChoice"));
-document.getElementById("pic-as-pic-btn").addEventListener("click", () => {
-  if (!pendingPicNeedsPassword){
-    showLoginError("PIC sign-in is unavailable because no password is set. Continue as Guest or contact the website administrator.");
-    return;
-  }
-  goToStep("password");
-  document.getElementById("login-password").focus();
-});
-document.getElementById("pic-as-guest-btn").addEventListener("click", () => {
-  pendingPicGuest = true;
+document.getElementById("password-back").addEventListener("click", resetToEmailStep);
+
+// Continue as Guest: masuk sebagai user biasa -> wajib isi Department/Unit.
+document.getElementById("password-guest").addEventListener("click", () => {
+  guestFromPic = true;
+  document.getElementById("login-password").value = "";
   goToStep("unit");
   document.getElementById("login-unit").focus();
 });
-document.getElementById("pic-choice-back").addEventListener("click", resetToEmailStep);
 
-// ---- STEP Unit: karyawan biasa atau PIC yang memilih masuk sebagai Guest ----
+// ---- STEP 2a: Unit (untuk @binus.edu) ----
 document.getElementById("unit-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const unit = document.getElementById("login-unit").value.trim();
@@ -3366,13 +2729,16 @@ document.getElementById("unit-form").addEventListener("submit", (e) => {
     showLoginError("Department/Unit cannot be empty.");
     return;
   }
-  const state = { email: pendingEmail, domain: getEmailDomain(pendingEmail), unit: unit };
-  if (pendingPicGuest){ state.role = "User"; state.guest = true; }
-  completeLogin(state, "Berhasil", unit);
+  completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, unit: unit }, "Berhasil", unit);
 });
 document.getElementById("unit-back").addEventListener("click", () => {
-  if (pendingPicGuest){ pendingPicGuest = false; goToStep("picChoice"); }
-  else resetToEmailStep();
+  // Dari Continue as Guest -> kembali ke langkah PIC; selain itu kembali ke email.
+  if (guestFromPic){
+    guestFromPic = false;
+    goToStep("password");
+    return;
+  }
+  resetToEmailStep();
 });
 
 // ---- STEP 2b: pilih Dosen / Mahasiswa (untuk @binus.ac.id) ----

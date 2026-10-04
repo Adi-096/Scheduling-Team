@@ -1,1164 +1,2890 @@
-/**
- * Kode ini BUKAN untuk ditaruh di website.
- * Ini ditempel di Google Apps Script (dibuka dari dalam Google Sheet-nya),
- * lalu di-deploy sebagai "Web App" supaya website bisa memanggilnya untuk
- * (1) menulis baris baru ke Sheet "Logs",
- * (2) mengecek apakah suatu Kode Dosen ada di Sheet "Data Dosen", dan
- * (3) mengecek apakah login seseorang baru saja "dipaksa logout" lewat
- *     Kolom F ("Hapus Login") Sheet "Logs".
- *
- * Struktur Sheet "Logs" sekarang:
- *   A: Timestamp
- *   B: Email
- *   C: Status (SINGKAT SAJA -- "Berhasil" / "Auto-login" / "Ditolak")
- *   D: Unit/Kode Dosen
- *   E: Keterangan (penjelasan tambahan, mis. "domain tidak diizinkan")
- *   F: Hapus Login / Action (dropdown 1 opsi "🗑️ Hapus Login", mirip
- *      tombol -- Sheets tidak punya tombol asli per baris. HANYA dipasang
- *      di baris yang statusnya bukan "Ditolak". Begitu dipilih, BARIS ITU
- *      LANGSUNG DIHAPUS dari sheet -- bukan cuma dikosongkan lagi.)
- *
- * Cara pasang, lihat panduan langkah-demi-langkah di chat.
- *
- * TAMBAHAN (di bagian paling bawah file ini, + 2 pengalihan kecil di doGet &
- * doPost): (4) login PIC -- email PIC ditanya Password (dari baris "Sheet
- * Password" di sheet Master) bukan Department/Unit, (5) leader bisa
- * menambah / menghapus link PIC Menu langsung dari website.
- */
+<!DOCTYPE html>
+<html lang="id" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRSC Team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F2F5F9;
+    --surface:#FFFFFF;
+    --surface-soft:#E7F5FC;
+    --ink:#0B2A4A;
+    --ink-soft:#526279;
+    --ink-faint:#93A1B5;
+    --primary:#0A3D62;
+    --primary-dark:#062A45;
+    --primary-soft:#DCEEFB;
+    --accent:#0EA8E0;
+    --accent-warm:#F7941D;
+    --accent-warm-dark:#D97A0A;
+    --line:#DCE6F0;
+    --gradient-brand: linear-gradient(135deg,#1CA7E0 0%,#0F5C9E 55%,#0A3D62 100%);
+    --radius: 12px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1100px 560px at 12% -8%, rgba(14,168,224,0.08), transparent 58%),
+      radial-gradient(900px 520px at 100% 0%, rgba(10,61,98,0.10), transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family:'Work Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .top-accent{
+    height:6px;width:100%;
+    background: var(--gradient-brand);
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:44px 24px 100px;}
 
-var HAPUS_LOGIN_LABEL = "🗑️ Hapus Login";
+  /* masthead */
+  .masthead{
+    display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    padding-bottom:20px;margin-bottom:0;
+    flex-wrap:wrap;gap:8px;
+  }
+  .masthead .brand{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--primary-dark);
+  }
+  .masthead .sub{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--primary-dark);
+  }
 
-// Dipanggil website lewat GET, contoh:
-//   ...exec?action=checkDosen&kode=D4859
-//   ...exec?action=checkRevoked&email=tri.mulyadi01@binus.edu
-function doGet(e) {
-  var action = e.parameter.action;
+  /* career tabs — sticky navigation so users don't need to scroll to find a section */
+  .tabs-wrap{
+    position:sticky; top:0; z-index:20;
+    background:var(--bg);
+    border-bottom:1px solid var(--line);   /* satu garis di bawah GRUP tab utama + sub-tab */
+  }
+  .tabs-scroll{
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center;
+    padding:20px 0; margin-bottom:0;   /* wrap: semua tab utama selalu terlihat, tidak terpotong */
+  }
+  /* kalau ada sub-tab, tab utama dan sub-tab dirapatkan jadi satu grup */
+  .tabs-scroll:has(+ .subtabs-scroll.open){ padding-bottom:10px; }
+  .tabs-scroll::-webkit-scrollbar{ height:4px; }
+  .tabs-scroll::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+  .tab-btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px; letter-spacing:.06em; text-transform:uppercase;
+    padding:9px 16px; border-radius:20px;
+    border:1px solid var(--line);
+    background:var(--surface); color:var(--ink-soft);
+    white-space:normal; text-align:center; flex:none; max-width:100%; cursor:pointer;
+    transition:background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .tab-btn:hover{ border-color:var(--accent); color:var(--ink); transform:translateY(-1px); }
+  .tab-btn.active{
+    background:var(--gradient-brand); color:#fff; border-color:transparent;
+    box-shadow:0 3px 10px rgba(11,42,74,0.18);
+  }
 
-  if (action === "checkDosen") {
-    var kode = String(e.parameter.kode || "").trim().toLowerCase();
-    var found = false;
+  /* sub-tab — muncul di bawah tab kategori utama saat kategori yang aktif
+     punya lebih dari satu section, sebagai toggle untuk memilih satu
+     section spesifik (klik lagi tombol yang aktif untuk kembali ke semua). */
+  /* sub-tab: di bawah tab utama, selalu SATU baris (kalau layar sempit, digeser ke samping) */
+  .subtabs-scroll{
+    display:none; flex-wrap:nowrap;
+    gap:6px; align-items:center; justify-content:center;
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+    padding:0 0 20px;
+    scrollbar-width:thin;
+  }
+  .subtabs-scroll.open{ display:flex; }
+  .subtab-btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px; letter-spacing:.04em;
+    padding:6px 14px; border-radius:16px;
+    border:1px solid var(--line);
+    background:var(--surface-soft); color:var(--ink-soft);
+    white-space:nowrap; flex:none; cursor:pointer;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .subtab-btn:hover{ border-color:var(--accent); color:var(--ink); }
+  .subtab-btn.active{
+    background:var(--accent); color:#fff; border-color:var(--accent);
+  }
 
-    if (kode) {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
-      var sheet = ss.getSheetByName("Data Dosen");
+  /* status / error messages */
+  .notice{
+    font-family:'Work Sans',sans-serif;
+    background:var(--surface);color:var(--ink);
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px;margin-bottom:24px;
+    font-size:14px;line-height:1.6;
+    box-shadow:0 1px 3px rgba(43,47,78,0.05);
+  }
+  .notice.error{ border-left:4px solid #E0785A; }
+  .notice.loading{ border-left:4px solid var(--primary); }
+  .notice code{
+    background:var(--surface-soft);padding:1px 6px;border-radius:4px;
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;
+  }
+  .notice ul{margin:10px 0 0;padding-left:18px;}
+  .notice li{margin-bottom:4px;}
 
-      if (sheet) {
-        var lastRow = sheet.getLastRow();
-        if (lastRow > 1) {
-          var values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-          for (var i = 0; i < values.length; i++) {
-            var idDiSheet = String(values[i][0] || "").trim().toLowerCase();
-            if (idDiSheet !== "" && idDiSheet === kode) {
-              found = true;
-              break;
-            }
-          }
-        }
-      }
+  /* section */
+  .section{
+    position:relative;
+    padding:20px 0 36px;
+    border-bottom:1px dashed var(--line);
+  }
+  .section:last-of-type{border-bottom:none;}
+
+  h2.header{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    font-size:clamp(26px,4vw,38px);
+    line-height:1.15;
+    margin:0 0 20px;
+    color:var(--ink);
+    white-space:pre-line;
+    text-align:center;
+  }
+  p.subheader{
+    font-family:'Work Sans',sans-serif;
+    font-size:15px;
+    color:var(--ink-soft);
+    max-width:56ch;
+    line-height:1.6;
+    margin:-8px auto 20px;
+    text-align:center;
+    white-space:pre-line;
+  }
+
+  /* hero (judul utama / kolom "All"/"Master" di Sheet Master) */
+  .hero{
+    text-align:center;
+    padding:20px 0 20px;
+    margin-bottom:0;
+    border-bottom:1px dashed var(--line);
+  }
+  .hero-title{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    font-size:clamp(20px,2.7vw,27px);
+    line-height:1.45;
+    color:var(--ink);
+    max-width:64ch;
+    margin:0 auto;
+    white-space:pre-line;
+  }
+  .hero-title a{ color:var(--accent); }
+
+  .team-btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:#fff;background:var(--accent-warm);
+    border:1px solid var(--accent-warm);
+    padding:11px 20px;border-radius:8px;
+    cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:background .15s ease, color .15s ease, transform .15s ease;
+    margin-bottom:28px;
+  }
+  .team-btn:hover{ background:var(--accent-warm-dark);border-color:var(--accent-warm-dark); }
+  .team-btn:active{ transform:scale(.98); }
+  .team-btn svg{width:14px;height:14px;flex:none;}
+
+  /* task link list */
+  .task-list{list-style:none;margin:0;padding:0;}
+  .task-list li{
+    border-top:1px solid var(--line);
+  }
+  .task-list li:last-child{border-bottom:1px solid var(--line);}
+
+  /* leadership block (Section Head / Manager / Senior Manager) — tampil di
+     bagian paling bawah popup "Our Team", terpisah dari kartu anggota biasa.
+     flex-basis:100% memaksa blok ini selalu menjadi baris penuh tersendiri
+     saat diletakkan di dalam .card-grid (yang berbasis flexbox). */
+  .leaders-block{
+    flex:1 0 100%;
+    margin-top:22px;padding-top:20px;
+    border-top:1px dashed var(--line);
+  }
+  .leaders-heading{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-faint);margin-bottom:12px;
+    width:100%;
+  }
+  .task-link{
+    display:flex;align-items:center;gap:16px;
+    padding:15px 4px;
+    color:var(--ink);
+    font-family:'Work Sans',sans-serif;font-weight:500;font-size:15px;
+    transition:padding-left .15s ease;
+    cursor:pointer;
+  }
+  .task-link:hover{ padding-left:10px; }
+  .task-link .idx{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);
+    flex:none;width:20px;padding-top:2px;
+  }
+  .task-link .name{ flex:1 1 auto;min-width:0; white-space:pre-line; }
+
+  .task-link .actions{
+    display:flex;align-items:center;gap:8px;flex:none;
+  }
+  .icon-btn{
+    width:32px;height:32px;border-radius:50%;flex:none;
+    display:inline-flex;align-items:center;justify-content:center;
+    border:1px solid var(--line);
+    background:var(--surface);
+    color:var(--ink-soft);
+    text-decoration:none;
+    transition:background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .icon-btn svg{width:15px;height:15px;flex:none;}
+  .icon-btn:hover{ transform:translateY(-1px); }
+  .icon-btn.icon-email:hover{ background:var(--primary); border-color:var(--primary); color:#fff; }
+  .icon-btn.icon-wa:hover{ background:#25D366; border-color:#25D366; color:#fff; }
+
+  /* modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(43,47,78,0.45);
+    display:none;align-items:flex-start;justify-content:center;
+    padding:40px 18px; overflow-y:auto; z-index:50;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--surface);color:var(--ink);
+    border-radius:var(--radius);
+    width:100%;max-width:900px;
+    padding:30px 26px 36px;
+    position:relative;
+    box-shadow:0 12px 40px rgba(43,47,78,0.18);
+  }
+  .modal-close{
+    position:absolute;top:18px;right:18px;
+    background:none;border:none;cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink);
+    padding:6px 10px;border:1px solid var(--line);border-radius:6px;
+  }
+  .modal-close:hover{ background:var(--surface-soft); }
+  .modal h3{
+    font-family:'Fraunces',serif;font-weight:600;
+    font-size:24px;margin:0 0 4px;padding-right:60px;
+    color:var(--ink);
+  }
+  .modal .modal-sub{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    color:var(--accent-warm-dark);letter-spacing:.08em;text-transform:uppercase;
+    margin-bottom:26px;
+  }
+
+  /* Flexbox + justify-content:center supaya kartu menyesuaikan jumlah
+     anggota tim dan selalu rata tengah (kiri-kanan seimbang), termasuk
+     saat baris terakhir tidak penuh — beda dengan CSS grid yang akan
+     merapatkan sisa kartu ke kiri. */
+  .card-grid{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:18px;
+  }
+  .card{
+    position:relative;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px 14px 18px;
+    display:flex;flex-direction:column;align-items:center;text-align:center;
+    box-shadow:0 1px 3px rgba(43,47,78,0.05);
+    flex:1 1 198px;
+    max-width:240px;
+  }
+  .card::before,.card::after{
+    content:"";position:absolute;top:10px;width:7px;height:7px;
+    border-radius:50%;background:var(--surface-soft);
+    border:1px solid var(--line);
+  }
+  .card::before{left:10px;}
+  .card::after{right:10px;}
+  .card .dp{
+    width:92px;height:92px;border-radius:50%;
+    object-fit:cover;background:var(--surface-soft);
+    border:1px solid var(--line);
+    margin-bottom:14px;
+  }
+  .card .dp.fallback{
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-size:30px;font-weight:600;
+    color:var(--primary);
+    background: var(--primary-soft);
+  }
+  .card hr{
+    width:100%;border:none;border-top:1px dashed var(--line);
+    margin:12px 0;
+  }
+  .card .pic-name{
+    font-family:'Work Sans',sans-serif;font-weight:600;font-size:14.5px;
+    color:var(--ink);
+    white-space:pre-line;
+  }
+  .card .task{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--accent-warm-dark);
+    line-height:1.5;
+    white-space:pre-line;
+  }
+  .card .task-desc{
+    font-family:'Work Sans',sans-serif;font-size:12.5px;color:var(--ink-soft);
+    line-height:1.55;
+    white-space:pre-line;
+  }
+
+  /* single-member detail modal */
+  .member-modal{ max-width:380px; text-align:center; }
+  .member-card{ display:flex;flex-direction:column;align-items:center; }
+  .member-card .dp{
+    width:96px;height:96px;border-radius:50%;
+    object-fit:cover;background:var(--surface-soft);
+    border:1px solid var(--line);
+  }
+  .member-card .dp.fallback{
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-size:30px;font-weight:600;
+    color:var(--primary);
+    background:var(--primary-soft);
+  }
+  .member-card hr{
+    width:100%;border:none;border-top:1px dashed var(--line);
+    margin:16px 0;
+  }
+  .member-card .pic-name{
+    font-family:'Fraunces',serif;font-weight:600;font-size:19px;
+    color:var(--ink);white-space:pre-line;
+  }
+  .member-card .task{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--accent-warm-dark);
+    line-height:1.5;white-space:pre-line;
+  }
+  .member-card .task-desc{
+    font-family:'Work Sans',sans-serif;font-size:13.5px;color:var(--ink-soft);
+    line-height:1.6;white-space:pre-line;
+  }
+  .member-actions{
+    display:flex;gap:12px;justify-content:center;flex-wrap:wrap;
+    margin-top:22px;width:100%;
+  }
+  .member-action-btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:11px 20px;border-radius:8px;
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:.04em;
+    text-decoration:none;color:#fff;border:1px solid transparent;
+    transition:transform .15s ease, filter .15s ease;
+  }
+  .member-action-btn:hover{ transform:translateY(-1px); filter:brightness(1.05); }
+  .member-action-btn svg{width:15px;height:15px;flex:none;}
+  .member-action-btn.email{ background:var(--primary); }
+  .member-action-btn.wa{ background:#25D366; }
+  .member-actions .no-contact{
+    font-family:'Work Sans',sans-serif;font-size:12.5px;color:var(--ink-faint);
+    margin-top:4px;
+  }
+
+  /* info akun yang sedang login: baris tipis & tidak mencolok di paling atas halaman */
+  .acct-bar{
+    display:none; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:6px;
+    margin:-20px 0 18px;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.05em;
+    color:var(--ink-faint); line-height:1.5;
+  }
+  .acct-bar.show{ display:flex; }
+  .acct-bar .acct-sep{ opacity:.6; }
+  .acct-bar .acct-email{ color:var(--ink-soft); word-break:break-all; }
+  .acct-bar .acct-role{ color:var(--primary); }
+  .acct-bar .acct-out{
+    font:inherit; letter-spacing:inherit; color:var(--ink-faint);
+    background:none; border:none; padding:0; cursor:pointer;
+    text-decoration:underline; text-underline-offset:2px;
+  }
+  .acct-bar .acct-out:hover{ color:#B3401F; }
+  footer.page-footer{
+    margin-top:48px;
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    color:var(--ink-faint);letter-spacing:.05em;
+    text-align:center;
+  }
+
+  /* ===== PIC Menu (hanya tampil untuk email yang terdaftar sebagai PIC) ===== */
+  /* Ukuran & gaya disamakan dengan tombol "Our Team" (.team-btn). */
+  .pic-menu-btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:#fff;background:var(--accent-warm);
+    border:1px solid var(--accent-warm);
+    padding:11px 20px;border-radius:8px;
+    cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:background .15s ease, color .15s ease, transform .15s ease;
+  }
+  .pic-menu-btn:hover{ background:var(--accent-warm-dark);border-color:var(--accent-warm-dark); }
+  .pic-menu-btn:active{ transform:scale(.98); }
+  .pic-menu-btn svg{width:14px;height:14px;flex:none;}
+  .section-actions{
+    display:flex;align-items:center;justify-content:center;
+    gap:16px;flex-wrap:wrap;margin-bottom:20px;
+  }
+  .section-actions .team-btn{ margin-bottom:0; }
+  /* display:flex membuat tombol di dalamnya jadi flex item langsung (bukan
+     inline di dalam baris teks), sehingga tidak ada selisih tinggi/baseline
+     dan posisinya persis sejajar dengan tombol Our Team. */
+  .pic-slot{ display:flex; align-items:center; }
+  .pic-slot:empty{ display:none; }
+  .section-actions .team-btn, .section-actions .pic-menu-btn{ margin:0; line-height:1.2; }
+  .pic-modal{ max-width:560px; }
+  /* Popup PIC Menu tampil di tengah layar (vertikal & horizontal). margin:auto
+     dipakai (bukan align-items:center) supaya popup tetap bisa di-scroll dari
+     atas kalau isinya panjang. */
+  #pic-modal-overlay .modal{ margin:auto; }
+  .pic-block-title{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-faint);margin:22px 0 10px;
+  }
+  .pic-list{ list-style:none;margin:0;padding:0; }
+  .pic-list li{ border-top:1px solid var(--line);padding:12px 2px; }
+  .pic-list li:last-child{ border-bottom:1px solid var(--line); }
+  .pic-list .pic-li-main{ font-weight:500;font-size:14.5px;color:var(--ink); }
+  .pic-list .pic-li-sub{ font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-top:2px; }
+  .pic-list a{ color:var(--primary);text-decoration:none; }
+  .pic-list a:hover{ text-decoration:underline; }
+  .pic-empty{ font-size:13px;color:var(--ink-soft);line-height:1.6; }
+  .pic-list li{ display:flex;align-items:flex-start;justify-content:space-between;gap:12px; }
+  .pic-li-body{ flex:1;min-width:0;overflow-wrap:anywhere; }
+  .pic-tag{
+    display:inline-block;margin-top:6px;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;
+    color:var(--ink-soft);background:var(--surface-soft);
+    border-radius:10px;padding:2px 9px;
+  }
+  .pic-check{ flex:none;display:flex;align-items:center;padding-top:1px; }
+  .pic-check input{ width:18px;height:18px;margin:0;accent-color:#B3401F;cursor:pointer; }
+  .pic-check input[type="radio"]{ accent-color:var(--primary); }
+  .pic-form{ display:flex;flex-direction:column;gap:10px; }
+  .pic-form input[type="text"],.pic-form input[type="url"],.pic-form select{
+    width:100%;font-family:'Work Sans',sans-serif;font-size:14px;
+    padding:11px 13px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink);outline:none;
+    transition:border-color .15s ease;
+  }
+  .pic-form input:focus,.pic-form select:focus{ border-color:var(--accent); }
+  .pic-actions{ display:flex;flex-wrap:wrap;gap:10px;margin-top:18px; }
+  .pic-actions .pic-btn{ flex:1 1 120px; }
+  .pic-btn{
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:.08em;
+    text-transform:uppercase;cursor:pointer;
+    padding:11px 14px;border-radius:8px;
+    color:var(--primary);background:var(--surface);border:1px solid var(--primary);
+    transition:background .15s ease,color .15s ease,border-color .15s ease;
+  }
+  .pic-btn:hover{ background:var(--primary);color:#fff; }
+  .pic-btn.primary{ background:var(--primary);color:#fff; }
+  .pic-btn.primary:hover{ background:var(--primary-dark);border-color:var(--primary-dark); }
+  .pic-btn.danger{ color:#B3401F;border-color:#B3401F; }
+  .pic-btn.danger:hover{ background:#B3401F;color:#fff; }
+  .pic-btn.danger.solid{ background:#B3401F;color:#fff; }
+  .pic-btn:disabled{ opacity:.45;cursor:not-allowed; }
+  .pic-btn:disabled:hover{ background:var(--surface);color:#B3401F; }
+  .pic-btn.danger.solid:disabled:hover{ background:#B3401F;color:#fff; }
+  .pic-hint{ font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin:14px 0 0; }
+  .pic-status{ display:none;font-size:12.5px;line-height:1.5;border-radius:8px;padding:9px 12px; }
+  .pic-status.show{ display:block; }
+  .pic-status.ok{ color:#17623A;background:#E7F6EE;border:1px solid #BFE3CF; }
+  .pic-status.err{ color:#B3401F;background:#FCEEE9;border:1px solid #F0C9BC; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;}
+  }
+
+  /* ===== login gate ===== */
+  #login-gate{
+    position:fixed;inset:0;z-index:999;
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;
+    background:
+      radial-gradient(1100px 560px at 12% -8%, rgba(14,168,224,0.10), transparent 58%),
+      radial-gradient(900px 520px at 100% 0%, rgba(10,61,98,0.14), transparent 55%),
+      var(--bg);
+  }
+  #login-gate.hidden{display:none;}
+
+  /* State "checking": dipakai saat browser punya data login tersimpan dan
+     sistem sedang memverifikasi (cek revoke di Sheet Logs). Kartu sign in
+     DISEMBUNYIKAN, diganti spinner kecil -- supaya user tidak mengira harus
+     sign in ulang. */
+  #login-gate .gate-loading{
+    display:none;flex-direction:column;align-items:center;gap:14px;
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);
+  }
+  #login-gate.checking .login-card{display:none;}
+  #login-gate.checking .gate-loading{display:flex;}
+  .gate-spinner{
+    width:30px;height:30px;border-radius:50%;
+    border:3px solid var(--line);border-top-color:var(--primary);
+    animation:gate-spin .8s linear infinite;
+  }
+  @keyframes gate-spin{ to{ transform:rotate(360deg); } }
+  .login-card{
+    width:100%;max-width:400px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:0 10px 30px rgba(11,42,74,0.10);
+    padding:32px 28px;
+    text-align:center;
+  }
+  .login-card .login-bar{
+    height:4px;width:56px;border-radius:4px;margin:0 auto 20px;
+    background:var(--gradient-brand);
+  }
+  .login-card h1{
+    font-family:'Fraunces',serif;font-weight:600;
+    font-size:22px;line-height:1.3;margin:0 0 8px;color:var(--ink);
+  }
+  .login-card p.login-desc{
+    font-family:'Work Sans',sans-serif;font-size:13.5px;color:var(--ink-soft);
+    line-height:1.6;margin:0 0 22px;
+  }
+  .login-card input[type="email"]{
+    width:100%;
+    font-family:'Work Sans',sans-serif;font-size:14px;
+    padding:12px 14px;border-radius:8px;
+    border:1px solid var(--line);
+    outline:none;color:var(--ink);
+    margin-bottom:12px;
+    transition:border-color .15s ease;
+  }
+  .login-card input[type="email"]:focus{ border-color:var(--accent); }
+  .login-card button{
+    width:100%;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:#fff;background:var(--primary);
+    border:1px solid var(--primary);
+    padding:12px 16px;border-radius:8px;
+    cursor:pointer;
+    transition:background .15s ease, transform .15s ease;
+  }
+  .login-card button:hover{ background:var(--primary-dark); }
+  .login-card button:active{ transform:scale(.99); }
+  .login-card .login-error{
+    display:none;
+    font-family:'Work Sans',sans-serif;font-size:12.5px;
+    color:#B3401F;background:#FCEEE9;
+    border:1px solid #F0C9BC;border-radius:8px;
+    padding:10px 12px;margin-bottom:12px;
+    text-align:left;line-height:1.5;
+  }
+  .login-card .login-error.show{ display:block; }
+  .login-card .login-note{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;
+    color:var(--ink-faint);letter-spacing:.04em;
+    margin-top:18px;
+  }
+
+  /* langkah tambahan (Step 2/3) setelah email tervalidasi: input Unit,
+     pilihan Dosen/Mahasiswa, dan input Kode Dosen. Disembunyikan lewat
+     class "hidden" dan ditampilkan bergantian oleh JS. */
+  .login-step.hidden{ display:none; }
+  /* Ikon "mata" di dalam kolom password: tekan & tahan = password terlihat. */
+  .pw-wrap{ position:relative;margin-bottom:12px; }
+  .pw-wrap.hidden{ display:none; }
+  .login-card .pw-wrap input[type="password"],
+  .login-card .pw-wrap input[type="text"]{ margin-bottom:0;padding-right:48px; }
+  .login-card .pw-toggle{
+    position:absolute;right:6px;top:50%;margin-top:-18px;
+    width:36px;height:36px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    background:transparent;border:none;border-radius:8px;
+    color:var(--ink-soft);cursor:pointer;
+    touch-action:none;user-select:none;-webkit-user-select:none;
+  }
+  .login-card .pw-toggle:hover{ background:transparent;color:var(--primary); }
+  .login-card .pw-toggle:active{ transform:none; }
+  .login-card .pw-toggle.on{ color:var(--primary); }
+  .pw-toggle svg{ width:20px;height:20px;pointer-events:none; }
+  .login-card input[type="text"],
+  .login-card input[type="password"]{
+    width:100%;
+    font-family:'Work Sans',sans-serif;font-size:14px;
+    padding:12px 14px;border-radius:8px;
+    border:1px solid var(--line);
+    outline:none;color:var(--ink);
+    margin-bottom:12px;
+    transition:border-color .15s ease;
+  }
+  .login-card input[type="text"]:focus,
+  .login-card input[type="password"]:focus{ border-color:var(--accent); }
+  .role-choice{
+    display:flex;gap:10px;margin-bottom:12px;
+  }
+  /* Ditulis sebagai ".login-card button.role-btn" (bukan cuma ".role-btn")
+     supaya lebih spesifik daripada ".login-card button" -- sebelumnya
+     warna tombol Lecturer/Student "kalah" oleh aturan tombol umum, sehingga
+     saat di-hover warna tulisan & warna latar jadi SAMA PERSIS (tulisan
+     hilang). Sekarang gaya outline putih ini dijamin terpakai. */
+  .login-card button.role-btn{
+    flex:1;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:12px 10px;border-radius:8px;
+    border:1px solid var(--line);
+    background:var(--surface);color:var(--ink);
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .login-card button.role-btn:hover{ background:var(--surface-soft); border-color:var(--accent); color:var(--primary-dark); transform:translateY(-1px); }
+  .login-card button.role-btn:active{ transform:scale(.99); }
+  /* Sama seperti di atas: ".login-card button.login-back" dibuat lebih
+     spesifik daripada ".login-card button" supaya gaya outline-nya benar2
+     terpakai, dan warna hover tidak lagi bentrok dengan warna latar. */
+  .login-card button.login-back{
+    background:var(--surface);color:var(--ink);
+    border:1px solid var(--line);
+  }
+  .login-card button.login-back:hover{ background:var(--surface-soft); border-color:var(--accent); color:var(--primary-dark); }
+
+  /* Baris tombol berdampingan (dipakai di Step Unit: Kembali + Lanjutkan
+     sejajar, masing-masing setengah lebar). */
+  .login-actions-row{
+    display:flex;
+    gap:10px;
+  }
+  .login-actions-row button{
+    flex:1;
+    margin-bottom:0;
+  }
+
+  /* Email yang sudah diisi tetap terlihat (terkunci) di langkah berikutnya */
+  .login-card input.login-email-echo,
+  .login-card input.login-role-echo{
+    width:100%;font-family:'Work Sans',sans-serif;font-size:14px;
+    padding:12px 14px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface-soft);color:var(--ink-soft);
+    margin-bottom:12px;outline:none;cursor:default;
+  }
+  .login-card .login-hint{
+    font-family:'Work Sans',sans-serif;font-size:12.5px;color:var(--ink-soft);
+    line-height:1.5;margin:0 0 12px;text-align:left;
+  }
+  /* Tiga tombol sejajar (Back / Continue as Guest / Sign In) */
+  .login-actions-row.three{ gap:8px; }
+  .login-actions-row.three button{
+    padding:12px 6px;font-size:11px;letter-spacing:.04em;line-height:1.25;
+  }
+  .login-actions-row.three button#password-guest{ flex:1.5; }
+
+  /* ===== Tampilan HP / layar sempit ===== */
+  @media (max-width:640px){
+    .wrap{ padding:24px 16px 80px; }
+    /* masthead: dua teks ditumpuk & rata tengah, rapi dan konsisten */
+    .acct-bar{ justify-content:center; margin:-8px 0 14px; text-align:center; }
+    .masthead{
+      flex-direction:column; align-items:center; justify-content:center;
+      text-align:center; gap:6px; padding-bottom:16px;
     }
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ found: found }))
-      .setMimeType(ContentService.MimeType.JSON);
+    .masthead .brand, .masthead .sub{
+      font-size:10px; letter-spacing:.1em; line-height:1.5;
+    }
+    /* tab tidak lengket di atas (hemat ruang layar) */
+    .tabs-wrap{ position:static; }
+    .tabs-scroll{ padding:16px 0; gap:6px; }
+    .tabs-scroll:has(+ .subtabs-scroll.open){ padding-bottom:10px; }
+    .tab-btn{ font-size:10.5px; padding:8px 12px; }
+    /* sub-tab boleh turun ke baris berikutnya (tidak perlu digeser) */
+    .subtabs-scroll{ flex-wrap:wrap; overflow-x:visible; padding-bottom:16px; }
+    .subtab-btn{ white-space:normal; text-align:center; max-width:100%; }
+    .hero{ padding:16px 0; }
+    .section{ padding-top:16px; }
+    .section-actions{ gap:10px; }
   }
+</style>
 
-  if (action === "checkRevoked") {
-    var email = String(e.parameter.email || "").trim().toLowerCase();
-    var device = String(e.parameter.device || "").trim().toLowerCase();
-    var revoked = email ? isLoginRevoked(email, device) : false;
+<!--[if gte mso 9]><xml>
+<mso:CustomDocumentProperties>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353404</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">8fc47207-016c-4cc4-b375-a9af2c4b594e</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353404, 3ZXFJ3NKVQQC-643343547-353404</mso:_dlc_DocIdUrl>
+</mso:CustomDocumentProperties>
+</xml><![endif]-->
+</head>
+<body>
 
-    return ContentService
-      .createTextOutput(JSON.stringify({ revoked: revoked }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+<div id="login-gate">
+  <div class="gate-loading" role="status" aria-live="polite">
+    <div class="gate-spinner"></div>
+    <div>Verifying access…</div>
+  </div>
+  <div class="login-card">
+    <div class="login-bar"></div>
+    <h1 id="login-title">Sign In Required</h1>
+    <p class="login-desc" id="login-desc">Restricted to BINUS employees. Log in with your email to proceed.</p>
+    <div class="login-error" id="login-error"></div>
 
-  // --- TAMBAHAN: data untuk website (spreadsheet dibuat PRIVAT; website tidak
-  // lagi membaca Google Sheet langsung, melainkan lewat sini) ---
-  if (action === "data") {
-    return handleSiteData(e.parameter);
-  }
+    <!-- STEP 1: email (semua domain masuk lewat sini dulu) -->
+    <form id="login-form" class="login-step" autocomplete="off">
+      <input type="email" id="login-email" placeholder="" required>
+      <button type="submit">Continue</button>
+    </form>
 
-  // --- TAMBAHAN: login PIC (email PIC ditanya Password, bukan Unit) ---
-  if (action === "picLogin" || action === "verifyPicPassword" || action === "warm") {
-    return handlePicLogin(e.parameter);
-  }
+    <!-- STEP 2a: khusus domain @binus.edu -> isi Unit -->
+    <form id="unit-form" class="login-step hidden" autocomplete="off">
+      <input type="email" class="login-email-echo" readonly tabindex="-1" aria-label="Email">
+      <input type="text" id="login-unit" placeholder="Department/Unit" required>
+      <div class="login-actions-row">
+        <button type="button" class="login-back" id="unit-back">&larr; Back</button>
+        <button type="submit">Continue</button>
+      </div>
+    </form>
 
-  return ContentService
-    .createTextOutput(JSON.stringify({ status: "ok" }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+    <!-- STEP 2a-PIC: khusus email PIC (@binus.edu) yang sheet-nya memakai password
+         -> isi Password (menggantikan Department/Unit) -->
+    <form id="password-form" class="login-step hidden" autocomplete="off">
+      <input type="email" class="login-email-echo" readonly tabindex="-1" aria-label="Email">
+      <p class="login-hint" id="password-hint">Your email is registered as a PIC / Leader. Enter your password to sign in, or continue as a guest.</p>
+      <div class="pw-wrap" id="pw-wrap">
+        <input type="password" id="login-password" placeholder="Password" required autocomplete="off">
+        <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Hold to show password" title="Hold to show password">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="login-actions-row three">
+        <button type="button" class="login-back" id="password-back">&larr; Back</button>
+        <button type="button" class="login-back" id="password-guest">Continue as Guest</button>
+        <button type="submit">Sign In</button>
+      </div>
+    </form>
 
-function doPost(e) {
-  // --- TAMBAHAN: perintah tambah/hapus link PIC Menu dari website (khusus
-  // leader). Diarahkan SEBELUM kunci (lock) di bawah diambil, karena
-  // handleLinkAction memakai kunci sendiri.
-  var parsedBody = null;
-  try { parsedBody = JSON.parse(e.postData.contents); } catch (errParse) {}
-  if (parsedBody && (parsedBody.action === "addLink" || parsedBody.action === "editLink" || parsedBody.action === "deleteLink")) {
-    return handleLinkAction(parsedBody);
-  }
+    <!-- STEP 2b: khusus domain @binus.ac.id -> pilih Dosen / Mahasiswa -->
+    <div id="role-step" class="login-step hidden">
+      <input type="email" class="login-email-echo" readonly tabindex="-1" aria-label="Email">
+      <div class="role-choice">
+        <button type="button" class="role-btn" id="role-dosen-btn">Lecturer</button>
+        <button type="button" class="role-btn" id="role-mahasiswa-btn">Student</button>
+      </div>
+      <button type="button" class="login-back" id="role-back">&larr; Back</button>
+    </div>
 
-  var lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+    <!-- STEP 3: khusus @binus.ac.id yang memilih Dosen -> isi Kode Dosen -->
+    <form id="kodedosen-form" class="login-step hidden" autocomplete="off">
+      <input type="email" class="login-email-echo" readonly tabindex="-1" aria-label="Email">
+      <input type="text" class="login-role-echo" value="Lecturer" readonly tabindex="-1" aria-label="Role">
+      <input type="text" id="login-kodedosen" placeholder="Lecturer ID" required>
+      <div class="login-actions-row">
+        <button type="button" class="login-back" id="kodedosen-back">&larr; Back</button>
+        <button type="submit">Continue</button>
+      </div>
+    </form>
 
+    <div class="login-note">BINUS Employees Only.</div>
+  </div>
+</div>
+
+<script>
+/* Jalankan SECEPAT MUNGKIN (sebelum halaman pertama kali digambar): kalau
+   browser ini punya data login yang lengkap, langsung tampilkan state
+   "checking" (spinner) sehingga form Sign In tidak sempat terlihat. */
+(function(){
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName("Logs");
+    var saved = JSON.parse(localStorage.getItem("srsc_login_email") || "null");
+    var eligible = saved && saved.email && (
+      (saved.pic || (saved.domain === "binus.edu" && saved.unit)) ||
+      (saved.domain === "binus.ac.id" && saved.role === "Dosen" && saved.kodeDosen)
+    );
+    if (eligible) document.getElementById("login-gate").classList.add("checking");
+  } catch (e) { /* data rusak / localStorage tidak tersedia -> tampilkan form biasa */ }
+})();
+</script>
 
-    if (!sheet) {
-      sheet = ss.insertSheet("Logs");
-      sheet.appendRow(["Timestamp", "Email", "Status", "Unit/Kode Dosen", "Keterangan", "Hapus Login", "Device ID"]);
-    } else {
-      if (sheet.getRange(1, 4).getValue() === "") sheet.getRange(1, 4).setValue("Unit/Kode Dosen");
-      if (sheet.getRange(1, 5).getValue() === "") sheet.getRange(1, 5).setValue("Keterangan");
-      if (sheet.getRange(1, 6).getValue() === "") sheet.getRange(1, 6).setValue("Hapus Login");
-      if (sheet.getRange(1, 7).getValue() === "") sheet.getRange(1, 7).setValue("Device ID");
-    }
+<div class="top-accent"></div>
+<div class="wrap">
+  <div class="acct-bar" id="acct-bar"></div>
+  <div class="masthead">
+    <div class="brand">Course Scheduling &amp; Student Registration Team</div>
+    <div class="sub" id="masthead-sub">Student Registration &amp; Scheduling Center</div>
+  </div>
 
-    var data = JSON.parse(e.postData.contents);
-    var email = data.email || "(tidak ada email)";
-    var status = data.status || "Berhasil";        // singkat: Berhasil/Auto-login/Ditolak
-    var extra = String(data.extra || "").trim();     // Unit atau Kode Dosen
-    var keterangan = String(data.keterangan || "").trim(); // penjelasan tambahan
-    var device = String(data.device || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "").substring(0, 32);
-    var timestamp = new Date();
+  <div class="tabs-wrap" id="tabs-wrap"></div>
 
-    // Jaring pengaman di server -- supaya kolom tidak pernah kosong begitu
-    // saja, berlaku juga untuk website versi lama yang belum kirim data ini.
-    if (extra === "") extra = "-";
-    if (keterangan === "" && status.trim().toLowerCase() === "berhasil") {
-      keterangan = "Tersimpan";
-    }
+  <div id="app">
+    <div class="notice loading">Retrieving the latest information, please allow a moment…</div>
+  </div>
 
-    sheet.appendRow([timestamp, email, status, extra, keterangan, "", device]); // Kolom F = kontrol Hapus Login, Kolom G = Device ID
+  <footer class="page-footer">This directory automatically syncs in real time with its data source.</footer>
+</div>
 
-    // Pasang kontrol "Hapus Login" di Kolom F baris baru ini -- HANYA kalau
-    // statusnya bukan "Ditolak".
-    var newRow = sheet.getLastRow();
-    applyHapusLoginControl(sheet, newRow, status);
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <button class="modal-close" id="modal-close">Tutup ✕</button>
+    <h3 id="modal-title"></h3>
+    <div class="modal-sub" id="modal-sub"></div>
+    <div class="card-grid" id="modal-grid"></div>
+  </div>
+</div>
 
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "ok" }))
-      .setMimeType(ContentService.MimeType.JSON);
+<div class="modal-overlay" id="member-modal-overlay">
+  <div class="modal member-modal">
+    <button class="modal-close" id="member-modal-close">Tutup ✕</button>
+    <div class="member-card" id="member-card-content"></div>
+  </div>
+</div>
 
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: "error", message: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+<div class="modal-overlay" id="pic-modal-overlay">
+  <div class="modal pic-modal">
+    <button class="modal-close" id="pic-modal-close">Tutup ✕</button>
+    <h3>PIC Menu</h3>
+    <div class="modal-sub" id="pic-modal-sub"></div>
+    <div id="pic-modal-content"></div>
+  </div>
+</div>
 
-  } finally {
-    lock.releaseLock();
-  }
-}
+<script>
+/* =========================================================================
+   PENGATURAN
+   ========================================================================= */
+// Spreadsheet sumber data bersifat PRIVAT. Website tidak membacanya langsung
+// (ID spreadsheet sengaja TIDAK ada di kode ini); semua data diambil lewat
+// Web App Apps Script di bawah (action=data).
+const MASTER_SHEET_NAME = "Master";
 
-// Memasang (atau melepas) kontrol "Hapus Login" di Kolom F untuk satu baris.
-// PENTING: selalu setValue("") setelah mengatur validasi -- supaya sel yang
-// tadinya berisi checkbox lama (nilai TRUE/FALSE) tidak nyangkut jadi
-// tulisan "FALSE" begitu diganti ke tipe dropdown.
-function applyHapusLoginControl(sheet, row, status) {
-  var cell = sheet.getRange(row, 6); // Kolom F
-  var isDitolak = String(status || "").toLowerCase().indexOf("ditolak") === 0;
+// URL Web App Google Apps Script yang bertugas MENULIS baris baru ke Sheet
+// "Logs" setiap kali ada yang berhasil sign in. Wajib diisi (lihat panduan
+// pembuatan Apps Script yang saya berikan terpisah) — kalau dibiarkan kosong,
+// pencatatan log akan dilewati begitu saja tanpa error.
+const LOG_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwuoasOaaZoVpE34eYW5zpzdzcQ3KZeZtHeIj_Qft0DYldVo7neyFFreatPYXLM_zkV9A/exec";
 
-  if (isDitolak) {
-    cell.clearDataValidations();
-    cell.setValue("");
-    return;
-  }
-
-  var rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList([HAPUS_LOGIN_LABEL], true)
-    .setAllowInvalid(false)
-    .build();
-  cell.setDataValidation(rule);
-  cell.setValue(""); // pastikan selalu mulai kosong, bukan warisan nilai lama
-}
-
-// Trigger otomatis bawaan Google Sheets (tidak perlu deploy ulang untuk
-// bagian ini -- selalu pakai kode TERBARU yang tersimpan di editor).
-function onEdit(e) {
-  try {
-    var sheet = e.range.getSheet();
-
-    // SINKRONISASI CEPAT: setiap kali sheet selain Logs/Revoked diedit, cache
-    // data website langsung dibuang, jadi pengunjung berikutnya mendapat data
-    // baru (tidak perlu menunggu cache kedaluwarsa).
-    var editedName = sheet.getName();
-    if (editedName !== "Logs" && editedName !== "Revoked") {
-      siteCacheInvalidateAll_();
-      return;
-    }
-
-    if (sheet.getName() !== "Logs") return;
-    if (e.range.getColumn() !== 6) return;                  // Kolom F sekarang
-    if (e.range.getRow() === 1) return;
-    if (e.value !== HAPUS_LOGIN_LABEL) return;
-
-    var row = e.range.getRow();
-    var status = sheet.getRange(row, 3).getValue();
-
-    if (String(status || "").toLowerCase().indexOf("ditolak") === 0) {
-      e.range.clearDataValidations();
-      e.range.setValue("");
-      return;
-    }
-
-    var email = String(sheet.getRange(row, 2).getValue() || "").trim().toLowerCase();
-    var device = String(sheet.getRange(row, 7).getValue() || "").trim().toLowerCase();
-    if (email) {
-      markLoginAsRevoked(email, device);
-    }
-
-    // Hapus SEMUA baris sesi akun yang sama di perangkat yang sama (bukan cuma baris
-    // yang dipilih), supaya log tidak menumpuk. Baris "Ditolak" tidak ikut dihapus
-    // (itu catatan percobaan gagal). Perangkat lain milik akun yang sama tidak tersentuh.
-    // Baris lama yang belum punya Device ID dianggap satu "perangkat" (device kosong).
-    var lastRow = sheet.getLastRow();
-    var rowsToDelete = [row];
-    if (email && lastRow > 1) {
-      var vals = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
-      for (var i = 0; i < vals.length; i++) {
-        var r = i + 2;
-        if (r === row) continue;
-        var rEmail = String(vals[i][1] || "").trim().toLowerCase();
-        var rStatus = String(vals[i][2] || "").toLowerCase();
-        var rDevice = String(vals[i][6] || "").trim().toLowerCase();
-        if (rEmail === email && rDevice === device && rStatus.indexOf("ditolak") !== 0) {
-          rowsToDelete.push(r);
-        }
-      }
-    }
-    rowsToDelete.sort(function (a, b) { return b - a; }); // hapus dari bawah supaya nomor baris tidak bergeser
-    for (var d = 0; d < rowsToDelete.length; d++) {
-      sheet.deleteRow(rowsToDelete[d]);
-    }
-  } catch (err) {
-    // diamkan saja kalau gagal, trigger otomatis tidak bisa lapor ke user
-  }
-}
-
-function getOrCreateRevokedSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Revoked");
-  if (!sheet) {
-    sheet = ss.insertSheet("Revoked");
-    sheet.appendRow(["Email", "Revoked At", "Device ID"]);
-    sheet.hideSheet();
-  } else if (sheet.getRange(1, 3).getValue() === "") {
-    sheet.getRange(1, 3).setValue("Device ID");
-  }
-  return sheet;
-}
-
-// Menandai login (email + perangkat) sebagai "dipaksa logout". Device kosong =
-// baris lama tanpa Device ID -> berlaku untuk perangkat mana pun milik email itu.
-function markLoginAsRevoked(email, device) {
-  device = String(device || "").trim().toLowerCase();
-  var sheet = getOrCreateRevokedSheet();
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var vals = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
-    for (var i = 0; i < vals.length; i++) {
-      if (String(vals[i][0]).trim().toLowerCase() === email &&
-          String(vals[i][2] || "").trim().toLowerCase() === device) {
-        sheet.getRange(i + 2, 2).setValue(new Date());
-        return;
-      }
-    }
-  }
-  sheet.appendRow([email, new Date(), device]);
-}
-
-// Dicek website saat auto-login. Cocok kalau ada entri untuk email ini dengan
-// device yang sama, ATAU entri tanpa device (baris lama). Entri dipakai sekali
-// lalu dihapus -- sehingga perangkat lain yang tidak ikut dicabut tidak terpengaruh.
-function isLoginRevoked(email, device) {
-  device = String(device || "").trim().toLowerCase();
-  var sheet = getOrCreateRevokedSheet();
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var vals = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
-    for (var i = 0; i < vals.length; i++) {
-      if (String(vals[i][0]).trim().toLowerCase() !== email) continue;
-      var d = String(vals[i][2] || "").trim().toLowerCase();
-      if (d === "" || d === device) {
-        sheet.deleteRow(i + 2);
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// FUNGSI SEKALI-JALAN (manual) -- jalankan lewat menu "Run" untuk merapikan
-// Kolom F di baris-baris yang sudah ada (baris baru otomatis rapi lewat
-// doPost). Aman dijalankan berkali-kali kalau perlu.
-function pasangTombolHapusLoginUntukBarisLama() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Logs");
-  if (!sheet) return;
-
-  if (sheet.getRange(1, 6).getValue() === "") {
-    sheet.getRange(1, 6).setValue("Hapus Login");
-  }
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var statuses = sheet.getRange(2, 3, lastRow - 1, 1).getValues();
-    for (var i = 0; i < statuses.length; i++) {
-      applyHapusLoginControl(sheet, i + 2, statuses[i][0]);
-    }
-  }
-}
-
-// FUNGSI SEKALI-JALAN (manual, PENTING dijalankan SEKALI SAJA kalau sheet
-// "Logs" Anda masih pakai struktur LAMA: Kolom E = "Hapus Login" tanpa
-// Kolom "Keterangan"). Jalankan lewat menu "Run" di editor Apps Script ini.
-//
-// Yang dilakukan:
-//  1. Menyisipkan Kolom E baru ("Keterangan") -- ini otomatis MENGGESER
-//     Kolom E lama ("Hapus Login" beserta checkbox/dropdown-nya) ke Kolom F.
-//  2. Memecah teks Status lama (mis. "Auto-login (sudah pernah sign in)",
-//     "Ditolak - domain tidak diizinkan") menjadi Status singkat (Kolom C)
-//     + Keterangan (Kolom E).
-//  3. Merapikan ulang kontrol "Hapus Login" di Kolom F.
-function migrasiKolomKeteranganDanHapusLogin() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Logs");
-  if (!sheet) return;
-
-  var headerE = sheet.getRange(1, 5).getValue();
-
-  if (headerE === "Hapus Login") {
-    // Struktur lama terdeteksi -- sisipkan kolom baru di posisi E, otomatis
-    // menggeser kolom "Hapus Login" lama (dan checkbox/dropdown di
-    // dalamnya) ke posisi F.
-    sheet.insertColumnAfter(4);
-    sheet.getRange(1, 5).setValue("Keterangan");
-    sheet.getRange(1, 6).setValue("Hapus Login");
-  } else if (headerE !== "Keterangan") {
-    sheet.getRange(1, 5).setValue("Keterangan");
-  }
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var statusRange = sheet.getRange(2, 3, lastRow - 1, 1);
-    var statusValues = statusRange.getValues();
-    var keteranganRange = sheet.getRange(2, 5, lastRow - 1, 1);
-    var keteranganValues = keteranganRange.getValues();
-
-    for (var i = 0; i < statusValues.length; i++) {
-      var teksLama = String(statusValues[i][0] || "");
-      var pecah = pecahStatusLama(teksLama);
-      statusValues[i][0] = pecah.status;
-      if (!keteranganValues[i][0]) { // jangan timpa kalau Kolom E sudah terisi
-        keteranganValues[i][0] = pecah.keterangan;
-      }
-    }
-
-    statusRange.setValues(statusValues);
-    keteranganRange.setValues(keteranganValues);
-  }
-
-  pasangTombolHapusLoginUntukBarisLama();
-}
-
-// Helper: memecah 1 baris teks Status lama menjadi { status, keterangan }.
-// Contoh:
-//   "Auto-login (sudah pernah sign in)" -> { status:"Auto-login", keterangan:"sudah pernah sign in" }
-//   "Ditolak - domain tidak diizinkan"  -> { status:"Ditolak", keterangan:"domain tidak diizinkan" }
-//   "Berhasil"                          -> { status:"Berhasil", keterangan:"" }
-function pecahStatusLama(teks) {
-  teks = teks.trim();
-
-  if (teks.indexOf("Auto-login") === 0) {
-    var sisaAuto = teks.substring("Auto-login".length).trim();
-    sisaAuto = sisaAuto.replace(/^\(/, "").replace(/\)$/, "").trim();
-    return { status: "Auto-login", keterangan: sisaAuto };
-  }
-
-  if (teks.indexOf("Ditolak") === 0) {
-    var sisaTolak = teks.substring("Ditolak".length).replace(/^[\s-]+/, "").trim();
-    return { status: "Ditolak", keterangan: sisaTolak };
-  }
-
-  return { status: teks || "Berhasil", keterangan: "" };
-}
-
-// FUNGSI SEKALI-JALAN (manual) -- jalankan lewat menu "Run" untuk merapikan
-// baris-baris LAMA yang Kolom D (Unit/Kode Dosen) atau Kolom E (Keterangan)
-// nya masih kosong:
-//  - Kolom D kosong (apa pun statusnya, biasanya baris "Ditolak") -> diisi "-"
-//  - Kolom E kosong DAN Status-nya "Berhasil" -> diisi "Tersimpan"
-// Aman dijalankan berkali-kali kalau perlu.
-function rapikanKolomKosongLama() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Logs");
-  if (!sheet) return;
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return;
-
-  var statusRange = sheet.getRange(2, 3, lastRow - 1, 1);
-  var statuses = statusRange.getValues();
-  var extraRange = sheet.getRange(2, 4, lastRow - 1, 1);
-  var extras = extraRange.getValues();
-  var keteranganRange = sheet.getRange(2, 5, lastRow - 1, 1);
-  var keterangans = keteranganRange.getValues();
-
-  for (var i = 0; i < statuses.length; i++) {
-    var status = String(statuses[i][0] || "").trim();
-
-    if (String(extras[i][0] || "").trim() === "") {
-      extras[i][0] = "-";
-    }
-    if (status.toLowerCase() === "berhasil" && String(keterangans[i][0] || "").trim() === "") {
-      keterangans[i][0] = "Tersimpan";
-    }
-  }
-
-  extraRange.setValues(extras);
-  keteranganRange.setValues(keterangans);
-}
-
+// Halaman mengecek ulang Google Sheet sumber secara berkala. Kalau tidak ada
+// perubahan data, tampilan dibiarkan persis seperti semula (tidak ada reload,
+// tidak ada kedipan). Kalau ada perubahan, tampilan diperbarui secara diam-diam
+// di tempat, tanpa memuat ulang halaman.
+const REFRESH_INTERVAL_MS = 60 * 1000; // 1 menit (hanya saat halaman sedang dibuka/terlihat)
 
 /* =========================================================================
- * ===== TAMBAHAN BARU: PIC Menu (link) & Login PIC ========================
- * Memakai spreadsheet yang sama dengan skrip ini (getActiveSpreadsheet).
- * ========================================================================= */
+   ATURAN STRUKTUR SHEET (baca ini kalau halaman menampilkan pesan error)
 
-// Mencari sheet berdasarkan nama. Pertama cocok persis; kalau tidak ketemu, cocokkan
-// longgar (abaikan huruf besar/kecil, spasi, dan tanda hubung) -- supaya salah ketik
-// kecil seperti "S1 - BINUS ..." vs "S1-BINUS ..." di Master tidak membuat sheet hilang.
-function sheetByNameLoose_(ss, name) {
-  var exact = ss.getSheetByName(name);
-  if (exact) return exact;
-  var squash = function (v) { return String(v == null ? '' : v).toLowerCase().replace(/[\s\-\u2010-\u2015_]+/g, ''); };
-  var want = squash(name);
-  if (!want) return null;
-  var all = ss.getSheets();
-  for (var i = 0; i < all.length; i++) {
-    if (squash(all[i].getName()) === want) return all[i];
+   Sheet "Master" (disusun PER KOLOM, bukan per baris):
+     Kolom A = label baris ("Sheet", "Judul", opsional "Sub Judul"/"Sub...").
+     Kolom B, C, D, ... = satu kolom = satu bagian/section di halaman.
+       - Baris berlabel "Sheet"  -> nama tab sheet data, harus SAMA PERSIS
+         dengan nama tab aslinya (contoh: "S1 - Greater Jakarta & Bekasi").
+       - Baris berlabel "Judul"  -> teks Header (judul besar) untuk section itu.
+       - Baris berlabel mengandung "Sub" (opsional) -> teks subHeader.
+     Kolom dengan nilai "Sheet" = "All" diperlakukan khusus: ditampilkan
+     sebagai catatan/pengumuman di paling atas halaman (bukan section tim).
+
+   Setiap sheet data (misal "S1 - Greater Jakarta & Bekasi"):
+     Baris pertama = judul kolom, boleh urutan bebas, dikenali dari NAMA
+     kolomnya (tidak harus persis, dicocokkan otomatis):
+       - berisi kata "jabatan" atau "posisi"      -> Jabatan / Posisi
+       - berisi kata "pic"                        -> PIC
+       - berisi kata "email"                      -> Email
+       - persis "task" (bukan "task description") -> Task
+       - berisi "task" dan "desc"                 -> Task Description
+       - berisi "display"/"picture"/"foto"/"photo"-> Display Picture (URL gambar)
+   ========================================================================= */
+
+/* ---------- CSV parser sederhana (menangani tanda kutip, koma, baris baru) ---------- */
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i], next = text[i+1];
+    if (inQuotes){
+      if (c === '"' && next === '"'){ field += '"'; i++; }
+      else if (c === '"'){ inQuotes = false; }
+      else if (c === '\r'){ /* skip, biarkan \n berikutnya yang jadi baris baru */ }
+      else { field += c; }
+    } else {
+      if (c === '"'){ inQuotes = true; }
+      else if (c === ','){ row.push(field); field = ""; }
+      else if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c === '\r'){ /* skip */ }
+      else { field += c; }
+    }
   }
-  return null;
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(c => c && c.trim() !== ""));
 }
 
-var LINK_MASTER_SHEET   = 'Master';
-
-// ===== DEVELOPER (hak tertinggi: semua menu, edit, hapus, Sign out) =========
-// Email di daftar ini (domain apa pun, termasuk @binus.ac.id) otomatis dikenali
-// sebagai Developer saat sign in, TANPA harus terdata di sheet tim.
-// Bisa juga ditambah lewat sheet Master: baris berlabel "Developer" di kolom A,
-// email di kolom B (boleh banyak, pisah koma / spasi / ;).
-var DEVELOPER_EMAILS = [
-  'tri.mulyadi01@binus.edu',
-  'triputramulyadi@binus.ac.id'
-];
-// WAJIB DIISI sebelum dipakai: password sign in Developer (hanya ada di server,
-// tidak pernah dikirim ke browser). Kalau dibiarkan kosong, login Developer
-// DITOLAK -- supaya email Developer tidak bisa dipakai masuk tanpa password.
-var DEVELOPER_PASSWORD = 'GANTI_PASSWORD_DEVELOPER';
-var LINK_LEADER_TITLES  = ['section head', 'manager', 'senior manager'];
-var LINK_TITLE_LABELS = { 'section head': 'Section Head', 'manager': 'Manager', 'senior manager': 'Senior Manager' };
-var LINK_MAX_NAME = 120;
-var LINK_MAX_DESC = 300;
-var LINK_MAX_URL  = 1500;
-
-function linkJson_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+// ---- Cache data di browser (stale-while-revalidate) ----
+// Data terakhir disimpan di localStorage. Saat halaman dibuka lagi, tampilan
+// langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
+// hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
+// dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
+const DATA_CACHE_KEY = "srsc_data_cache_v2";
+let cacheSheets = null;
+let cacheExtra = null;
+function loadDataCache(){
+  try {
+    const c = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || "null");
+    if (!c || !c.sheets || typeof c.sheets !== "object" || !c.extra) return null;
+    if (c.email !== getCurrentUserEmail()) return null;
+    return c;
+  } catch (e){ return null; }
+}
+function saveDataCache(store, extra){
+  try {
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({
+      t: Date.now(), email: getCurrentUserEmail(), sheets: store, extra: extra
+    }));
+  } catch (e){ /* penuh / tidak tersedia -> abaikan */ }
 }
 
-function linkNorm_(v) {
-  return String(v == null ? '' : v)
-    .replace(/\u00A0/g, ' ')
+// ---- Ambil data dari Apps Script (spreadsheet privat) ----
+// Satu permintaan membawa semuanya: Master, semua sheet tim yang aktif, dan
+// link PIC Menu yang BOLEH dilihat email yang sedang login (disaring di server).
+let serverDataPromise = null;
+let serverDataEmail = null;
+
+async function fetchServerData(email){
+  if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
+    throw new Error("Web App URL belum diatur.");
+  }
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&_=" + Date.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 45000);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+    const d = await res.json();
+    if (!d || !d.ok || !d.master) throw new Error((d && d.error) || "Respons data tidak valid.");
+    return d;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function getServerData(){
+  const email = getCurrentUserEmail();   // "" kalau belum login
+  if (!serverDataPromise || serverDataEmail !== email){
+    serverDataEmail = email;
+    serverDataPromise = fetchServerData(email).catch(err => { serverDataPromise = null; throw err; });
+  }
+  return serverDataPromise;
+}
+
+async function fetchSheet(sheetName){
+  const d = await getServerData();
+  const rows = sheetName === MASTER_SHEET_NAME ? d.master : (d.sheets && d.sheets[sheetName]);
+  if (!rows) throw new Error(`Sheet "${sheetName}" tidak tersedia.`);
+  return rows;
+}
+
+function normalizeHeader(h){
+  // Hilangkan spasi tak-standar (non-breaking space, dsb), rapikan spasi ganda,
+  // dan buang tanda baca umum di ujung (titik dua, tanda bintang) supaya
+  // variasi kecil penulisan header (mis. "Task:", "Task ", "TASK") tetap cocok.
+  return (h || "")
+    .replace(/\u00A0/g, " ")
     .toLowerCase()
-    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[:*]+$/g, "")
     .trim();
 }
 
-function linkHeader_(v) {
-  return linkNorm_(v).replace(/[:*]+$/g, '').trim();
-}
-
-function linkEmails_(raw) {
-  return String(raw == null ? '' : raw)
-    .toLowerCase()
-    .split(/[\s,;]+/)
-    .filter(function (x) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x); });
-}
-
-function linkFindCol_(header, test) {
-  for (var i = 0; i < header.length; i++) {
-    if (test(header[i])) return i;
+function findCol(headerRow, matchers){
+  const lower = headerRow.map(normalizeHeader);
+  for (let i = 0; i < lower.length; i++){
+    if (matchers(lower[i])) return i;
   }
   return -1;
 }
 
-// Daftar sheet tim dari baris "Sheet" di Master -> { namaTernormalisasi: namaAsli }
-function linkKnownSheets_(ss) {
-  var map = {};
-  var master = ss.getSheetByName(LINK_MASTER_SHEET);
-  if (!master) return map;
-  var values = master.getDataRange().getValues();
-  for (var r = 0; r < values.length; r++) {
-    if (linkNorm_(values[r][0]) === 'sheet') {
-      for (var c = 1; c < values[r].length; c++) {
-        var actual = String(values[r][c] == null ? '' : values[r][c]).trim();
-        var n = linkNorm_(actual);
-        if (n && n !== 'master' && n !== 'all') map[n] = actual;
-      }
-      break;
-    }
+// Urutan kolom baku sesuai sheet Master, dipakai sebagai cadangan kalau
+// nama header di suatu tab section tidak persis sama dengan yang diharapkan.
+const FALLBACK_ORDER = ["jabatan","pic","task","desc","dp","email","whatsapp"];
+
+function detectColumns(headerRow){
+  const cols = {
+    jabatan: findCol(headerRow, h => h.includes("jabatan") || h.includes("posisi")),
+    pic:     findCol(headerRow, h => h === "pic" || (h.includes("pic") && !h.includes("pictur"))),
+    email:   findCol(headerRow, h => h.includes("email") || h.includes("e-mail")),
+    whatsapp:findCol(headerRow, h => h.includes("whatsapp") || h === "wa" || h.includes("no wa") || h.includes("nomor wa") || h.includes("no. hp") || h.includes("no hp") || h.includes("telepon") || h.includes("phone")),
+    task:    findCol(headerRow, h => h === "task" || h === "nama task" || h.includes("tugas") && !h.includes("desk") && !h.includes("uraian")),
+    desc:    findCol(headerRow, h => (h.includes("task") || h.includes("tugas")) && (h.includes("desc") || h.includes("deskripsi") || h.includes("uraian")) || h === "deskripsi" || h === "description"),
+    dp:      findCol(headerRow, h => h.includes("pictur") || h.includes("display") || h.includes("foto") || h.includes("photo") || h.includes("gambar") || h.includes("avatar")),
+  };
+
+  // Cadangan: kalau ada kolom penting yang tidak ketemu lewat nama header,
+  // tapi jumlah kolom di baris ini sama seperti susunan baku Master,
+  // pakai posisi kolomnya saja daripada membiarkan datanya hilang total.
+  const missingKey = FALLBACK_ORDER.find(key => cols[key] === -1);
+  if (missingKey && headerRow.length === FALLBACK_ORDER.length){
+    FALLBACK_ORDER.forEach((key, i) => {
+      if (cols[key] === -1) cols[key] = i;
+    });
   }
-  return map;
+
+  return cols;
 }
 
-// Apakah email ini tercatat sebagai leader di salah satu sheet tim?
-function linkIsLeader_(ss, email, knownMap) {
-  for (var key in knownMap) {
-    var sh = sheetByNameLoose_(ss, knownMap[key]);
-    if (!sh) continue;
-    var values = sh.getDataRange().getValues();
-    if (values.length < 2) continue;
-    var header = values[0].map(linkHeader_);
-    var cJab = linkFindCol_(header, function (h) { return h.indexOf('jabatan') >= 0 || h.indexOf('posisi') >= 0; });
-    var cEml = linkFindCol_(header, function (h) { return h.indexOf('email') >= 0 || h.indexOf('e-mail') >= 0; });
-    if (cJab < 0 || cEml < 0) continue;
-    for (var r = 1; r < values.length; r++) {
-      if (LINK_LEADER_TITLES.indexOf(linkNorm_(values[r][cJab])) < 0) continue;
-      if (linkEmails_(values[r][cEml]).indexOf(email) >= 0) return true;
-    }
-  }
-  return false;
+function linkify(text){
+  return escapeHtml(text).replace(/(https?:\/\/[^\s<]+)/g, url =>
+    `<a href="${url}" target="_blank" rel="noopener" style="color:var(--primary)">${url}</a>`);
 }
 
-// Tulis sebagai teks biasa supaya isi yang diawali = + - @ tidak dibaca sebagai rumus.
-function linkSetText_(sh, row, col, value) {
-  var cell = sh.getRange(row, col + 1);
-  cell.setNumberFormat('@');
-  cell.setValue(value);
+function toDirectImageUrl(url){
+  if (!url) return url;
+  const u = url.trim();
+
+  // Link Google Drive ("Anyone with the link") -> diubah ke URL thumbnail
+  // langsung supaya bisa ditampilkan sebagai <img>, bukan halaman preview.
+  const driveMatch =
+    u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+    u.match(/drive\.google\.com\/(?:open|uc)\?[^#]*[?&]id=([a-zA-Z0-9_-]+)/) ||
+    u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (/drive\.google\.com/i.test(u) && driveMatch){
+    return `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w1000`;
+  }
+
+  // Link share SharePoint/OneDrive (guestaccess.aspx) tidak menampilkan gambar
+  // langsung karena mengarah ke halaman preview, bukan file gambarnya.
+  // Menambahkan &download=1 memaksa server mengirim file aslinya — tapi ini
+  // hanya berhasil kalau tenant SharePoint mengizinkan akses anonim/publik;
+  // kalau tetap meminta login, gambar tidak akan bisa dimuat sama sekali.
+  if (/sharepoint\.com/i.test(u) && /guestaccess\.aspx/i.test(u) && !/[?&]download=1/i.test(u)){
+    return u + (u.includes("?") ? "&" : "?") + "download=1";
+  }
+  return u;
 }
 
-// Membaca & memvalidasi isi form (nama, URL, keterangan, visibilitas).
-// allowKeep = true (edit): nilai "__keep__" berarti kolom visibilitas tidak diubah.
-function linkReadFields_(body, known, allowKeep) {
-  var name = String(body.name == null ? '' : body.name).trim();
-  var url  = String(body.url == null ? '' : body.url).trim();
-  var desc = String(body.desc == null ? '' : body.desc).trim();
-  var visRaw = String(body.visible == null ? '' : body.visible).trim();
-
-  if (!name || name.length > LINK_MAX_NAME) {
-    return { error: 'Menu name is required (max ' + LINK_MAX_NAME + ' characters).' };
-  }
-  if (!/^https?:\/\//i.test(url) || url.length > LINK_MAX_URL) {
-    return { error: 'A valid http(s) URL is required.' };
-  }
-  if (desc.length > LINK_MAX_DESC) {
-    return { error: 'Description is too long (max ' + LINK_MAX_DESC + ' characters).' };
-  }
-  var visValue = '';
-  var keepVis = false;
-  if (allowKeep && visRaw === '__keep__') {
-    keepVis = true;
-  } else if (visRaw) {
-    var vn = linkNorm_(visRaw);
-    if (vn === 'master') visValue = 'Master';
-    else if (known[vn]) visValue = known[vn];
-    else return { error: 'Unknown visibility value.' };
-  }
-  return { name: name, url: url, desc: desc, visValue: visValue, keepVis: keepVis };
+function formatWaLink(raw){
+  if (!raw) return "";
+  const trimmed = String(raw).trim();
+  if (!trimmed || trimmed === "-" || /^(-+|n\/?a|tbd|to be updated|belum ada|update)$/i.test(trimmed)) return "";
+  let digits = trimmed.replace(/[^\d]/g, "");
+  if (digits.length < 8) return ""; // terlalu pendek untuk nomor telepon asli
+  if (digits.startsWith("0")) digits = "62" + digits.slice(1);
+  else if (!digits.startsWith("62")) digits = "62" + digits;
+  return digits;
 }
 
-// Tambah / ubah / hapus link PIC Menu.
-// Yang boleh: LEADER (semua sheet) atau email yang tercantum di baris
-// "Editor Menu" (sheet Master) pada kolom sheet tsb (hanya untuk sheet itu).
-function handleLinkAction(body) {
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-  } catch (e) {
-    return linkJson_({ ok: false, error: 'Server is busy. Please try again.' });
-  }
-
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var actor = linkNorm_(body.actor);
-    var action = String(body.action || '');
-    var sheetNorm = linkNorm_(body.sheet);
-
-    var picIdx = picIndex_(ss);
-    var known = picIdx.names;
-    if (!sheetNorm || !known[sheetNorm]) {
-      return linkJson_({ ok: false, error: 'Unknown sheet.' });
-    }
-
-    var canManage = function (ix) {
-      return !!actor && (!!ix.leaders[actor] || (ix.editors && (ix.editors[actor] || []).indexOf(sheetNorm) >= 0));
-    };
-    // Indeks bisa sedikit usang: kalau belum diizinkan, cek sekali lagi dengan data segar.
-    if (!canManage(picIdx)) {
-      if (actor) picIdx = picIndex_(ss, true);
-      if (!canManage(picIdx)) {
-        return linkJson_({ ok: false, error: 'You do not have permission to manage menus for this sheet.' });
-      }
-    }
-
-    var sh = sheetByNameLoose_(ss, known[sheetNorm]);
-    if (!sh) return linkJson_({ ok: false, error: 'Sheet not found.' });
-
-    // Cari kolom link di baris header sheet tujuan
-    var lastCol = sh.getLastColumn();
-    var header = sh.getRange(1, 1, 1, Math.max(lastCol, 1)).getValues()[0].map(linkHeader_);
-    var cUrl  = linkFindCol_(header, function (h) { return h.indexOf('url') >= 0 || (h.indexOf('link') >= 0 && h.indexOf('nama') < 0); });
-    var cName = linkFindCol_(header, function (h) { return h.indexOf('nama') >= 0 && h.indexOf('link') >= 0; });
-    var cDesc = linkFindCol_(header, function (h) { return h.indexOf('keterangan') >= 0; });
-    var cVis  = linkFindCol_(header, function (h) { return h.indexOf('visible') >= 0; });
-    if (cUrl < 0 || cName < 0) {
-      return linkJson_({ ok: false, error: 'Link columns ("Nama Link", "link / URL") were not found in this sheet header.' });
-    }
-
-    var lastRow = sh.getLastRow();
-    var data = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
-    var same = function (row, name, url) {
-      return String(row[cUrl]).trim() === url && String(row[cName]).trim() === name;
-    };
-
-    if (action === 'addLink') {
-      var f = linkReadFields_(body, known, false);
-      if (f.error) return linkJson_({ ok: false, error: f.error });
-
-      for (var i = 0; i < data.length; i++) {
-        if (same(data[i], f.name, f.url)) return linkJson_({ ok: false, error: 'This menu already exists.' });
-      }
-
-      // Baris kosong pertama (semua kolom link kosong); kalau tidak ada, tambah di bawah.
-      var cols = [cName, cUrl];
-      if (cDesc >= 0) cols.push(cDesc);
-      if (cVis >= 0) cols.push(cVis);
-      var targetRow = lastRow + 1;
-      for (var j = 0; j < data.length; j++) {
-        var empty = true;
-        for (var k = 0; k < cols.length; k++) {
-          if (String(data[j][cols[k]] == null ? '' : data[j][cols[k]]).trim() !== '') { empty = false; break; }
-        }
-        if (empty) { targetRow = j + 2; break; }
-      }
-
-      linkSetText_(sh, targetRow, cName, f.name);
-      linkSetText_(sh, targetRow, cUrl, f.url);
-      if (cDesc >= 0) linkSetText_(sh, targetRow, cDesc, f.desc);
-      if (cVis >= 0) linkSetText_(sh, targetRow, cVis, f.visValue);
-      SpreadsheetApp.flush();
-      siteDataInvalidate_();
-      return linkJson_({ ok: true, row: targetRow });
-    }
-
-    if (action === 'editLink') {
-      var e = linkReadFields_(body, known, true);
-      if (e.error) return linkJson_({ ok: false, error: e.error });
-      var oldName = String(body.oldName == null ? '' : body.oldName).trim();
-      var oldUrl  = String(body.oldUrl == null ? '' : body.oldUrl).trim();
-
-      var editIdx = -1;
-      for (var m = 0; m < data.length; m++) {
-        if (same(data[m], oldName, oldUrl)) { editIdx = m; break; }
-      }
-      if (editIdx < 0) {
-        return linkJson_({ ok: false, notFound: true, error: 'Menu not found in the sheet (it may have been changed by someone else). Please reload the page.' });
-      }
-      for (var n = 0; n < data.length; n++) {
-        if (n !== editIdx && same(data[n], e.name, e.url)) {
-          return linkJson_({ ok: false, error: 'Another menu with the same name and URL already exists.' });
-        }
-      }
-
-      var editRow = editIdx + 2;
-      linkSetText_(sh, editRow, cName, e.name);
-      linkSetText_(sh, editRow, cUrl, e.url);
-      if (cDesc >= 0) linkSetText_(sh, editRow, cDesc, e.desc);
-      if (cVis >= 0 && !e.keepVis) linkSetText_(sh, editRow, cVis, e.visValue);
-      SpreadsheetApp.flush();
-      siteDataInvalidate_();
-      return linkJson_({ ok: true, row: editRow });
-    }
-
-    if (action === 'deleteLink') {
-      var delName = String(body.name == null ? '' : body.name).trim();
-      var delUrl  = String(body.url == null ? '' : body.url).trim();
-      for (var r = 0; r < data.length; r++) {
-        if (same(data[r], delName, delUrl)) {
-          var row = r + 2;
-          sh.getRange(row, cName + 1).clearContent();
-          sh.getRange(row, cUrl + 1).clearContent();
-          if (cDesc >= 0) sh.getRange(row, cDesc + 1).clearContent();
-          if (cVis >= 0) sh.getRange(row, cVis + 1).clearContent();
-          SpreadsheetApp.flush();
-          siteDataInvalidate_();
-          return linkJson_({ ok: true, row: row });
-        }
-      }
-      return linkJson_({ ok: false, notFound: true, error: 'Menu not found in the sheet.' });
-    }
-
-    return linkJson_({ ok: false, error: 'Unknown action.' });
-  } catch (err) {
-    return linkJson_({ ok: false, error: 'Server error: ' + err.message });
-  } finally {
-    lock.releaseLock();
-  }
+function isValidEmail(str){
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str || "").trim());
 }
 
+const EMAIL_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`;
+const WA_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+
+// Jabatan/posisi yang diperlakukan sebagai "leader" (tidak peka besar-kecil
+// huruf) — dikecualikan dari daftar task bernomor dan hanya ditampilkan di
+// popup "Our Team" sebagai blok "Person In Charge". Urutan array menentukan
+// urutan tampil: Section Head -> Manager -> Senior Manager.
+const LEADER_TITLES = ["section head","manager","senior manager"];
+const normJabatan = (j) => (j || "").toLowerCase().trim();
+
+// Jabatan yang mengandung kata "Group" (mis. "Group Penjadwalan") — baris ini
+// tetap tampil sebagai item bernomor di daftar task, tapi disembunyikan dari
+// popup "Our Team" (grid semua anggota).
+const isGroupRow = (j) => normJabatan(j).includes("group");
+
+function initials(name){
+  return (name||"?").trim().split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||"").join("");
+}
+
+function escapeHtml(str){
+  return (str||"").replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
+}
+
+function buildSection(idx, sheetKey, header, subheader, members, career){
+  const secId = `sec-${idx}`;
+
+  // Jabatan/posisi yang diperlakukan sebagai "leader" — tidak ikut dihitung/
+  // tampil sebagai item bernomor di daftar task. Hanya muncul di popup
+  // "Our Team" sebagai blok "Person In Charge" (lihat openModal / LEADER_TITLES).
+  const regularIdx = [];
+  members.forEach((m,i) => {
+    if (!LEADER_TITLES.includes(normJabatan(m.jabatan))) regularIdx.push(i);
+  });
+
+  const taskLinks = regularIdx.map((i, displayPos) => {
+    const m = members[i];
+    const waDigits = formatWaLink(m.whatsapp);
+    const emailBtn = isValidEmail(m.email)
+      ? `<a class="icon-btn icon-email" href="mailto:${encodeURIComponent(m.email.trim())}" title="Email: ${escapeHtml(m.email)}" aria-label="Kirim email ke ${escapeHtml(m.email)}">${EMAIL_SVG}</a>`
+      : "";
+    const waBtn = waDigits
+      ? `<a class="icon-btn icon-wa" href="https://wa.me/${waDigits}" target="_blank" rel="noopener" title="WhatsApp: ${escapeHtml(m.whatsapp)}" aria-label="Chat WhatsApp ${escapeHtml(m.whatsapp)}">${WA_SVG}</a>`
+      : "";
+    return `
+    <li>
+      <div class="task-link" data-sec="${idx}" data-member="${i}" role="button" tabindex="0" aria-haspopup="dialog">
+        <span class="idx">${String(displayPos+1).padStart(2,"0")}</span>
+        <span class="name">${escapeHtml(m.task || "(Tanpa nama task)")}</span>
+        <span class="actions">${emailBtn}${waBtn}</span>
+      </div>
+    </li>`;
+  }).join("");
+
+  const empty = members.length === 0;
+  return `
+  <section class="section" id="${secId}" data-career="${escapeHtml(career || "")}" data-sheet="${escapeHtml(sheetKey)}">
+    <h2 class="header">${escapeHtml(header)}</h2>
+    ${subheader ? `<p class="subheader">${escapeHtml(subheader)}</p>` : ""}
+    ${empty
+      ? `<p class="subheader">Belum ada data PIC yang diisi untuk bagian ini.</p>`
+      : `<div class="section-actions"><button class="team-btn" data-target="${secId}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
+          Our Team
+        </button><span class="pic-slot" data-pic-slot="${idx}"></span></div>
+        <ul class="task-list">${taskLinks}</ul>`}
+  </section>`;
+}
+
+function memberCardHtml(m){
+  return `
+    <div class="card">
+      ${m.dp
+        ? `<img class="dp" src="${escapeHtml(toDirectImageUrl(m.dp))}" alt="${escapeHtml(m.pic)}" onerror="this.outerHTML='<div class=&quot;dp fallback&quot;>${initials(m.pic)}</div>'">`
+        : `<div class="dp fallback">${initials(m.pic)}</div>`}
+      <hr>
+      <div class="pic-name">${escapeHtml(m.pic || "-")}</div>
+      <hr>
+      <div class="task">${escapeHtml(m.task || "-")}</div>
+      <hr>
+      <div class="task-desc">${escapeHtml(m.desc || "-")}</div>
+    </div>`;
+}
+
+function openModal(header, sheetKey, members){
+  // Baris dengan Jabatan mengandung "Group" tidak ikut ditampilkan di popup
+  // "Our Team" (tapi tetap ada di daftar task pada halaman utama).
+  const teamMembers = members.filter(m => !isGroupRow(m.jabatan));
+
+  document.getElementById("modal-title").textContent = header;
+  document.getElementById("modal-sub").textContent = `${sheetKey} — ${teamMembers.length} anggota tim`;
+
+  // Pisahkan anggota biasa dari leader (Senior Manager/Manager/Section Head).
+  // Leader ditampilkan terpisah, di blok "Person In Charge" paling bawah,
+  // urut sesuai hierarki: Section Head -> Manager -> Senior Manager.
+  const regular = teamMembers.filter(m => !LEADER_TITLES.includes(normJabatan(m.jabatan)));
+  const leaders = teamMembers
+    .filter(m => LEADER_TITLES.includes(normJabatan(m.jabatan)))
+    .sort((a,b) => LEADER_TITLES.indexOf(normJabatan(a.jabatan)) - LEADER_TITLES.indexOf(normJabatan(b.jabatan)));
+
+  const grid = document.getElementById("modal-grid");
+  grid.innerHTML = regular.map(memberCardHtml).join("")
+    + (leaders.length === 0 ? "" : `
+      <div class="leaders-block">
+        <div class="leaders-heading">Person In Charge</div>
+        <div class="card-grid">${leaders.map(memberCardHtml).join("")}</div>
+      </div>`);
+
+  document.getElementById("modal-overlay").classList.add("open");
+}
+
+function openMemberModal(m){
+  const waDigits = formatWaLink(m.whatsapp);
+  const emailValid = isValidEmail(m.email);
+
+  const dpHtml = m.dp
+    ? `<img class="dp" src="${escapeHtml(toDirectImageUrl(m.dp))}" alt="${escapeHtml(m.pic)}" onerror="this.outerHTML='<div class=&quot;dp fallback&quot;>${initials(m.pic)}</div>'">`
+    : `<div class="dp fallback">${initials(m.pic)}</div>`;
+
+  const emailBtn = emailValid
+    ? `<a class="member-action-btn email" href="mailto:${encodeURIComponent(m.email.trim())}" title="Email: ${escapeHtml(m.email)}">${EMAIL_SVG}<span>Email</span></a>`
+    : "";
+  const waBtn = waDigits
+    ? `<a class="member-action-btn wa" href="https://wa.me/${waDigits}" target="_blank" rel="noopener" title="WhatsApp: ${escapeHtml(m.whatsapp)}">${WA_SVG}<span>WhatsApp</span></a>`
+    : "";
+  const actionsHtml = (emailBtn || waBtn)
+    ? `<div class="member-actions">${emailBtn}${waBtn}</div>`
+    : `<div class="member-actions"><span class="no-contact">Kontak belum tersedia.</span></div>`;
+
+  document.getElementById("member-card-content").innerHTML = `
+    ${dpHtml}
+    <hr>
+    <div class="pic-name">${escapeHtml(m.pic || "-")}</div>
+    <hr>
+    <div class="task">${escapeHtml(m.task || "-")}</div>
+    <hr>
+    <div class="task-desc">${escapeHtml(m.desc || "-")}</div>
+    ${actionsHtml}
+  `;
+  document.getElementById("member-modal-overlay").classList.add("open");
+}
+
+document.getElementById("modal-close").addEventListener("click", () => {
+  document.getElementById("modal-overlay").classList.remove("open");
+});
+document.getElementById("modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "modal-overlay") e.target.classList.remove("open");
+});
+
+document.getElementById("member-modal-close").addEventListener("click", () => {
+  document.getElementById("member-modal-overlay").classList.remove("open");
+});
+document.getElementById("member-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "member-modal-overlay") e.target.classList.remove("open");
+});
+
+// Klik pada setiap item di daftar link (task-list) -> buka popup detail PIC.
+// Klik pada tombol email/WA di sisi kanan tetap menjalankan aksi masing-masing
+// (mailto:/wa.me) tanpa ikut membuka popup.
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".icon-btn")) return;
+  const link = e.target.closest(".task-link");
+  if (!link) return;
+  const sec = link.dataset.sec;
+  const idx = link.dataset.member;
+  if (sec === undefined || idx === undefined) return;
+  const members = sectionMembers[Number(sec)];
+  const member = members && members[Number(idx)];
+  if (member) openMemberModal(member);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const link = e.target.closest && e.target.closest(".task-link");
+  if (!link) return;
+  e.preventDefault();
+  link.click();
+});
+
+function renderError(message, hints){
+  document.getElementById("app").innerHTML = `
+    <div class="notice error">
+      <strong>Halaman belum bisa menampilkan data.</strong><br>
+      ${escapeHtml(message)}
+      ${hints ? `<ul>${hints.map(h=>`<li>${h}</li>`).join("")}</ul>` : ""}
+      <ul>
+        <li><strong>Melihat pesan "Failed to fetch"?</strong> Kemungkinan besar halaman ini sedang dibuka di dalam preview chat, yang memblokir koneksi internet keluar. Unduh file-nya lalu buka langsung di tab browser biasa (bukan di dalam preview chat).</li>
+      </ul>
+    </div>`;
+}
+
+// Global: menyimpan data anggota tim per section, dipakai baik oleh modal
+// "Our Team" (grid semua anggota) maupun popup detail per-item saat sebuah
+// baris di daftar task diklik.
+let sectionMembers = [];
+let lastDataSignature = null; // dipakai untuk mendeteksi apakah data sumber berubah
+let sectionMeta = [];         // paralel dengan sectionMembers: {header, sheetKey} per section
 
 /* =========================================================================
- * LOGIN PIC — email PIC ditanya Password (bukan Department/Unit)
- * =========================================================================
- * Sumber password: sheet Master, baris berlabel "Sheet Password" (kolom A),
- * sejajar dengan nama sheet di baris "Sheet". Contoh: kolom C = password
- * untuk sheet di C2.
- *
- *  action=picLogin&email=...
- *     -> { isPic, needsPassword }
- *        isPic         : email tercatat di kolom Email salah satu sheet tim
- *        needsPassword : minimal satu sheet milik PIC itu memakai password
- *  action=verifyPicPassword&email=...&password=...
- *     -> { valid, locked }
- *        valid : password cocok dengan password salah satu sheet milik PIC itu
- *        locked: terlalu banyak salah (5x) -> dikunci 10 menit
- */
-var PIC_PASSWORD_LABEL = 'sheet password';
-var PIC_MAX_FAILS = 5;
-var PIC_LOCK_SECONDS = 600;
+   PIC MENU — tombol di sebelah "Our Team" (rata kanan) yang berisi tautan
+   khusus PIC. Sumber datanya ada di MASING-MASING sheet tim (kolom I dst.,
+   sejajar dengan baris data di sheet itu), dikenali dari nama header:
+     "Nama Link"   -> teks tautan
+     "link / URL"  -> alamat tautan (baris tanpa URL valid diabaikan)
+     "Keterangan"  -> penjelasan singkat (opsional)
+     "is Visible from other PIC" -> siapa lagi yang boleh melihat link
+        (kosong = hanya PIC sheet itu; "Master" = semua PIC; nama sheet = PIC
+        sheet tsb juga). Leader (Section Head/Manager/Senior Manager) selalu
+        bisa melihat semua link.
+   Pemilik link = sheet tempat link itu ditulis.
+   Tombol hanya muncul di section yang punya setidaknya satu link yang boleh
+   dilihat oleh email yang sedang login (untuk LEADER: selalu muncul, karena
+   leader juga bisa menambah / menghapus link dari popup ini; perubahan
+   ditulis ke Google Sheet lewat Apps Script -- lihat apps-script-link-menu.gs).
+   ========================================================================= */
+const PIC_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3z"/><path d="m9 12 2 2 4-4"/></svg>`;
 
-// { names: {norm: asli}, passwords: {norm: password} } dari sheet Master
-function picMasterInfo_(ss) {
-  var info = { names: {}, passwords: {}, editors: {}, developers: [] };
-  var master = ss.getSheetByName(LINK_MASTER_SHEET);
-  if (!master) return info;
-  var values = master.getDataRange().getValues();
-  var sheetRow = null, pwRow = null, editorRow = null;
-  var devRow = null;
-  for (var r = 0; r < values.length; r++) {
-    var label = linkNorm_(values[r][0]);
-    if (label === 'sheet' && !sheetRow) sheetRow = values[r];
-    if (label === PIC_PASSWORD_LABEL && !pwRow) pwRow = values[r];
-    if (label === 'developer' && !devRow) devRow = values[r];
-    // Baris "Editor Menu" (boleh dibalik: "Menu Editor"): email-email (boleh banyak)
-    // yang boleh kelola menu sheet di kolom yang sama.
-    if (label.indexOf('editor') >= 0 && !editorRow) editorRow = values[r];
-  }
-  if (devRow) {
-    for (var dc = 1; dc < devRow.length; dc++) info.developers = info.developers.concat(linkEmails_(devRow[dc]));
-  }
-  if (!sheetRow) return info;
-  for (var c = 1; c < sheetRow.length; c++) {
-    var actual = String(sheetRow[c] == null ? '' : sheetRow[c]).trim();
-    var n = linkNorm_(actual);
-    if (!n || n === 'master' || n === 'all') continue;
-    info.names[n] = actual;
-    var pw = pwRow && pwRow[c] != null ? String(pwRow[c]).trim() : '';
-    if (pw) info.passwords[n] = pw;
-    if (editorRow && editorRow[c] != null) info.editors[n] = linkEmails_(editorRow[c]);
-  }
-  return info;
+const normSheetName = (v) => String(v || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+// Satu sel Email bisa berisi lebih dari satu alamat (dipisah koma/titik koma/spasi).
+function splitEmails(raw){
+  return String(raw || "").toLowerCase().split(/[\s,;]+/).filter(isValidEmail);
 }
 
-// ---- INDEKS PIC (di-cache) -------------------------------------------------
-// Membaca banyak sheet itu lambat, jadi hasilnya (nama sheet, password,
-// email -> sheet mana saja, daftar leader) disimpan di CacheService selama
-// PIC_INDEX_TTL detik. Login PIC & pengecekan leader memakai indeks ini, jadi
-// jawabannya cepat. Konsekuensi: perubahan email/password/leader di sheet
-// baru terbaca paling lama PIC_INDEX_TTL detik kemudian.
-var PIC_INDEX_KEY = 'picindex:v5';
-var PIC_INDEX_TTL = 300; // 5 menit (jaring pengaman; edit lewat UI langsung membuang cache)
-
-function picBuildIndex_(ss) {
-  var info = picMasterInfo_(ss);
-  var idx = { names: info.names, passwords: info.passwords, emails: {}, leaders: {}, editors: {}, developers: {}, titles: {} };
-  // Developer: dari konstanta DEVELOPER_EMAILS + baris "Developer" di Master.
-  // Developer otomatis juga Leader (bisa kelola semua link).
-  var devList = DEVELOPER_EMAILS.map(function (x) { return linkNorm_(x); }).concat(info.developers || []);
-  for (var dv = 0; dv < devList.length; dv++) {
-    if (!devList[dv]) continue;
-    idx.developers[devList[dv]] = true;
-    idx.leaders[devList[dv]] = true;
-  }
-  // editors: email -> [sheet yang boleh dia kelola], dari baris "Editor Menu" di Master
-  for (var sk in info.editors) {
-    var list = info.editors[sk] || [];
-    for (var q = 0; q < list.length; q++) {
-      if (!idx.editors[list[q]]) idx.editors[list[q]] = [];
-      if (idx.editors[list[q]].indexOf(sk) < 0) idx.editors[list[q]].push(sk);
-    }
-  }
-  for (var key in info.names) {
-    var sh = sheetByNameLoose_(ss, info.names[key]);
-    if (!sh) continue;
-    var lastRow = sh.getLastRow();
-    var lastCol = sh.getLastColumn();
-    if (lastRow < 2 || lastCol < 1) continue;
-    var header = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(linkHeader_);
-    var cEml = linkFindCol_(header, function (h) { return h.indexOf('email') >= 0 || h.indexOf('e-mail') >= 0; });
-    if (cEml < 0) continue;
-    var cJab = linkFindCol_(header, function (h) { return h.indexOf('jabatan') >= 0 || h.indexOf('posisi') >= 0; });
-    var c0 = cJab >= 0 ? Math.min(cEml, cJab) : cEml;
-    var c1 = cJab >= 0 ? Math.max(cEml, cJab) : cEml;
-    var vals = sh.getRange(2, c0 + 1, lastRow - 1, c1 - c0 + 1).getValues();
-    for (var r = 0; r < vals.length; r++) {
-      var emails = linkEmails_(vals[r][cEml - c0]);
-      if (!emails.length) continue;
-      var isLead = cJab >= 0 && LINK_LEADER_TITLES.indexOf(linkNorm_(vals[r][cJab - c0])) >= 0;
-      for (var e = 0; e < emails.length; e++) {
-        var em = emails[e];
-        if (!idx.emails[em]) idx.emails[em] = [];
-        if (idx.emails[em].indexOf(key) < 0) idx.emails[em].push(key);
-        if (isLead) {
-          idx.leaders[em] = true;
-          // Simpan jabatan tertinggi kalau terdata di beberapa sheet.
-          var tNorm = linkNorm_(vals[r][cJab - c0]);
-          var cur = idx.titles[em] ? LINK_LEADER_TITLES.indexOf(linkNorm_(idx.titles[em])) : -1;
-          if (LINK_LEADER_TITLES.indexOf(tNorm) > cur) idx.titles[em] = LINK_TITLE_LABELS[tNorm];
-        }
-      }
-    }
-  }
-  return idx;
+function getCurrentUserEmail(){
+  const saved = readSavedLoginState();
+  // Guest = pengguna biasa: email TIDAK dipakai untuk mencari peran di spreadsheet
+  // (bukan PIC / Leader / Editor), jadi dianggap tidak punya identitas peran.
+  if (saved && saved.guest) return "";
+  return saved && saved.email ? String(saved.email).trim().toLowerCase() : "";
 }
 
-function picIndex_(ss, forceRebuild) {
-  var cache = CacheService.getScriptCache();
-  if (!forceRebuild) {
-    var hit = cache.get(PIC_INDEX_KEY);
-    if (hit) {
-      try { return JSON.parse(hit); } catch (e) {}
-    }
-  }
-  var idx = picBuildIndex_(ss);
-  try { cache.put(PIC_INDEX_KEY, JSON.stringify(idx), PIC_INDEX_TTL); } catch (e) {}
-  return idx;
-}
-
-// Menyegarkan indeks (dipanggil website saat halaman login dibuka -- sekaligus
-// "membangunkan" Apps Script -- dan oleh trigger berkala di bawah).
-function warmPicIndex() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  picIndex_(ss, true);
-  siteData_(ss, true);
-}
-
-// OPSIONAL, jalankan SEKALI (Run) supaya indeks selalu hangat: login PIC jadi
-// cepat bahkan untuk orang pertama setelah lama tidak ada yang membuka.
-function installPicWarmTrigger() {
-  // Hapus trigger penyegar lama (tiap 5 menit), ganti dengan yang tiap 1 menit.
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    var fn = triggers[i].getHandlerFunction();
-    if (fn === 'warmPicIndex' || fn === 'warmIfMissing') ScriptApp.deleteTrigger(triggers[i]);
-  }
-  ScriptApp.newTrigger('warmIfMissing').timeBased().everyMinutes(1).create();
-}
-
-// Dipanggil tiap menit oleh trigger: membangun ulang cache HANYA kalau cache
-// sedang kosong (habis kedaluwarsa atau baru dibuang karena ada edit). Jadi
-// pengunjung hampir selalu mendapat jawaban cepat dari cache, dan data baru
-// siap dalam <= 1 menit setelah ada perubahan.
-function warmIfMissing() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var cache = CacheService.getScriptCache();
-  if (!cache.get(PIC_INDEX_KEY)) picIndex_(ss, true);
-  if (!cache.get(SITE_DATA_KEY + ':n')) siteData_(ss, true);
-}
-
-// Membuang SEMUA cache data website (dipanggil saat ada edit di spreadsheet).
-function siteCacheInvalidateAll_() {
-  siteDataInvalidate_();
-  try { CacheService.getScriptCache().remove(PIC_INDEX_KEY); } catch (e) {}
-}
-
-function handlePicLogin(params) {
+function safeHttpUrl(u){
   try {
-    var action = String(params.action || '');
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (action === 'warm') {
-      picIndex_(ss);
-      siteData_(ss);
-      return linkJson_({ ok: true });
-    }
-    var email = linkNorm_(params.email);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return linkJson_({ ok: false, error: 'Invalid email.' });
-    }
-
-    var idx = picIndex_(ss);
-    var isDev = !!idx.developers[email];
-    var picSheets = idx.emails[email] || [];
-    var withPassword = picSheets.filter(function (k) { return !!idx.passwords[k]; });
-
-
-    if (action === 'picLogin') {
-      return linkJson_({ ok: true, isPic: isDev || picSheets.length > 0, needsPassword: isDev || withPassword.length > 0 });
-    }
-
-    if (action === 'verifyPicPassword') {
-      if (!isDev && !picSheets.length) return linkJson_({ ok: true, valid: false });
-      if (!isDev && !withPassword.length) return linkJson_({ ok: true, valid: true }); // tidak ada password -> tidak perlu
-
-      var cache = CacheService.getScriptCache();
-      var failKey = 'picfail:' + email;
-      var fails = Number(cache.get(failKey) || 0);
-      if (fails >= PIC_MAX_FAILS) return linkJson_({ ok: true, valid: false, locked: true });
-
-      var given = String(params.password == null ? '' : params.password).trim();
-      var okPw = false;
-      for (var i = 0; !isDev && i < withPassword.length; i++) {
-        if (given && given === idx.passwords[withPassword[i]]) okPw = true;
-      }
-      // Developer: password khusus di konstanta DEVELOPER_PASSWORD (kosong / belum diganti = ditolak).
-      if (isDev && DEVELOPER_PASSWORD && DEVELOPER_PASSWORD !== 'GANTI_PASSWORD_DEVELOPER' && given === DEVELOPER_PASSWORD) okPw = true;
-      if (okPw) {
-        cache.remove(failKey);
-        return linkJson_({ ok: true, valid: true });
-      }
-      cache.put(failKey, String(fails + 1), PIC_LOCK_SECONDS);
-      return linkJson_({ ok: true, valid: false, locked: fails + 1 >= PIC_MAX_FAILS });
-    }
-
-    return linkJson_({ ok: false, error: 'Unknown action.' });
-  } catch (err) {
-    return linkJson_({ ok: false, error: 'Server error: ' + err.message });
-  }
+    const url = new URL(String(u || "").trim());
+    return (url.protocol === "https:" || url.protocol === "http:") ? url.href : "";
+  } catch (e){ return ""; }
 }
 
-
-/* =========================================================================
- * ===== DATA UNTUK WEBSITE (spreadsheet PRIVAT) ============================
- * Website TIDAK lagi membaca Google Sheet lewat tautan publik. Semua data
- * diambil lewat action=data di sini. Skrip ini berjalan atas nama pemilik
- * spreadsheet, jadi spreadsheet cukup dibagikan ke admin saja.
- *
- * Yang DIKIRIM ke website : isi sheet Master (tanpa baris rahasia) dan sheet
- *   tim yang berstatus Active; link PIC Menu hanya untuk email yang berhak.
- * Yang TIDAK PERNAH keluar: baris "Sheet Password" & "Editor Menu" di Master,
- *   sheet Logs, Revoked, Data Dosen, dan kolom link di sheet tim (kolom itu
- *   dikosongkan; link dikirim terpisah setelah disaring per email).
- * ========================================================================= */
-var SITE_DATA_KEY = 'srscdata:v2';
-var SITE_DATA_TTL = 300; // 5 menit (jaring pengaman; edit lewat UI langsung membuang cache)
-var SITE_CHUNK = 30000;  // CacheService maks 100 KB per nilai -> dipecah
-
-function cachePutBig_(key, str, ttl) {
-  var cache = CacheService.getScriptCache();
-  var n = Math.ceil(str.length / SITE_CHUNK);
-  var obj = {};
-  for (var i = 0; i < n; i++) obj[key + ':' + i] = str.substr(i * SITE_CHUNK, SITE_CHUNK);
-  obj[key + ':n'] = String(n);
-  try { cache.putAll(obj, ttl); } catch (e) {}
-}
-
-function cacheGetBig_(key) {
-  var cache = CacheService.getScriptCache();
-  var n = Number(cache.get(key + ':n') || 0);
-  if (!n) return null;
-  var keys = [];
-  for (var i = 0; i < n; i++) keys.push(key + ':' + i);
-  var got = cache.getAll(keys);
-  var out = '';
-  for (var j = 0; j < n; j++) {
-    var part = got[key + ':' + j];
-    if (part == null) return null;
-    out += part;
-  }
-  return out;
-}
-
-function siteDataInvalidate_() {
-  var cache = CacheService.getScriptCache();
-  var n = Number(cache.get(SITE_DATA_KEY + ':n') || 0);
-  var keys = [SITE_DATA_KEY + ':n'];
-  for (var i = 0; i < n; i++) keys.push(SITE_DATA_KEY + ':' + i);
-  try { cache.removeAll(keys); } catch (e) {}
-}
-
-function linkSha256_(text) {
-  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text), Utilities.Charset.UTF_8);
-  return bytes.map(function (b) {
-    var v = (b < 0 ? b + 256 : b).toString(16);
-    return v.length === 1 ? '0' + v : v;
-  }).join('');
-}
-
-function siteRowHasData_(row) {
-  for (var i = 0; i < row.length; i++) {
-    if (String(row[i]).trim() !== '') return true;
-  }
-  return false;
-}
-
-// Isi kolom "is Visible from other PIC" -> { all, list[nama sheet ternormalisasi] }
-function siteParseVisible_(raw, knownMap) {
-  var res = { all: false, list: [] };
-  var parts = String(raw == null ? '' : raw).split(/[\n;|]+/);
-  for (var i = 0; i < parts.length; i++) {
-    var n = linkNorm_(parts[i]);
-    if (!n) continue;
-    var pieces = knownMap[n] ? [n] : n.split(',').map(function (x) { return x.trim(); }).filter(function (x) { return x; });
-    for (var j = 0; j < pieces.length; j++) {
-      if (pieces[j] === 'master' || pieces[j] === 'all') res.all = true;
-      else res.list.push(pieces[j]);
-    }
-  }
+// Baca kolom link PIC di sebuah sheet tim -> [link, ...]
+// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[] }
+//   - kolom "is Visible from other PIC" kosong  -> hanya PIC sheet pemilik
+//   - berisi "Master"                           -> semua PIC di semua sheet
+//   - berisi nama sheet (boleh lebih dari satu, dipisah baris baru / ; / |)
+//                                               -> PIC sheet pemilik + PIC sheet2 tsb
+// (Leader -- Section Head/Manager/Senior Manager -- selalu bisa melihat semua link.)
+// "knownSheets" = himpunan nama sheet (sudah dinormalisasi) dari baris "Sheet"
+// di Master, supaya nama sheet yang kebetulan mengandung koma tidak terpecah.
+// Ubah isi kolom "is Visible from other PIC" -> { all: boolean, list: [nama sheet ternormalisasi] }
+function parseVisibleSheets(raw, knownSheets){
+  const res = { all: false, list: [] };
+  String(raw || "").split(/[\n;|]+/).forEach(part => {
+    const n = normSheetName(part);
+    if (!n) return;
+    const pieces = knownSheets.has(n) ? [n] : n.split(",").map(x => x.trim()).filter(Boolean);
+    pieces.forEach(x => { if (x === "master" || x === "all") res.all = true; else res.list.push(x); });
+  });
   return res;
 }
 
-// Membangun data situs (belum disaring per email). Hasilnya di-cache.
-function siteBuild_(ss) {
-  var info = picMasterInfo_(ss);
-  var master = ss.getSheetByName(LINK_MASTER_SHEET);
-  var mvals = master ? master.getDataRange().getDisplayValues() : [];
-
-  var masterRows = [];
-  var sheetRow = null, statusRow = null;
-  for (var r = 0; r < mvals.length; r++) {
-    var row = mvals[r];
-    var label = linkNorm_(row[0]);
-    if (label.indexOf('password') >= 0 || label.indexOf('editor') >= 0 || label === 'developer') continue; // rahasia
-    if (!siteRowHasData_(row)) continue;
-    masterRows.push(row);
-    if (label === 'sheet' && !sheetRow) sheetRow = row;
-    if (label.indexOf('status') >= 0 && !statusRow) statusRow = row;
-  }
-
-  var sheets = {}, linksAll = {}, activeKeys = {};
-  if (sheetRow) {
-    for (var c = 1; c < sheetRow.length; c++) {
-      var name = String(sheetRow[c] == null ? '' : sheetRow[c]).trim();
-      var key = linkNorm_(name);
-      if (!key || key === 'master' || key === 'all') continue;
-      var st = statusRow ? linkNorm_(statusRow[c]) : '';
-      if (st === 'inactive' || st === 'nonaktif' || st === 'non-aktif') continue;
-      var sh = sheetByNameLoose_(ss, name);
-      if (!sh) continue;
-
-      var vals = sh.getDataRange().getDisplayValues().filter(siteRowHasData_);
-      activeKeys[key] = true;
-      linksAll[key] = [];
-      if (!vals.length) { sheets[name] = []; continue; }
-
-      var header = vals[0].map(linkHeader_);
-      var cUrl  = linkFindCol_(header, function (h) { return h.indexOf('url') >= 0 || (h.indexOf('link') >= 0 && h.indexOf('nama') < 0); });
-      var cName = linkFindCol_(header, function (h) { return h.indexOf('nama') >= 0 && h.indexOf('link') >= 0; });
-      var cDesc = linkFindCol_(header, function (h) { return h.indexOf('keterangan') >= 0; });
-      var cVis  = linkFindCol_(header, function (h) { return h.indexOf('visible') >= 0; });
-
-      if (cUrl >= 0) {
-        for (var i = 1; i < vals.length; i++) {
-          var rawUrl = String(vals[i][cUrl] == null ? '' : vals[i][cUrl]).trim();
-          if (!/^https?:\/\//i.test(rawUrl)) continue;
-          var rawName = cName >= 0 ? String(vals[i][cName] == null ? '' : vals[i][cName]).trim() : '';
-          var vis = siteParseVisible_(cVis >= 0 ? vals[i][cVis] : '', info.names);
-          linksAll[key].push({
-            owner: key,
-            name: rawName || rawUrl,
-            rawName: rawName,
-            rawUrl: rawUrl,
-            desc: cDesc >= 0 ? String(vals[i][cDesc] == null ? '' : vals[i][cDesc]).trim() : '',
-            visibleAll: vis.all,
-            visibleTo: vis.list
-          });
-        }
-      }
-      // Kosongkan kolom link di data yang dikirim (link dikirim terpisah & disaring).
-      var blank = [cUrl, cName, cDesc, cVis];
-      for (var b = 0; b < blank.length; b++) {
-        if (blank[b] < 0) continue;
-        for (var k = 1; k < vals.length; k++) vals[k][blank[b]] = '';
-      }
-      sheets[name] = vals;
-    }
-  }
-
-  // Email anggota sheet yang TIDAK aktif (di-hash): supaya halaman login tahu
-  // bahwa email itu perlu dicek ke server, tanpa membuka daftar emailnya.
-  var idx = picIndex_(ss);
-  var inactive = [];
-  for (var em in idx.emails) {
-    var list = idx.emails[em];
-    for (var q = 0; q < list.length; q++) {
-      if (!activeKeys[list[q]]) { inactive.push(linkSha256_(em)); break; }
-    }
-  }
-
-  // Hash email Developer, supaya halaman login tahu email itu perlu password
-  // tanpa membuka daftar emailnya.
-  var devs = [];
-  for (var dem in idx.developers) devs.push(linkSha256_(dem));
-
-  return {
-    master: masterRows,
-    devs: devs,
-    sheets: sheets,
-    linksAll: linksAll,
-    pwSheets: Object.keys(info.passwords),   // hanya NAMA sheet yang memakai password, bukan passwordnya
-    inactive: inactive
-  };
+// Link PIC Menu datang sudah disaring dari server (per email). Di sini hanya
+// dirapikan ke bentuk yang dipakai tampilan.
+function mapServerLinks(arr){
+  return (arr || []).map(l => ({
+    owner: l.owner,
+    name: l.name || l.rawUrl,
+    rawName: l.rawName || "",      // persis seperti di sheet -- dipakai saat edit/hapus
+    url: safeHttpUrl(l.rawUrl),
+    rawUrl: l.rawUrl || "",
+    desc: l.desc || "",
+    visibleAll: !!l.visibleAll,
+    visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : []
+  })).filter(l => l.url);
 }
 
-function siteData_(ss, forceRebuild) {
-  if (!forceRebuild) {
-    var hit = cacheGetBig_(SITE_DATA_KEY);
-    if (hit) {
-      try { return JSON.parse(hit); } catch (e) {}
+// Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
+// Editor menu: email-email (boleh banyak, dipisah koma) di baris "Editor Menu" sheet
+// Master, pada kolom sheet yang bersangkutan -> boleh Add/Edit/Delete menu
+// untuk sheet itu saja. (Leader boleh untuk semua sheet.)
+let siteLeaderFlag = false;   // status leader menurut server (termasuk sheet nonaktif)
+
+function getPicContext(){
+  const ctx = { sheets: new Set(), leader: false, editorSheets: new Set() };
+  const email = getCurrentUserEmail();
+  if (!email) return ctx;
+  sectionMeta.forEach((meta, i) => {
+    if ((meta.editors || []).includes(email)) ctx.editorSheets.add(normSheetName(meta.sheetKey));
+  });
+  sectionMembers.forEach((members, i) => {
+    const key = normSheetName((sectionMeta[i] || {}).sheetKey);
+    members.forEach(m => {
+      if (!splitEmails(m.email).includes(email)) return;
+      ctx.sheets.add(key);
+      if (LEADER_TITLES.includes(normJabatan(m.jabatan))) ctx.leader = true;
+    });
+  });
+  if (siteLeaderFlag) ctx.leader = true;
+  return ctx;
+}
+
+function canSeePicLink(link, ctx){
+  if (ctx.leader) return true;                         // leader: semua link
+  if (ctx.editorSheets.has(link.owner)) return true;   // editor menu: semua link di sheet yang dikelolanya
+  if (ctx.sheets.size === 0) return false;             // bukan PIC terdata
+  if (ctx.sheets.has(link.owner)) return true;         // PIC sheet pemilik link
+  if (link.visibleAll) return true;                    // "Master": semua PIC
+  return link.visibleTo.some(n => ctx.sheets.has(n));  // PIC sheet yang ditunjuk
+}
+
+// Link yang boleh dilihat user, per section (dipakai juga saat popup dibuka).
+let picVisible = {};
+let picCanManage = false;   // boleh Add/Edit/Delete di section yang sedang dibuka
+let picManageMap = {};
+let picCurrentIdx = null;
+let picBusy = false;
+let knownSheetsGlobal = new Set();
+
+function applyPicMenus(){
+  const ctx = getPicContext();
+  picVisible = {};
+  picManageMap = {};
+  document.querySelectorAll("[data-pic-slot]").forEach(slot => {
+    const idx = Number(slot.dataset.picSlot);
+    const meta = sectionMeta[idx];
+    const list = ((meta && meta.links) || []).filter(l => canSeePicLink(l, ctx));
+    // Boleh kelola (Add/Edit/Delete) = leader (semua sheet) ATAU PIC yang
+    // ditandai di kolom "Menu Editor" (hanya sheet-nya sendiri).
+    const canManage = !!meta && (ctx.leader || ctx.editorSheets.has(normSheetName(meta.sheetKey)));
+    picVisible[idx] = list;
+    picManageMap[idx] = canManage;
+    // Yang boleh kelola selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
+    slot.innerHTML = (list.length || canManage)
+      ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
+      : "";
+  });
+}
+
+function sheetDisplayName(norm){
+  const m = sectionMeta.find(x => normSheetName(x.sheetKey) === norm);
+  return m ? m.sheetKey : norm;
+}
+function visibilityLabel(l){
+  if (l.visibleAll) return "Visible to: all PICs";
+  if (l.visibleTo.length) return "Visible to: this sheet + " + l.visibleTo.map(sheetDisplayName).join(", ");
+  return "Visible to: this sheet's PIC only";
+}
+
+// Mode tampilan popup:
+//   "view" (daftar saja) | "add" (form tambah) | "delete" (centang yang dihapus)
+//   "edit-pick" (pilih 1 menu) | "edit" (form ubah)
+let picMode = "view";
+let picEditLink = null;
+
+function setPicStatus(type, text){
+  const el = document.getElementById("pic-status");
+  if (!el) return;
+  el.className = "pic-status" + (text ? " show " + type : "");
+  el.textContent = text || "";
+}
+
+// <select> visibilitas. Saat mengubah menu, nilai yang sekarang dipilih otomatis.
+function visSelectHtml(idx, link){
+  const others = sectionMeta.filter((m, i) => i !== idx).map(m => m.sheetKey);
+  let selected = "";
+  let keepLabel = "";
+  if (link){
+    if (link.visibleAll) selected = "Master";
+    else if (link.visibleTo.length === 1){
+      const nm = sheetDisplayName(link.visibleTo[0]);
+      if (others.includes(nm)) selected = nm; else keepLabel = nm;
+    } else if (link.visibleTo.length > 1){
+      keepLabel = link.visibleTo.map(sheetDisplayName).join(", ");
     }
   }
-  var data = siteBuild_(ss);
-  cachePutBig_(SITE_DATA_KEY, JSON.stringify(data), SITE_DATA_TTL);
+  const sel = (v) => (!keepLabel && selected === v) ? " selected" : "";
+  return `<select id="pic-f-vis">
+      ${keepLabel ? `<option value="__keep__" selected>Keep current: ${escapeHtml(keepLabel)}</option>` : ""}
+      <option value=""${sel("")}>Visible to this sheet's PIC only</option>
+      <option value="Master"${sel("Master")}>Visible to all PICs</option>
+      ${others.map(n => `<option value="${escapeHtml(n)}"${sel(n)}>Also visible to: ${escapeHtml(n)}</option>`).join("")}
+    </select>`;
+}
+
+function picFormHtml(idx, formId, link, submitLabel){
+  return `
+    <form id="${formId}" class="pic-form" autocomplete="off">
+      <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
+      <input type="url" id="pic-f-url" placeholder="https://..." required value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
+      <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
+      ${visSelectHtml(idx, link)}
+      <div class="pic-actions">
+        <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+        <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
+      </div>
+    </form>`;
+}
+
+function renderPicModal(idx, note){
+  const meta = sectionMeta[idx];
+  if (!meta) return;
+  const links = picVisible[idx] || [];
+  const deleting = picCanManage && picMode === "delete";
+  const picking  = picCanManage && picMode === "edit-pick";
+  document.getElementById("pic-modal-sub").textContent =
+    (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
+
+  // ---- Daftar menu (selalu tampil dulu) ----
+  const listHtml = links.length
+    ? `<ul class="pic-list">${links.map((l, i) => `
+        <li>
+          ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
+          ${picking ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
+          <div class="pic-li-body">
+            <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
+            ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
+            ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
+          </div>
+        </li>`).join("")}</ul>`
+    : `<p class="pic-empty">No menus yet.</p>`;
+
+  // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
+  let controlsHtml = "";
+  if (picCanManage){
+    if (picMode === "add"){
+      controlsHtml = `<div class="pic-block-title">Add menu</div>` + picFormHtml(idx, "pic-add-form", null, "Save");
+    } else if (picMode === "edit" && picEditLink){
+      controlsHtml = `<div class="pic-block-title">Edit menu</div>` + picFormHtml(idx, "pic-edit-form", picEditLink, "Save changes");
+    } else if (picMode === "edit-pick"){
+      controlsHtml = `
+        <p class="pic-hint">Select the menu you want to edit, then click <strong>Edit Menu</strong>.</p>
+        <div class="pic-actions">
+          <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+          <button type="button" class="pic-btn primary" id="pic-edit-continue" disabled>Edit Menu</button>
+        </div>`;
+    } else if (picMode === "delete"){
+      controlsHtml = `
+        <p class="pic-hint">Tick the menus you want to delete, then click <strong>Delete Menu</strong>.</p>
+        <div class="pic-actions">
+          <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+          <button type="button" class="pic-btn danger solid" id="pic-delete-confirm" disabled>Delete Menu</button>
+        </div>`;
+    } else {
+      controlsHtml = `
+        <div class="pic-actions">
+          <button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>
+          ${links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
+          ${links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
+        </div>`;
+    }
+  }
+
+  document.getElementById("pic-modal-content").innerHTML =
+    listHtml + controlsHtml + `<div class="pic-status" id="pic-status" style="margin-top:12px"></div>`;
+  if (note) setPicStatus(note.type, note.text);
+  if (picMode === "add"){
+    const nameEl = document.getElementById("pic-f-name");
+    if (nameEl) nameEl.focus();
+  }
+}
+
+function setPicMode(mode){
+  if (picBusy || picCurrentIdx === null) return;
+  picMode = mode;
+  if (mode !== "edit") picEditLink = null;
+  renderPicModal(picCurrentIdx);
+}
+
+function openPicMenu(idx){
+  const meta = sectionMeta[idx];
+  if (!meta) return;
+  picCanManage = !!picManageMap[idx];
+  if (!(picVisible[idx] || []).length && !picCanManage) return;
+  picCurrentIdx = idx;
+  picMode = "view";
+  picEditLink = null;
+  renderPicModal(idx);
+  document.getElementById("pic-modal-overlay").classList.add("open");
+}
+
+// Kirim perintah tulis (add/edit/delete) ke Apps Script. Hasilnya dibaca balik
+// (JSON). "actor" = email yang melakukan; server memeriksa ulang bahwa email
+// itu memang leader atau "Menu Editor" untuk sheet tersebut.
+async function picApi(payload){
+  if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
+    throw new Error("Web App URL is not configured.");
+  }
+  const res = await fetch(LOG_WEBAPP_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload)
+  });
+  let data;
+  try { data = await res.json(); }
+  catch (e){ throw new Error("Unexpected response from the server. Make sure the Apps Script has been updated and redeployed."); }
   return data;
 }
 
-// Aturan siapa boleh melihat sebuah link PIC Menu (sama seperti di website).
-function siteCanSeeLink_(link, mySheets, leader, editorFor) {
-  if (leader) return true;
-  if (editorFor.indexOf(link.owner) >= 0) return true;
-  if (!mySheets.length) return false;
-  if (mySheets.indexOf(link.owner) >= 0) return true;
-  if (link.visibleAll) return true;
-  for (var i = 0; i < link.visibleTo.length; i++) {
-    if (mySheets.indexOf(link.visibleTo[i]) >= 0) return true;
-  }
-  return false;
+function refreshPicLocal(idx, note){
+  const meta = sectionMeta[idx];
+  const ctx = getPicContext();
+  picVisible[idx] = (meta.links || []).filter(l => canSeePicLink(l, ctx));
+  renderPicModal(idx, note);
 }
 
-// GET ?action=data&email=...  -> semua data yang dibutuhkan website.
-function handleSiteData(params) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var email = linkNorm_(params && params.email);
-    var base = siteData_(ss);
-    var idx = picIndex_(ss);
-    var mySheets = email ? (idx.emails[email] || []) : [];
-    var leader = email ? !!idx.leaders[email] : false;
-    var developer = email ? !!idx.developers[email] : false;
-    var editorFor = email ? ((idx.editors && idx.editors[email]) || []) : [];
+// Baca & validasi isi form (dipakai Add dan Edit). Mengembalikan null kalau tidak valid.
+function readPicForm(){
+  const name = document.getElementById("pic-f-name").value.trim();
+  const url  = document.getElementById("pic-f-url").value.trim();
+  const desc = document.getElementById("pic-f-desc").value.trim();
+  const vis  = document.getElementById("pic-f-vis").value;
+  if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
+  if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
+    setPicStatus("err", "Please enter a valid URL starting with https://");
+    return null;
+  }
+  return { name, url, desc, vis };
+}
 
-    var links = {};
-    for (var owner in base.linksAll) {
-      links[owner] = base.linksAll[owner].filter(function (l) {
-        return siteCanSeeLink_(l, mySheets, leader, editorFor);
+async function addPicLink(){
+  if (picBusy || !picCanManage || picCurrentIdx === null) return;
+  const idx = picCurrentIdx;
+  const meta = sectionMeta[idx];
+  const f = readPicForm();
+  if (!f) return;
+
+  const btn = document.getElementById("pic-submit");
+  picBusy = true; btn.disabled = true; btn.textContent = "Saving...";
+  setPicStatus("", "");
+  try {
+    const data = await picApi({
+      action: "addLink", actor: getCurrentUserEmail(),
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis
+    });
+    if (!data || !data.ok){
+      setPicStatus("err", (data && data.error) || "Failed to add menu.");
+    } else {
+      const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
+      meta.links.push({
+        owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
+        url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
+        visibleAll: v.all, visibleTo: v.list
+      });
+      picMode = "view";
+      refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." });
+    }
+  } catch (err){
+    setPicStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    picBusy = false;
+    const b = document.getElementById("pic-submit");
+    if (b){ b.disabled = false; b.textContent = "Save"; }
+  }
+}
+
+async function editPicLink(){
+  if (picBusy || !picCanManage || picCurrentIdx === null || !picEditLink) return;
+  const idx = picCurrentIdx;
+  const meta = sectionMeta[idx];
+  const link = picEditLink;
+  const f = readPicForm();
+  if (!f) return;
+
+  const btn = document.getElementById("pic-submit");
+  picBusy = true; btn.disabled = true; btn.textContent = "Saving...";
+  setPicStatus("", "");
+  try {
+    const data = await picApi({
+      action: "editLink", actor: getCurrentUserEmail(),
+      sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis
+    });
+    if (!data || !data.ok){
+      setPicStatus("err", (data && data.error) || "Failed to update menu.");
+    } else {
+      link.name = f.name; link.rawName = f.name;
+      link.url = safeHttpUrl(f.url); link.rawUrl = f.url;
+      link.desc = f.desc;
+      if (f.vis !== "__keep__"){
+        const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
+        link.visibleAll = v.all; link.visibleTo = v.list;
+      }
+      picMode = "view"; picEditLink = null;
+      refreshPicLocal(idx, { type: "ok", text: "Menu updated and saved to the spreadsheet." });
+    }
+  } catch (err){
+    setPicStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    picBusy = false;
+    const b = document.getElementById("pic-submit");
+    if (b){ b.disabled = false; b.textContent = "Save changes"; }
+  }
+}
+
+// Tombol "Delete Menu" aktif hanya kalau ada yang dicentang.
+function updatePicDeleteButton(){
+  const btn = document.getElementById("pic-delete-confirm");
+  if (!btn) return;
+  const n = document.querySelectorAll("[data-pic-check]:checked").length;
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? `Delete Menu (${n})` : "Delete Menu";
+}
+
+async function deleteSelectedPicLinks(){
+  if (picBusy || !picCanManage || picCurrentIdx === null) return;
+  const idx = picCurrentIdx;
+  const meta = sectionMeta[idx];
+  const visible = picVisible[idx] || [];
+  const chosen = Array.from(document.querySelectorAll("[data-pic-check]:checked"))
+    .map(el => visible[Number(el.dataset.picCheck)])
+    .filter(Boolean);
+  if (!chosen.length) return;
+
+  const btn = document.getElementById("pic-delete-confirm");
+  picBusy = true; btn.disabled = true; btn.textContent = "Deleting...";
+  setPicStatus("", "");
+
+  let done = 0, failMsg = "";
+  try {
+    for (const link of chosen){
+      const data = await picApi({
+        action: "deleteLink", actor: getCurrentUserEmail(),
+        sheet: meta.sheetKey, name: link.rawName, url: link.rawUrl
+      });
+      if (data && (data.ok || data.notFound)){
+        meta.links = meta.links.filter(x => x !== link);
+        done++;
+      } else {
+        failMsg = (data && data.error) || "Failed to delete menu.";
+        break;
+      }
+    }
+  } catch (err){
+    failMsg = "Could not reach the server: " + err.message;
+  } finally {
+    picBusy = false;
+  }
+
+  picMode = "view";
+  if (failMsg){
+    refreshPicLocal(idx, { type: "err", text: `${done} of ${chosen.length} deleted. ${failMsg}` });
+  } else {
+    refreshPicLocal(idx, { type: "ok", text: `${done} menu${done === 1 ? "" : "s"} deleted from the spreadsheet.` });
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const open = e.target.closest("[data-pic-sec]");
+  if (open){ openPicMenu(Number(open.dataset.picSec)); return; }
+  const modeBtn = e.target.closest("[data-pic-mode]");
+  if (modeBtn){ setPicMode(modeBtn.dataset.picMode); return; }
+  if (e.target.closest("#pic-edit-continue")){
+    const r = document.querySelector("[data-pic-radio]:checked");
+    if (!r) return;
+    picEditLink = (picVisible[picCurrentIdx] || [])[Number(r.dataset.picRadio)] || null;
+    if (picEditLink){ picMode = "edit"; renderPicModal(picCurrentIdx); }
+    return;
+  }
+  if (e.target.closest("#pic-delete-confirm")) deleteSelectedPicLinks();
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!t || !t.matches) return;
+  if (t.matches("[data-pic-check]")) updatePicDeleteButton();
+  if (t.matches("[data-pic-radio]")){
+    const b = document.getElementById("pic-edit-continue");
+    if (b) b.disabled = false;
+  }
+});
+document.addEventListener("submit", (e) => {
+  const id = e.target && e.target.id;
+  if (id === "pic-add-form"){ e.preventDefault(); addPicLink(); }
+  else if (id === "pic-edit-form"){ e.preventDefault(); editPicLink(); }
+});
+document.getElementById("pic-modal-close").addEventListener("click", () => {
+  document.getElementById("pic-modal-overlay").classList.remove("open");
+});
+document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "pic-modal-overlay") e.target.classList.remove("open");
+});
+
+/* =========================================================================
+   VISIBILITY INDEX (baris "Visibility Index" di sheet Master)
+   - Leader                          : semua index, urutan 1 / 2 / 3
+   - PIC                             : hanya index milik sheet tempat dia terdaftar
+   - Unit Binus Support / BSP /
+     Contact Center                  : semua index, urutan 3 / 2 / 1
+   - Unit lain (karyawan @binus.edu) : semua index, urutan 1 / 2 / 3
+   - Dosen                           : hanya index 1 dan 3 (urutan 1 / 3)
+   "Urutan" = prioritas tampilan pertama kali: dipilih index pertama dalam
+   urutan itu yang section-nya Active. Sheet Inactive otomatis dilewati.
+   ========================================================================= */
+const SUPPORT_UNIT_PATTERN = /\bbinus\s*support\b|\bbsp\b|\bcontact\s*center\b/i;
+const DOSEN_ALLOWED_INDEXES = [1, 3];
+
+/* ---- URUTAN PRIORITAS (mana yang tampil pertama kali) ----------------------
+   CARA TERMUDAH MENGUBAH: lewat sheet Master, TANPA edit kode. Tambahkan baris
+   baru dengan label di Kolom A dan urutannya di Kolom B, contoh:
+        Priority BSP      |  2/3/1
+        Priority Staff    |  1/2/3
+        Priority Leader   |  1/2/3
+        Priority Dosen    |  1/3
+   (pemisah boleh "/", "," atau spasi). Baris yang tidak ada -> pakai nilai
+   bawaan di bawah ini. "BSP" = Binus Support / BSP / Contact Center.
+   Index yang tidak disebut otomatis dicoba setelahnya, urut dari kecil. */
+const DEFAULT_PRIORITY = {
+  leader: [1, 2, 3],
+  bsp:    [2, 3, 1],
+  staff:  [1, 2, 3],
+  dosen:  [1, 3]
+};
+let currentSel = { email: "", set: false, career: null, secKey: null };   // pilihan tab user saat ini (career=null -> semua section)
+
+function parseVisIndex(raw){
+  const m = String(raw == null ? "" : raw).match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+// Baca override urutan prioritas dari baris "Priority ..." di sheet Master.
+function readPriorityConfig(masterRows){
+  const out = Object.assign({}, DEFAULT_PRIORITY);
+  (masterRows || []).forEach(r => {
+    const label = String(r[0] || "").toLowerCase().trim();
+    if (!label.startsWith("priority") && !label.startsWith("prioritas")) return;
+    let key = null;
+    if (/leader/.test(label)) key = "leader";
+    else if (/bsp|support|contact/.test(label)) key = "bsp";
+    else if (/dosen|lecturer/.test(label)) key = "dosen";
+    else if (/staff|lain|other|unit/.test(label)) key = "staff";
+    if (!key) return;
+    for (let c = 1; c < r.length; c++){
+      const nums = String(r[c] || "").match(/\d+/g);
+      if (nums && nums.length){ out[key] = nums.map(n => parseInt(n, 10)); break; }
+    }
+  });
+  return out;
+}
+
+// Gabungkan urutan pilihan + sisanya (tanpa duplikat).
+function finishOrder(preferred, rest){
+  const seen = new Set(), out = [];
+  preferred.concat(rest).forEach(i => { if (!seen.has(i)){ seen.add(i); out.push(i); } });
+  return out;
+}
+
+// ctx: { leader:boolean, userIdx:Set<number>, allIdx:number[], priority:{...} }
+// Hasil: { allowed:Set|null (null = semua), order:number[], strict:boolean }
+function resolveViewerVisibility(ctx){
+  const saved = readSavedLoginState() || {};
+  const asc = ctx.allIdx.slice().sort((a, b) => a - b);
+  const P = ctx.priority || DEFAULT_PRIORITY;
+
+  if (ctx.leader) return { allowed: null, order: finishOrder(P.leader, asc), strict: false, isLeader: true };
+
+  if (saved.role === "Dosen" || saved.domain === "binus.ac.id"){
+    const allowed = new Set(DOSEN_ALLOWED_INDEXES);
+    return {
+      allowed: allowed,
+      order: finishOrder(P.dosen.filter(i => allowed.has(i)), DOSEN_ALLOWED_INDEXES.slice().sort((a, b) => a - b)),
+      strict: true
+    };
+  }
+
+  if (ctx.userIdx.size > 0){   // PIC: boleh membuka semua index; yang dipilih pertama = index sheet miliknya
+    const own = Array.from(ctx.userIdx).sort((a, b) => a - b);
+    return { allowed: null, order: finishOrder(own, asc), strict: false };
+  }
+
+  if (SUPPORT_UNIT_PATTERN.test(String(saved.unit || ""))){
+    return { allowed: null, order: finishOrder(P.bsp, asc), strict: false };
+  }
+  return { allowed: null, order: finishOrder(P.staff, asc), strict: false };
+}
+
+// Info akun yang sedang login: satu baris kecil di paling atas halaman
+// (email · peran · unit/ID · Sign out). Sengaja dibuat tidak mencolok.
+function renderLoginInfo(opts){
+  const box = document.getElementById("acct-bar");
+  if (!box) return;
+  const saved = readSavedLoginState();
+  if (!saved || !saved.email){ box.className = "acct-bar"; box.innerHTML = ""; return; }
+
+  const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
+  if (saved.role === "Dosen"){
+    parts.push(`<span class="acct-role">Lecturer</span>`);
+    if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
+  } else if (opts.isDeveloper){
+    parts.push(`<span class="acct-role">Developer</span>`);
+  } else if (opts.isLeader){
+    // Role mengikuti jabatan di sheet: Section Head / Manager / Senior Manager
+    parts.push(`<span class="acct-role">${escapeHtml(opts.title || "Leader")}</span>`);
+  } else if (opts.isPic){
+    // Editor Menu = Authorized PIC; selain itu Registered PIC
+    parts.push(`<span class="acct-role">${opts.isEditor ? "Authorized PIC" : "Registered PIC"}</span>`);
+  } else {
+    parts.push(`<span class="acct-role">Staff</span>`);
+    if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
+  }
+  // Tombol Sign out hanya untuk Leader (Section Head / Manager / Senior Manager).
+  // PIC (Authorized / Registered), BSP, Staff / Guest, dan Dosen: tidak ada.
+  const canSignOut = !!opts.isLeader;
+  if (canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
+
+  box.className = "acct-bar show";
+  box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
+  const outBtn = document.getElementById("acct-signout");
+  if (outBtn) outBtn.addEventListener("click", () => {
+    if (!confirm("Sign out from " + saved.email + "?")) return;
+    try {
+      localStorage.removeItem(LOGIN_STORAGE_KEY);
+      localStorage.removeItem(DATA_CACHE_KEY);
+    } catch (e){}
+    location.reload();
+  });
+}
+
+async function loadAndRender(isInitial, fromCache){
+  // Kalau ada popup yang sedang dibuka pengguna, tunda dulu pengecekan diam-diam
+  // ini ke siklus berikutnya — supaya tidak mengganti isi halaman di tengah
+  // interaksi pengguna.
+  if (!isInitial && document.querySelector(".modal-overlay.open")) return;
+
+  const sigParts = [];
+  let masterRows;
+  let extra = { links: {}, editorFor: [], leader: false, developer: false, title: "" };
+
+  // Setiap siklus (kecuali dari cache) mengambil data BARU dari server.
+  if (!fromCache) serverDataPromise = null;
+
+  // Ambil data sheet: dari cache (kalau diminta & tersedia) atau dari jaringan.
+  // Semua sheet section diminta SERENTAK (paralel), bukan satu per satu.
+  const runStore = {};
+  const pending = {};
+  const rowsOf = (name) => pending[name] || (pending[name] = (
+    fromCache && cacheSheets && cacheSheets[name]
+      ? Promise.resolve(cacheSheets[name]).then(rows => { runStore[name] = rows; return rows; })
+      : fetchSheet(name).then(rows => { runStore[name] = rows; return rows; })
+  ));
+
+  try {
+    masterRows = await rowsOf(MASTER_SHEET_NAME);
+    // Data pendamping per email: link PIC Menu yang boleh dilihat, sheet yang
+    // boleh dikelola (Editor Menu), dan status leader -- dihitung di server.
+    if (fromCache && cacheExtra){
+      extra = cacheExtra;
+    } else {
+      const d = await getServerData();
+      extra = { links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader, developer: !!d.developer, title: d.title || "" };
+    }
+    sigParts.push("extra:" + JSON.stringify(extra));
+  } catch (err){
+    if (isInitial){
+      renderError(`Tidak bisa membaca sheet "${MASTER_SHEET_NAME}".`, [
+        `Pastikan nama tab persis <code>${MASTER_SHEET_NAME}</code>.`,
+        `Pastikan sharing sudah "Anyone with the link can view".`,
+        `Pesan asli: ${escapeHtml(err.message)}`
+      ]);
+    }
+    // Saat pengecekan diam-diam gagal (mis. jaringan sedang bermasalah),
+    // tampilan yang sudah ada dibiarkan apa adanya; dicoba lagi siklus berikutnya.
+    return;
+  }
+  sigParts.push(JSON.stringify(masterRows));
+
+  const labelOf = (r) => (r[0] || "").toLowerCase().trim();
+  const sheetRow  = masterRows.find(r => labelOf(r) === "sheet");
+  // Nama semua sheet di Master (dinormalisasi) -- dipakai saat membaca kolom
+  // "is Visible from other PIC" di tiap sheet tim.
+  const knownSheets = new Set();
+  if (sheetRow) sheetRow.slice(1).forEach(v => { const n = normSheetName(v); if (n) knownSheets.add(n); });
+  knownSheetsGlobal = knownSheets;
+  const judulRow  = masterRows.find(r => labelOf(r).includes("judul") && !labelOf(r).includes("sub"));
+  const subRow    = masterRows.find(r => labelOf(r).includes("sub"));
+  const careerRow = masterRows.find(r => labelOf(r).includes("career") || labelOf(r).includes("kategori"));
+  const statusRow = masterRows.find(r => labelOf(r).includes("status"));
+  const visRow    = masterRows.find(r => labelOf(r).includes("visibility"));
+
+  if (!sheetRow || !judulRow){
+    if (isInitial){
+      renderError(`Sheet "${MASTER_SHEET_NAME}" ditemukan, tapi baris label "Sheet" dan/atau "Judul" di kolom A tidak ketemu.`, [
+        `Baris pertama di kolom A harus berisi teks <code>Sheet</code>, baris berikutnya <code>Judul</code>.`
+      ]);
+    }
+    return;
+  }
+
+  const numCols = Math.max(sheetRow.length, judulRow.length, subRow ? subRow.length : 0, statusRow ? statusRow.length : 0);
+  const sectionsHtml = [];
+  const newSectionMembers = [];
+  const newSectionMeta = [];
+  const careerTabs = []; // daftar kategori unik (Career), urut sesuai kemunculan pertama di sheet Master
+  const renderedSecs = []; // section yang benar-benar tampil: {id, sheetKey, career, label, visIdx}
+  let introHtml = "";
+  let fetchFailed = false;   // (tidak dipakai lagi: sheet yang gagal dimuat dilewati, bukan menghentikan seluruh pembaruan)
+  const missingSheets = [];  // sheet Active yang tidak ditemukan di server (nama tab tidak cocok)
+
+  // Mulai ambil semua sheet section yang akan ditampilkan SEKARANG juga
+  // (paralel); hasilnya nanti dipakai oleh loop di bawah.
+  for (let c = 1; c < numCols; c++){
+    const key = (sheetRow[c] || "").trim();
+    if (!key) continue;
+    const st = (statusRow ? (statusRow[c] || "") : "").trim().toLowerCase();
+    if (st === "inactive" || st === "nonaktif" || st === "non-aktif") continue;
+    if (key.toLowerCase() === "all" || key.toLowerCase() === MASTER_SHEET_NAME.toLowerCase()) continue;
+    rowsOf(key).catch(() => {}); // error ditangani di loop di bawah
+  }
+
+  // --- Visibility Index: tentukan index apa saja yang boleh dilihat user ini ---
+  const isSheetActive = (c) => {
+    const k = (sheetRow[c] || "").trim();
+    if (!k) return false;
+    const st = (statusRow ? (statusRow[c] || "") : "").trim().toLowerCase();
+    if (st === "inactive" || st === "nonaktif" || st === "non-aktif") return false;
+    return !(k.toLowerCase() === "all" || k.toLowerCase() === MASTER_SHEET_NAME.toLowerCase());
+  };
+  const userIdx = new Set();   // index milik sheet tempat email ini terdaftar (PIC)
+  const allIdx = [];
+  const me = getCurrentUserEmail();
+  if (visRow){
+    for (let c = 1; c < numCols; c++){
+      if (!isSheetActive(c)) continue;
+      const vi = parseVisIndex(visRow[c]);
+      if (vi === null) continue;
+      if (!allIdx.includes(vi)) allIdx.push(vi);
+      if (!me) continue;
+      try {
+        const r = await rowsOf((sheetRow[c] || "").trim());
+        const cc = detectColumns(r[0] || []);
+        if (cc.email >= 0 && r.slice(1).some(row => splitEmails(row[cc.email]).includes(me))) userIdx.add(vi);
+      } catch (e){ /* sheet gagal dibaca: ditangani di loop utama */ }
+    }
+  }
+  const viewVis = resolveViewerVisibility({ leader: !!extra.leader, userIdx: userIdx, allIdx: allIdx, priority: readPriorityConfig(masterRows) });
+  const canSeeIdx = (vi) => {
+    if (!visRow) return true;                 // belum ada baris Visibility Index -> tidak difilter
+    if (vi === null) return !viewVis.strict;  // sel kosong: terlihat, kecuali untuk Dosen
+    return viewVis.allowed === null || viewVis.allowed.has(vi);
+  };
+
+  for (let c = 1; c < numCols; c++){
+    const sectionKey = (sheetRow[c] || "").trim();
+    if (!sectionKey) continue;
+
+    // Baris "status" di sheet Master (Active / Inactive) menentukan apakah
+    // sebuah sheet ditampilkan di halaman atau tidak. Kalau kosong (belum
+    // diisi), section tetap dianggap Active — supaya sheet lama yang belum
+    // punya kolom status tidak tiba-tiba hilang.
+    const rawStatus = (statusRow ? (statusRow[c] || "") : "").trim().toLowerCase();
+    if (rawStatus === "inactive" || rawStatus === "nonaktif" || rawStatus === "non-aktif") continue;
+
+    const header = (judulRow[c] || "").trim() || sectionKey;
+    const subheader = subRow ? (subRow[c] || "").trim() : "";
+
+    if (sectionKey.toLowerCase() === "all" || sectionKey.toLowerCase() === MASTER_SHEET_NAME.toLowerCase()){
+      introHtml = `<div class="hero"><h1 class="hero-title">${linkify(header)}</h1></div>`;
+      continue;
+    }
+
+    const secVisIdx = visRow ? parseVisIndex(visRow[c]) : null;
+    if (!canSeeIdx(secVisIdx)) continue;   // tidak termasuk Visibility Index user ini
+
+    const rawCareer = careerRow ? (careerRow[c] || "").trim() : "";
+    const career = (rawCareer && rawCareer !== "-") ? rawCareer : "";
+
+    let rows;
+    try {
+      rows = await rowsOf(sectionKey);
+    } catch (err){
+      // Semua sheet datang dalam SATU respons server, jadi kegagalan di sini berarti
+      // sheet itu tidak ada / namanya tidak cocok -- bukan masalah jaringan. Sheet
+      // tsb dilewati; sheet lain tetap ditampilkan & diperbarui seperti biasa.
+      missingSheets.push(sectionKey);
+      sigParts.push(`${sectionKey}:ERROR:${err.message}`);
+      continue;
+    }
+    sigParts.push(`${sectionKey}:${JSON.stringify(rows)}`);
+
+    // Sheet yang belum berisi anggota tetap dibuat sebagai section (pesan "belum ada
+    // data PIC"), supaya tab utama / sub-tab-nya tetap muncul.
+    if (rows.length < 1) rows = [[]];
+
+    const cols = detectColumns(rows[0]);
+    const members = rows.slice(1).map(r => ({
+      jabatan: (cols.jabatan >= 0 ? r[cols.jabatan] : "") || "",
+      pic:     (cols.pic >= 0 ? r[cols.pic] : "") || "",
+      email:   (cols.email >= 0 ? r[cols.email] : "") || "",
+      whatsapp:(cols.whatsapp >= 0 ? r[cols.whatsapp] : "") || "",
+      task:    (cols.task >= 0 ? r[cols.task] : "") || "",
+      desc:    (cols.desc >= 0 ? r[cols.desc] : "") || "",
+      dp:      (cols.dp >= 0 ? r[cols.dp] : "") || "",
+    })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
+
+    newSectionMembers.push(members);
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
+    const secIdx = newSectionMembers.length - 1;
+    sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
+    if (career){
+      if (!careerTabs.includes(career)) careerTabs.push(career);
+      renderedSecs.push({
+        id: `sec-${secIdx}`,
+        sheetKey: sectionKey,
+        career: career,
+        visIdx: secVisIdx,
+        label: header.replace(/\s*\n\s*/g, " ").trim() || sectionKey
       });
     }
-    return linkJson_({
-      ok: true,
-      master: base.master,
-      sheets: base.sheets,
-      pwSheets: base.pwSheets,
-      inactive: base.inactive,
-      devs: base.devs || [],
-      links: links,
-      editorFor: editorFor,
-      leader: leader,
-      developer: developer,
-      title: (email && idx.titles && idx.titles[email]) || ''
+  }
+
+  // Saat pengecekan diam-diam (bukan pemuatan awal) dan salah satu sheet gagal
+  // diambil, jangan timpa tampilan yang sudah ada dengan hasil yang tidak
+  // lengkap — biarkan seperti semula, dicoba lagi di siklus berikutnya.
+  if (missingSheets.length && viewVis.isLeader){
+    sectionsHtml.unshift(`
+      <div class="notice error">
+        <strong>${missingSheets.length} sheet berstatus Active tidak ditemukan sehingga tidak ditampilkan:</strong>
+        <ul>${missingSheets.map(n => `<li><code>${escapeHtml(n)}</code></li>`).join("")}</ul>
+        Samakan nama di baris "Sheet" (Master) dengan nama tab di Google Sheet (huruf, spasi, dan tanda hubung harus sama).
+        <br><small>(Pesan ini hanya tampil untuk Leader.)</small>
+      </div>`);
+  }
+
+  // Simpan data terbaru untuk pembukaan halaman berikutnya (hanya dari hasil
+  // jaringan yang lengkap).
+  if (!fromCache && !fetchFailed) saveDataCache(runStore, extra);
+
+  if (sectionsHtml.length === 0 && !introHtml){
+    if (isInitial){
+      renderError(`Sheet "${MASTER_SHEET_NAME}" tidak berisi kolom section yang valid (kolom B dst. pada baris "Sheet" harus diisi nama tab).`);
+    }
+    return;
+  }
+
+  // Bandingkan dengan data terakhir yang ditampilkan. Kalau tidak ada
+  // perubahan sama sekali, hentikan di sini — tampilan dibiarkan persis
+  // seperti semula, tanpa render ulang apapun (benar-benar tidak terlihat).
+  const signature = sigParts.join("\u241F");
+  if (!isInitial && signature === lastDataSignature) return;
+  lastDataSignature = signature;
+  sectionMembers = newSectionMembers;
+  sectionMeta = newSectionMeta;
+  siteLeaderFlag = !!extra.leader;
+
+  // Simpan posisi scroll supaya render ulang diam-diam tidak membuat tampilan "melompat".
+  // (Tab/section yang dipilih disimpan di variabel currentSel.)
+  const prevScrollY = isInitial ? null : window.scrollY;
+
+  document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
+  applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
+  renderLoginInfo({ isDeveloper: !!extra.developer, title: extra.title || "", isLeader: !!viewVis.isLeader, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
+
+  const tabsWrap = document.getElementById("tabs-wrap");
+  if (careerTabs.length > 0){
+    const catBtns = careerTabs.map(k =>
+      `<button class="tab-btn" data-career="${escapeHtml(k)}" type="button" aria-pressed="false">${escapeHtml(k)}</button>`
+    ).join("");
+    tabsWrap.innerHTML = `<div class="tabs-scroll">${catBtns}</div><div class="subtabs-scroll" id="subtabs-scroll"></div>`;
+
+    const subtabsEl = document.getElementById("subtabs-scroll");
+
+    // Pilih section sesuai urutan prioritas user (mis. 3 / 2 / 1): index pertama
+    // dalam urutan itu yang punya section Active.
+    const pickByPriority = (list) => {
+      for (const idx of viewVis.order){
+        const f = list.find(s => s.visIdx === idx);
+        if (f) return f;
+      }
+      return list[0];
+    };
+
+    // Terapkan pilihan saat ini (currentSel) ke tampilan:
+    //   Selalu tepat satu section yang tampil (career + secKey).
+    // Tab utama (kategori): SELALU wajib ada satu yang terpilih untuk semua user.
+    // Sub-tab (section): wajib pilih satu juga, KECUALI Leader -- Leader boleh
+    // mematikan sub-tab yang aktif sehingga semua section di kategori itu tampil.
+    // Hanya LEADER yang boleh membiarkan sub-tab tidak terpilih (semua sub section tampil).
+    // Editor Menu dan user lain: wajib pilih salah satu sub-tab.
+    const canToggleSub = !!viewVis.isLeader;
+    const applySel = () => {
+      const { career, secKey } = currentSel;
+      tabsWrap.querySelectorAll(".tab-btn").forEach(b => {
+        const on = b.dataset.career === career;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", String(on));
+      });
+      document.querySelectorAll(".section[data-career]").forEach(el => {
+        const c = el.dataset.career;
+        let show = true;
+        if (career && c){
+          show = (c === career) && (!secKey || el.dataset.sheet === secKey);
+        }
+        el.style.display = show ? "" : "none";
+      });
+      const list = career ? renderedSecs.filter(s => s.career === career) : [];
+      if (list.length <= 1){
+        subtabsEl.innerHTML = "";
+        subtabsEl.classList.remove("open");
+        return;
+      }
+      subtabsEl.innerHTML = list.map(item =>
+        `<button class="subtab-btn${item.sheetKey === secKey ? " active" : ""}" data-sheet-key="${escapeHtml(item.sheetKey)}" type="button" aria-pressed="${item.sheetKey === secKey}">${escapeHtml(item.label)}</button>`
+      ).join("");
+      subtabsEl.classList.add("open");
+      subtabsEl.querySelectorAll(".subtab-btn").forEach(sBtn => {
+        sBtn.addEventListener("click", () => {
+          if (currentSel.secKey === sBtn.dataset.sheetKey){
+            if (!canToggleSub) return;       // user biasa: wajib pilih salah satu
+            currentSel.secKey = null;        // Leader/Editor: kembali ke semua section di kategori ini
+          } else {
+            currentSel.secKey = sBtn.dataset.sheetKey;
+          }
+          applySel();
+        });
+      });
+    };
+
+    tabsWrap.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (currentSel.career === btn.dataset.career) return;   // tab utama: wajib pilih satu (semua user)
+        const list = renderedSecs.filter(s => s.career === btn.dataset.career);
+        if (!list.length) return;
+        // Leader: sub-tab tidak diklik -> semua sub section di kategori itu tampil.
+        // User lain: langsung ke satu section prioritas pertama di kategori itu.
+        const pick = pickByPriority(list);
+        currentSel = { email: getCurrentUserEmail(), set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
+        applySel();
+      });
     });
-  } catch (err) {
-    return linkJson_({ ok: false, error: 'Server error: ' + err.message });
+
+    // Pilihan awal (hanya saat user ini belum pernah memilih). Setelah itu pilihan
+    // user dipertahankan walau data di-refresh otomatis.
+    const me2 = getCurrentUserEmail();
+    const selValid = currentSel.set && currentSel.email === me2 && !!currentSel.career && (
+      currentSel.secKey
+        ? renderedSecs.some(s => s.sheetKey === currentSel.secKey && s.career === currentSel.career)
+        : (canToggleSub && careerTabs.includes(currentSel.career))
+    );
+    if (!selValid){
+      const pick = pickByPriority(renderedSecs);
+      // Leader: tab utama terpilih (prioritas Visibility Index), sub-tab TIDAK diklik -> semua sub section tampil.
+      // User lain: langsung ke satu section prioritas pertama.
+      currentSel = { email: me2, set: true, career: pick.career, secKey: viewVis.isLeader ? null : pick.sheetKey };
+    }
+    applySel();
+  } else {
+    tabsWrap.innerHTML = "";
+  }
+
+  document.querySelectorAll(".team-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.target.split("-")[1], 10);
+      const members = sectionMembers[idx];
+      const headerEl = btn.closest(".section").querySelector(".header");
+      const sheetName = btn.closest(".section").dataset.sheet || "";
+      openModal(headerEl.textContent, sheetName, members);
+    });
+  });
+
+  // Kembalikan posisi scroll (pilihan tab sudah dipulihkan lewat currentSel).
+  if (!isInitial && prevScrollY !== null) window.scrollTo(0, prevScrollY);
+}
+
+/* =========================================================================
+   LOGIN GATE — hanya email domain @binus.edu (karyawan) yang boleh masuk.
+   Domain mahasiswa @binus.ac.id ditolak secara eksplisit dengan pesan
+   khusus. Status login disimpan di localStorage supaya pengguna yang sudah
+   pernah masuk tidak perlu login ulang setiap kali membuka halaman.
+   CATATAN: ini hanya penjagaan tampilan (UI gate) di sisi klien, bukan
+   keamanan data sesungguhnya — sumber data (Google Sheet) tetap bisa
+   diakses langsung lewat URL CSV publik oleh siapa pun yang mengetahuinya.
+   ========================================================================= */
+// Domain email yang boleh lanjut ke Step 2 (masing-masing dengan alur
+// pertanyaan lanjutan yang berbeda — lihat STEP_EL & handler di bawah).
+const DOMAIN_EDU = "binus.edu";       // karyawan -> ditanya Unit
+const DOMAIN_AC_ID = "binus.ac.id";   // dosen/mahasiswa -> ditanya peran dulu
+
+// Kalau pengecekan "apakah email ini PIC?" ke Apps Script GAGAL (Apps Script
+// error / belum diperbarui / kuota habis / internet putus):
+//   true  -> lanjut ke langkah Department/Unit seperti dulu, supaya SEMUA
+//            karyawan tidak ikut terkunci gara-gara Apps Script bermasalah.
+//   false -> sign in dihentikan dengan pesan error (lebih ketat, tapi semua
+//            karyawan @binus.edu tidak bisa masuk selama Apps Script bermasalah).
+const PIC_LOOKUP_FAIL_OPEN = true;
+
+// Data login yang tersimpan sekarang berupa OBJECT (bukan cuma email polos
+// seperti sebelumnya), supaya Unit / Kode Dosen ikut diingat untuk
+// auto-login berikutnya. Contoh isi:
+//   { email, domain: "binus.edu", unit: "..." }
+//   { email, domain: "binus.edu", pic: true }          <- email PIC (tanpa Unit)
+//   { email, domain: "binus.ac.id", role: "Dosen", kodeDosen: "..." }
+const LOGIN_STORAGE_KEY = "srsc_login_email";
+
+// Menyimpan sementara email yang sedang diproses di antara Step 1 -> Step 2/3
+// (baru benar-benar dianggap "login" setelah pertanyaan lanjutannya terisi).
+let pendingEmail = "";
+
+// Kirim catatan "siapa membuka website, kapan, dan hasilnya apa" ke Sheet
+// "Logs" lewat Apps Script. Dipanggil "fire-and-forget": halaman tidak
+// menunggu ataupun peduli hasil pengiriman ini, jadi kalaupun gagal (mis.
+// tidak ada internet sesaat), proses login pengguna tetap lanjut seperti
+// biasa dan tidak error.
+// Parameter "status" menjelaskan apa yang terjadi: "Berhasil" (sign in
+// sukses), "Ditolak - ..." (email dimasukkan tapi ditolak), atau
+// "Auto-login" (buka lagi, datanya sudah diingat browser).
+// Parameter "extra" adalah isian Unit (untuk @binus.edu) atau Kode Dosen
+// (untuk @binus.ac.id) yang akan ditulis Apps Script ke Kolom D Sheet Logs.
+// ID acak per perangkat/browser (disimpan di localStorage). Dikirim ke sheet Logs
+// supaya "Hapus Login" bisa menghapus semua log akun yang sama DI PERANGKAT YANG SAMA
+// (bukan di perangkat lain milik akun itu).
+function getDeviceId(){
+  try {
+    let id = localStorage.getItem("srsc_device_id");
+    if (!id){
+      const arr = new Uint8Array(6);
+      (window.crypto || window.msCrypto).getRandomValues(arr);
+      id = Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem("srsc_device_id", id);
+    }
+    return id;
+  } catch (e){ return ""; }
+}
+
+function logSignIn(email, status, extra, keterangan){
+  if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return;
+  fetch(LOG_WEBAPP_URL, {
+    method: "POST",
+    mode: "no-cors", // Apps Script Web App tidak mengizinkan fetch biasa
+                      // dibaca balik hasilnya dari domain lain (CORS). Mode
+                      // ini membuat browser tetap MENGIRIM datanya, hanya
+                      // saja kita tidak bisa membaca balasannya — tidak apa,
+                      // karena kita memang tidak butuh balasan itu.
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    // "status" sengaja dibuat SINGKAT ("Berhasil"/"Auto-login"/"Ditolak")
+    // supaya Kolom C di sheet rapi -- penjelasan detailnya (kalau ada)
+    // dikirim terpisah lewat "keterangan", ditulis ke Kolom E.
+    body: JSON.stringify({ email: email, status: status || "Berhasil", extra: extra || "", keterangan: keterangan || "", device: getDeviceId() })
+  }).catch(() => { /* diamkan saja kalau gagal, jangan ganggu proses login */ });
+}
+
+function getEmailDomain(email){
+  const parts = String(email || "").trim().toLowerCase().split("@");
+  return parts.length === 2 ? parts[1] : "";
+}
+
+function showLoginError(message){
+  const el = document.getElementById("login-error");
+  el.textContent = message;
+  el.classList.add("show");
+}
+
+function clearLoginError(){
+  const el = document.getElementById("login-error");
+  el.textContent = "";
+  el.classList.remove("show");
+}
+
+function hideLoginGate(){
+  document.getElementById("login-gate").classList.add("hidden");
+}
+
+// Semua elemen langkah (step) dalam kartu login, dipakai untuk gonta-ganti
+// tampilan: sembunyikan semua dulu, baru tampilkan satu yang relevan.
+const STEP_EL = {
+  email: document.getElementById("login-form"),
+  unit: document.getElementById("unit-form"),
+  password: document.getElementById("password-form"),
+  role: document.getElementById("role-step"),
+  kodeDosen: document.getElementById("kodedosen-form")
+};
+
+function goToStep(stepName){
+  Object.values(STEP_EL).forEach(el => el.classList.add("hidden"));
+  STEP_EL[stepName].classList.remove("hidden");
+  document.querySelectorAll(".login-email-echo").forEach(el => { el.value = pendingEmail; });
+  clearLoginError();
+}
+
+// Status pencarian PIC untuk email yang sedang diproses (dipakai tombol
+// "Continue as Guest" & tombol Back di langkah Department/Unit).
+let pendingPic = null;
+let unitFromPicStep = false;
+
+function resetToEmailStep(){
+  pendingEmail = "";
+  pendingPic = null;
+  unitFromPicStep = false;
+  document.getElementById("login-unit").value = "";
+  document.getElementById("login-password").value = "";
+  document.getElementById("login-kodedosen").value = "";
+  goToStep("email");
+  document.getElementById("login-email").focus();
+}
+
+function completeLogin(state, statusText, extraForLog, keteranganText){
+  localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(state));
+  // Login pertama kali (status "Berhasil") dikasih keterangan "Tersimpan" --
+  // supaya di sheet jelas ini bukan baris kosong, tapi memang login ini yang
+  // baru tersimpan di browser-nya (untuk dipakai auto-login berikutnya).
+  logSignIn(state.email, statusText, extraForLog, keteranganText || "Tersimpan");
+  hideLoginGate();
+  main();
+}
+
+// Membaca data login tersimpan di localStorage. Ditulis defensif karena versi
+// lama skrip ini menyimpan email sebagai teks polos (bukan JSON) -- kalau
+// ketemu format lama itu, anggap datanya belum lengkap (bukan auto-login),
+// supaya pengguna lama diminta melengkapi Unit / Kode Dosen sekali lagi.
+function readSavedLoginState(){
+  const raw = localStorage.getItem(LOGIN_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && parsed.email) return parsed;
+    return null;
+  } catch (e){
+    return null;
   }
 }
+
+// Menanyakan ke Apps Script: "email ini baru saja dipaksa logout (dicentang
+// 'Hapus Login' di Kolom E sheet Logs) belum?". Dipakai SEBELUM auto-login
+// dipercaya. Kalau gagal cek (mis. tidak ada internet), dianggap TIDAK
+// revoked -- supaya user tetap bisa auto-login seperti biasa, bukan malah
+// terkunci gara-gara koneksi bermasalah.
+async function checkLoginRevoked(email){
+  if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return false;
+  try {
+    // "&_=" + Date.now() dan cache:"no-store" memaksa browser BENAR-BENAR
+    // bertanya ke server setiap kali, bukan memakai jawaban lama yang
+    // sempat tersimpan di cache (URL-nya kalau tidak begini akan selalu
+    // sama persis untuk email yang sama, jadi rawan di-cache browser).
+    const url = LOG_WEBAPP_URL + "?action=checkRevoked&email=" + encodeURIComponent(email) + "&device=" + encodeURIComponent(getDeviceId()) + "&_=" + Date.now();
+    // Batas waktu 8 detik: kalau Apps Script lambat/macet, jangan biarkan
+    // user menunggu selamanya -- anggap tidak revoked (sama seperti saat
+    // jaringan gagal) lalu lanjut auto-login.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+      const data = await res.json();
+      return !!data.revoked;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err){
+    // Kalau ini muncul di Console (F12), berarti pemanggilan ke Apps
+    // Script gagal -- kemungkinan besar Web App-nya belum di-deploy ulang
+    // (deploy versi lama masih belum punya action "checkRevoked").
+    console.warn("Gagal cek status revoke:", err);
+    return false;
+  }
+}
+
+// Auto-login OPTIMISTIS: kalau browser sudah punya data login yang lengkap,
+// halaman LANGSUNG ditampilkan -- tidak menunggu Apps Script (yang bisa lambat
+// saat "cold start"). Pengecekan "dipaksa logout" (Hapus Login) berjalan di
+// latar belakang; kalau ternyata di-revoke, data login dihapus dan halaman
+// dimuat ulang ke form Sign In. (Server menghapus tanda revoke begitu
+// dibaca, jadi hasilnya HARUS selalu ditindaklanjuti seperti di bawah.)
+async function tryAutoLogin(){
+  const saved = readSavedLoginState();
+  if (!saved) return false;
+
+  let extraForLog;
+  if (saved.pic || (saved.domain === DOMAIN_EDU && saved.unit)){
+    extraForLog = saved.unit || "PIC";
+  } else if (saved.domain === DOMAIN_AC_ID && saved.role === "Dosen" && saved.kodeDosen){
+    extraForLog = saved.kodeDosen;
+  } else {
+    return false;
+  }
+
+  hideLoginGate();
+  main();
+
+  checkLoginRevoked(saved.email).then(revoked => {
+    if (revoked){
+      localStorage.removeItem(LOGIN_STORAGE_KEY);
+      location.reload();
+      return;
+    }
+    logSignIn(saved.email, "Auto-login", extraForLog, "sudah pernah sign in");
+  });
+  return true;
+}
+
+// Bertanya ke Apps Script: "email ini PIC (terdata di sheet tim) atau bukan,
+// dan apakah sheet-nya memakai password?" (GET -- hasilnya perlu dibaca).
+// Mengembalikan:
+//   { ok:true,  isPic:false }                      -> bukan PIC (tanya Unit seperti biasa)
+//   { ok:true,  isPic:true, needsPassword:true }   -> PIC, minta Password
+//   { ok:true,  isPic:true, needsPassword:false }  -> PIC, sheet tanpa password: langsung masuk
+//   { ok:false }                                   -> gagal cek (jaringan / respons tidak terbaca)
+// Respons yang tidak punya field "isPic" dianggap server lama (Apps Script
+// belum diperbarui) -> diperlakukan sebagai bukan PIC supaya login karyawan
+// tidak terkunci.
+async function lookupPicLogin(email){
+  if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return { ok: true, isPic: false };
+  try {
+    const url = LOG_WEBAPP_URL + "?action=picLogin&email=" + encodeURIComponent(email) + "&_=" + Date.now();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000); // Apps Script bisa lambat saat "cold start"
+    try {
+      const res = await fetch(url, { method: "GET", cache: "no-store", signal: ctrl.signal });
+      const data = await res.json();
+      if (typeof data.isPic !== "boolean"){
+        console.warn("picLogin: respons tidak dikenali (Apps Script belum diperbarui?)", data);
+        return { ok: true, isPic: false };
+      }
+      return { ok: true, isPic: data.isPic, needsPassword: !!data.needsPassword };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err){
+    // Lihat di Console (F12): "AbortError" = server terlalu lama menjawab;
+    // "Unexpected token <" / "Failed to fetch" = Apps Script belum
+    // diperbarui/di-deploy ulang, belum diberi izin, atau error di dalamnya.
+    console.warn("picLogin gagal:", err && err.name, err && err.message);
+    return { ok: false };
+  }
+}
+
+// ---- Percepatan login PIC ----------------------------------------------
+// Begitu form Sign In tampil (selagi user mengetik email), di latar belakang:
+//  1. "Membangunkan" Apps Script (ping "warm") supaya tidak cold start saat
+//     dibutuhkan, dan
+//  2. Mengambil data sheet publik (paralel) untuk membuat indeks lokal:
+//     email -> sheet mana saja, dan sheet mana yang memakai password.
+// Dengan indeks ini, langkah email diputuskan LANGSUNG di browser (tanpa
+// menunggu server). Kalau indeks belum siap dalam 2,5 detik / gagal dibuat,
+// dipakai pengecekan lewat Apps Script seperti sebelumnya. Password tetap
+// dibandingkan di server.
+let picIndexPromise = null;
+
+function startLoginPrefetch(){
+  if (picIndexPromise) return;
+
+  if (LOG_WEBAPP_URL && !LOG_WEBAPP_URL.includes("PASTE_URL")){
+    // no-cors: cukup "mengetuk" server, balasannya tidak perlu dibaca.
+    fetch(LOG_WEBAPP_URL + "?action=warm&_=" + Date.now(), { mode: "no-cors", cache: "no-store" }).catch(() => {});
+  }
+
+  picIndexPromise = (async () => {
+    const d = await getServerData();      // belum login -> tanpa link PIC Menu
+    const emails = {};
+    Object.keys(d.sheets || {}).forEach(name => {
+      const rows = d.sheets[name];
+      if (!rows || rows.length < 2) return;
+      const key = normSheetName(name);
+      const cEml = rows[0].map(normalizeHeader).findIndex(h => h.includes("email") || h.includes("e-mail"));
+      if (cEml < 0) return;
+      rows.slice(1).forEach(r => {
+        splitEmails(r[cEml]).forEach(em => {
+          const list = emails[em] || (emails[em] = []);
+          if (!list.includes(key)) list.push(key);
+        });
+      });
+    });
+    const hasPw = {};
+    (d.pwSheets || []).forEach(k => { hasPw[k] = true; });
+    return { emails: emails, hasPw: hasPw, inactive: new Set(d.inactive || []), devs: new Set(d.devs || []) };
+  })();
+  picIndexPromise.catch(() => {});
+}
+
+// SHA-256 (hex) dari teks; null kalau browser tidak mendukung.
+async function sha256Hex(text){
+  try {
+    if (!window.crypto || !crypto.subtle) return null;
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  } catch (e){ return null; }
+}
+
+// Keputusan lokal: { ok, isPic, needsPassword } atau null kalau indeks belum siap.
+async function localPicLookup(email){
+  if (!picIndexPromise) return null;
+  try {
+    const idx = await Promise.race([
+      picIndexPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("lambat")), 2500))
+    ]);
+    const em = String(email).trim().toLowerCase();
+    // Developer (hash email dari server): selalu PIC + wajib password.
+    if (idx.devs.size > 0){
+      const hd = await sha256Hex(em);
+      if (hd === null) return null;   // tidak bisa hash -> biarkan server yang memutuskan
+      if (idx.devs.has(hd)) return { ok: true, isPic: true, needsPassword: true };
+    }
+    // Email yang juga tercatat di sheet NONAKTIF tidak ada di data lokal ->
+    // biarkan server yang memutuskan (lebih lambat, tapi benar).
+    if (idx.inactive.size > 0){
+      const h = await sha256Hex(em);
+      if (h === null || idx.inactive.has(h)) return null;
+    }
+    const sheets = idx.emails[em] || [];
+    return { ok: true, isPic: sheets.length > 0, needsPassword: sheets.some(k => idx.hasPw[k]) };
+  } catch (err){
+    return null;
+  }
+}
+
+// Memeriksa password PIC ke Apps Script (password dibandingkan di server,
+// bukan di browser).
+async function verifyPicPassword(email, password){
+  try {
+    const url = LOG_WEBAPP_URL + "?action=verifyPicPassword&email=" + encodeURIComponent(email) +
+                "&password=" + encodeURIComponent(password) + "&_=" + Date.now();
+    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    const data = await res.json();
+    return { ok: true, valid: !!data.valid, locked: !!data.locked };
+  } catch (err){
+    console.warn("verifyPicPassword gagal:", err && err.name, err && err.message);
+    return { ok: false, valid: false, locked: false };
+  }
+}
+
+// ---- STEP 1: email ----
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const emailInput = document.getElementById("login-email");
+  const email = emailInput.value.trim();
+
+  if (!isValidEmail(email)){
+    showLoginError("Access denied. Please use a valid email address.");
+    return;
+  }
+
+  const domain = getEmailDomain(email);
+  pendingEmail = email;
+
+  if (domain === DOMAIN_EDU || domain === DOMAIN_AC_ID){
+    // Cek dulu: apakah email ini PIC / Leader / Developer? PIC tidak ditanya Unit -- diganti Password
+    // (kalau sheet-nya memakai password) atau langsung masuk (kalau tidak).
+    const submitBtn = document.querySelector("#login-form button[type='submit']");
+    const originalLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Checking...";
+    clearLoginError();
+
+    let pic = await localPicLookup(email);          // instan kalau indeks lokal sudah siap
+    if (!pic) pic = await lookupPicLogin(email);    // cadangan: tanya Apps Script
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalLabel;
+
+    if (!pic.ok){
+      if (PIC_LOOKUP_FAIL_OPEN){
+        // Gagal cek PIC -> perlakukan seperti pengguna biasa.
+        console.warn("Pengecekan PIC gagal -> lanjut ke alur pengguna biasa.");
+        if (domain === DOMAIN_AC_ID){ goToStep("role"); return; }
+        goToStep("unit");
+        document.getElementById("login-unit").focus();
+        return;
+      }
+      showLoginError("Failed to verify your account. Please check your internet connection and try again.");
+      return;
+    }
+
+    if (pic.isPic){
+      // Email terdata sebagai PIC / Leader -> langkah Password + pilihan Guest.
+      pendingPic = pic;
+      const needsPw = !!pic.needsPassword;
+      document.getElementById("pw-wrap").classList.toggle("hidden", !needsPw);
+      document.getElementById("login-password").required = needsPw;
+      document.getElementById("password-hint").textContent = needsPw
+        ? "Your email is registered as a PIC / Leader. Enter your password to sign in, or continue as a guest."
+        : "Your email is registered as a PIC / Leader. Press Sign In to continue, or continue as a guest.";
+      goToStep("password");
+      if (needsPw) document.getElementById("login-password").focus();
+      return;
+    }
+
+    // Email tidak terdata:
+    //   @binus.edu    -> Staff (Email + Department/Unit)
+    //   @binus.ac.id  -> Dosen (Email + Role + Lecturer ID)
+    unitFromPicStep = false;
+    if (domain === DOMAIN_AC_ID){
+      goToStep("role");
+      return;
+    }
+    goToStep("unit");
+    document.getElementById("login-unit").focus();
+    return;
+  }
+
+  logSignIn(email, "Ditolak", "", "domain tidak diizinkan");
+  showLoginError("Access denied. Please use a valid email address.");
+});
+
+// ---- Ikon "mata": tekan & tahan = tampilkan password, lepas = sembunyikan ----
+(function(){
+  const input = document.getElementById("login-password");
+  const btn = document.getElementById("pw-toggle");
+  const show = () => { input.type = "text"; btn.classList.add("on"); };
+  const hide = () => { input.type = "password"; btn.classList.remove("on"); };
+
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();                       // jangan ambil fokus / seleksi teks
+    show();
+    try { btn.setPointerCapture(e.pointerId); } catch (err) {}  // tetap "tertahan" walau jari bergeser
+  });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach(t => btn.addEventListener(t, hide));
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());   // tahan lama di HP tidak memunculkan menu
+  btn.addEventListener("keydown", (e) => {                          // akses keyboard: tahan Spasi / Enter
+    if (e.key === " " || e.key === "Enter"){ e.preventDefault(); show(); }
+  });
+  btn.addEventListener("keyup", hide);
+  btn.addEventListener("blur", hide);
+  window.addEventListener("blur", hide);
+  document.addEventListener("visibilitychange", hide);
+})();
+
+// ---- STEP 2a-PIC: Password (untuk email PIC @binus.edu) ----
+document.getElementById("password-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const password = document.getElementById("login-password").value;
+  const needsPw = !pendingPic || pendingPic.needsPassword;
+
+  // PIC / Leader tanpa password di spreadsheet -> langsung Sign In.
+  if (!needsPw){
+    completeLogin({ email: pendingEmail, domain: getEmailDomain(pendingEmail), pic: true }, "Berhasil", "PIC");
+    return;
+  }
+  if (!password.trim()){
+    showLoginError("Password cannot be empty.");
+    return;
+  }
+
+  const submitBtn = document.querySelector("#password-form button[type='submit']");
+  const originalLabel = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Checking...";
+  clearLoginError();
+
+  const result = await verifyPicPassword(pendingEmail, password);
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = originalLabel;
+
+  if (!result.ok){
+    showLoginError("Failed to verify password. Please check your internet connection and try again.");
+    return;
+  }
+  if (result.locked){
+    logSignIn(pendingEmail, "Ditolak", "", "Password salah berulang (terkunci sementara)");
+    showLoginError("Too many failed attempts. Please try again in a few minutes.");
+    return;
+  }
+  if (!result.valid){
+    logSignIn(pendingEmail, "Ditolak", "", "Password salah");
+    document.getElementById("login-password").value = "";
+    showLoginError("Access denied. Incorrect password.");
+    return;
+  }
+
+  completeLogin({ email: pendingEmail, domain: getEmailDomain(pendingEmail), pic: true }, "Berhasil", "PIC");
+});
+document.getElementById("password-back").addEventListener("click", resetToEmailStep);
+
+// Continue as Guest: peran = pengguna biasa (bukan sesuai spreadsheet),
+// wajib mengisi Department/Unit.
+document.getElementById("password-guest").addEventListener("click", () => {
+  document.getElementById("login-password").value = "";
+  unitFromPicStep = true;
+  goToStep("unit");
+  document.getElementById("login-unit").focus();
+});
+
+// ---- STEP 2a: Unit (untuk @binus.edu) ----
+document.getElementById("unit-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const unit = document.getElementById("login-unit").value.trim();
+  if (!unit){
+    showLoginError("Department/Unit cannot be empty.");
+    return;
+  }
+  completeLogin({ email: pendingEmail, domain: DOMAIN_EDU, unit: unit, guest: true }, "Berhasil", unit, "Tersimpan (Guest)");
+});
+document.getElementById("unit-back").addEventListener("click", () => {
+  if (unitFromPicStep && pendingPic){
+    goToStep("password");           // kembali ke langkah Password
+    unitFromPicStep = false;
+  } else {
+    resetToEmailStep();
+  }
+});
+
+// ---- STEP 2b: pilih Dosen / Mahasiswa (untuk @binus.ac.id) ----
+document.getElementById("role-mahasiswa-btn").addEventListener("click", () => {
+  logSignIn(pendingEmail, "Ditolak", "", "Mahasiswa (@binus.ac.id)");
+  resetToEmailStep();
+  showLoginError("Access denied. Please use a valid email address.");
+});
+document.getElementById("role-dosen-btn").addEventListener("click", () => {
+  goToStep("kodeDosen");
+  document.getElementById("login-kodedosen").focus();
+});
+document.getElementById("role-back").addEventListener("click", resetToEmailStep);
+
+// Mengecek apakah suatu Kode Dosen benar-benar terdaftar di Sheet
+// "Data Dosen" (Kolom A), dengan bertanya ke Apps Script (GET, bukan
+// fire-and-forget seperti logSignIn -- di sini kita BUTUH jawabannya).
+// Mengembalikan Promise<boolean>: true kalau ketemu, false kalau tidak
+// ketemu ATAU kalau terjadi error jaringan (supaya user tidak nyangkut,
+// error jaringan dianggap "tidak ketemu" lalu ditampilkan pesan yang
+// membedakan keduanya lewat parameter networkError pada pemanggilnya).
+async function checkKodeDosenTerdaftar(kodeDosen){
+  if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return { ok: true, found: true }; // fallback: jangan blokir kalau URL belum diisi
+  try {
+    const url = LOG_WEBAPP_URL + "?action=checkDosen&kode=" + encodeURIComponent(kodeDosen) + "&_=" + Date.now();
+    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    const data = await res.json();
+    return { ok: true, found: !!data.found };
+  } catch (err){
+    return { ok: false, found: false }; // ok:false = gagal cek (bukan berarti tidak terdaftar)
+  }
+}
+
+// ---- STEP 3: Kode Dosen (untuk @binus.ac.id yang memilih Dosen) ----
+document.getElementById("kodedosen-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const kodeDosen = document.getElementById("login-kodedosen").value.trim();
+  if (!kodeDosen){
+    showLoginError("Lecturer code cannot be empty.");
+    return;
+  }
+
+  // Nonaktifkan tombol + ganti teksnya sementara, supaya user tahu sedang
+  // dicek dan tidak klik dobel selagi menunggu jawaban dari Apps Script.
+  const submitBtn = document.querySelector("#kodedosen-form button[type='submit']");
+  const originalLabel = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Checking...";
+  clearLoginError();
+
+  const result = await checkKodeDosenTerdaftar(kodeDosen);
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = originalLabel;
+
+  if (!result.ok){
+    showLoginError("Failed to verify lecturer code. Please check your internet connection and try again.");
+    return;
+  }
+
+  if (!result.found){
+    logSignIn(pendingEmail, "Ditolak", kodeDosen, "Kode Dosen tidak ditemukan");
+    showLoginError("Access denied. Lecturer code not found.");
+    return;
+  }
+
+  completeLogin(
+    { email: pendingEmail, domain: DOMAIN_AC_ID, role: "Dosen", kodeDosen: kodeDosen },
+    "Berhasil",
+    kodeDosen
+  );
+});
+document.getElementById("kodedosen-back").addEventListener("click", () => {
+  goToStep("role");
+});
+
+(async () => {
+  let loggedInOtomatis = false;
+  try {
+    loggedInOtomatis = await tryAutoLogin();
+  } catch (err){
+    console.warn("Auto-login error:", err);
+  }
+  if (!loggedInOtomatis){
+    // Auto-login tidak berlaku (tidak ada data tersimpan, sudah di-revoke,
+    // atau data tidak lengkap) -> BARU sekarang tampilkan form Sign In.
+    document.getElementById("login-gate").classList.remove("checking");
+    document.getElementById("login-email").focus();
+    startLoginPrefetch(); // siapkan pengecekan PIC selagi user mengetik email
+  }
+})();
+
+async function main(){
+  // Kalau ada cache dari kunjungan sebelumnya: tampilkan INSTAN dari cache,
+  // lalu segarkan diam-diam dari Google Sheet. Kalau tidak: muat seperti biasa.
+  const cached = loadDataCache();
+  if (cached && cached.sheets[MASTER_SHEET_NAME]){
+    cacheSheets = cached.sheets;
+    cacheExtra = cached.extra;
+    await loadAndRender(true, true);
+    loadAndRender(false).catch(() => {});
+  } else {
+    await loadAndRender(true);
+  }
+
+  // Cek pembaruan data secara berkala. Selama tidak ada perubahan di Google
+  // Sheet sumber, tampilan tidak diapa-apakan sama sekali (tidak reload,
+  // tidak ada indikator loading) — benar-benar tidak terlihat oleh pengguna.
+  let silentBusy = false;
+  const silentRefresh = () => {
+    if (silentBusy || document.visibilityState !== "visible") return;
+    silentBusy = true;
+    loadAndRender(false).catch(() => {}).finally(() => { silentBusy = false; });
+  };
+  setInterval(silentRefresh, REFRESH_INTERVAL_MS);
+
+  // Saat pengguna kembali ke tab ini setelah sempat berpindah, lakukan satu
+  // kali pengecekan tambahan (tetap diam-diam) — supaya perubahan data lebih
+  // cepat terlihat tanpa harus menunggu penuh 15 menit, tanpa menambah beban
+  // permintaan saat halaman tidak sedang dilihat.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") silentRefresh();
+  });
+}
+</script>
+</body>
+</html>

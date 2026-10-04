@@ -933,7 +933,7 @@ function parseCSV(text){
 // langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
 // hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
 // dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
-const DATA_CACHE_KEY = "srsc_data_cache_v6";
+const DATA_CACHE_KEY = "srsc_data_cache_v8";
 let cacheSheets = null;
 let cacheExtra = null;
 function loadDataCache(){
@@ -1185,7 +1185,7 @@ function memberCardHtml(m, sectionIdx, memberIdx){
       <div class="task">${escapeHtml(m.task || "-")}</div>
       <hr>
       <div class="task-desc">${escapeHtml(m.desc || "-")}</div>
-      ${m._row && (siteTeamPermissions.edit || siteTeamPermissions.delete) ? `<div class="team-card-actions">${siteTeamPermissions.edit ? `<button type="button" class="team-edit-btn" data-team-edit="${sectionIdx}" data-team-member="${memberIdx}">Edit</button>` : ""}${siteTeamPermissions.delete ? `<button type="button" class="team-delete-btn" data-team-delete="${sectionIdx}" data-team-member="${memberIdx}">Delete</button>` : ""}</div>` : ""}
+  ${m._row && (canEditTeamSection(sectionIdx) || siteTeamPermissions.delete) ? `<div class="team-card-actions">${canEditTeamSection(sectionIdx) ? `<button type="button" class="team-edit-btn" data-team-edit="${sectionIdx}" data-team-member="${memberIdx}">Edit</button>` : ""}${siteTeamPermissions.delete ? `<button type="button" class="team-delete-btn" data-team-delete="${sectionIdx}" data-team-member="${memberIdx}">Delete</button>` : ""}</div>` : ""}
     </div>`;
 }
 
@@ -1195,7 +1195,7 @@ let teamEditBusy = false;
 function openModal(header, sheetKey, members, sectionIdx){
   // Baris Group disembunyikan kecuali pengguna memiliki izin Edit/Delete Our Team.
   const teamMembers = members.map((m, index) => ({ member: m, index: index }))
-    .filter(item => siteTeamPermissions.edit || siteTeamPermissions.delete || !isGroupRow(item.member.jabatan));
+    .filter(item => canEditTeamSection(sectionIdx) || siteTeamPermissions.delete || !isGroupRow(item.member.jabatan));
   teamModalState = { header: header, sheetKey: sheetKey, sectionIdx: sectionIdx, mode: "view" };
   setActivityDetail("Our Team / " + sheetKey);
 
@@ -1250,7 +1250,7 @@ function openTeamAddForm(sectionIdx){
 }
 
 function openTeamEditForm(sectionIdx, memberIdx){
-  if (!siteTeamPermissions.edit) return;
+  if (!canEditTeamSection(sectionIdx)) return;
   const meta = sectionMeta[sectionIdx];
   const member = (sectionMembers[sectionIdx] || [])[memberIdx];
   if (!meta || !member || !member._row) return;
@@ -1286,7 +1286,7 @@ function setTeamEditStatus(type, text){
 async function saveTeamMember(){
   if (teamEditBusy || !teamModalState) return;
   const ctx = teamModalState;
-  if ((ctx.mode === "add" && !siteTeamPermissions.add) || (ctx.mode !== "add" && !siteTeamPermissions.edit)) return;
+  if ((ctx.mode === "add" && !siteTeamPermissions.add) || (ctx.mode !== "add" && !canEditTeamSection(ctx.sectionIdx))) return;
   const meta = sectionMeta[ctx.sectionIdx];
   const member = ctx.mode === "add" ? null : (sectionMembers[ctx.sectionIdx] || [])[ctx.memberIdx];
   const form = document.getElementById("team-edit-form");
@@ -1548,8 +1548,8 @@ let siteDeveloperFlag = false; // status Developer dari whitelist server
 let siteManagerFlag = false;
 let siteSectionHeadFlag = false;
 let siteSectionHeadCareers = [];
-let sitePicPermissions = { roleKey: "staff", visibilityKey: "staff", view: "none", manage: "none", deleteScope: "none", editorFor: [], sectionHeadCareers: [], managerCareers: [], teamAdd: false, teamEdit: false, teamDelete: false, signOut: false };
-let siteTeamPermissions = { add: false, edit: false, delete: false };
+let sitePicPermissions = { roleKey: "staff", visibilityKey: "staff", view: "none", manage: "none", deleteScope: "none", editorFor: [], sectionHeadCareers: [], managerCareers: [], teamAdd: false, teamEdit: false, teamEditScope: "none", teamDelete: false, signOut: false, jobTitle: "" };
+let siteTeamPermissions = { add: false, edit: false, editScope: "none", delete: false };
 let siteRolePolicy = null;
 
 function getPicContext(){
@@ -1573,6 +1573,13 @@ function picScopeAllows(scope, owner, ctx){
     return !!career && (ctx.sectionHeadCareers.has(career) || ctx.managerCareers.has(career));
   }
   return false;
+}
+
+function canEditTeamSection(sectionIdx){
+  const meta = sectionMeta[Number(sectionIdx)];
+  if (!meta) return false;
+  const scope = siteTeamPermissions.editScope || (siteTeamPermissions.edit ? "all" : "none");
+  return picScopeAllows(scope, meta.sheetKey, getPicContext());
 }
 
 function canSeePicLink(link, ctx){
@@ -2098,21 +2105,19 @@ function renderLoginInfo(opts){
   const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
   if (opts.isDeveloper){
     parts.push(`<span class="acct-role">Developer</span>`);
-  } else if (opts.isManager){
-    parts.push(`<span class="acct-role">Manager / Senior Manager</span>`);
-  } else if (opts.isSectionHead){
-    parts.push(`<span class="acct-role">Section Head</span>`);
   } else if (opts.isLeader){
-    parts.push(`<span class="acct-role">Leader</span>`);
+    const fallbackTitle = opts.isManager ? "Manager" : (opts.isSectionHead ? "Section Head" : "Leader");
+    parts.push(`<span class="acct-role">${escapeHtml(opts.jobTitle || fallbackTitle)}</span>`);
+  } else if (opts.isEditor){
+    parts.push(`<span class="acct-role">Authorized PIC</span>`);
+  } else if (opts.isPic){
+    parts.push(`<span class="acct-role">PIC</span>`);
   } else if (saved.role === "Dosen"){
     parts.push(`<span class="acct-role">Lecturer</span>`);
     if (saved.kodeDosen) parts.push(`<span>${escapeHtml(saved.kodeDosen)}</span>`);
-  } else if (opts.isPic){
-    parts.push(`<span class="acct-role">PIC</span>`);
   } else {
     if (saved.unit) parts.push(`<span>${escapeHtml(saved.unit)}</span>`);
   }
-  if (!opts.isDeveloper && (opts.isLeader || opts.isPic) && opts.isEditor) parts.push(`<span>Editor Menu</span>`);
   if (opts.canSignOut){
     parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
   }
@@ -2191,6 +2196,7 @@ async function loadAndRender(isInitial, fromCache){
   siteTeamPermissions = {
     add: !!(sitePicPermissions && sitePicPermissions.teamAdd),
     edit: !!(sitePicPermissions && sitePicPermissions.teamEdit),
+    editScope: (sitePicPermissions && sitePicPermissions.teamEditScope) || ((sitePicPermissions && sitePicPermissions.teamEdit) ? "all" : "none"),
     delete: !!(sitePicPermissions && sitePicPermissions.teamDelete)
   };
   siteRolePolicy = extra.rolePolicy || siteRolePolicy;
@@ -2391,7 +2397,7 @@ async function loadAndRender(isInitial, fromCache){
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
-  renderLoginInfo({ canSignOut: !!sitePicPermissions.signOut, isLeader: !!viewVis.isLeader, isDeveloper: !!viewVis.isDeveloper, isManager: !!extra.manager, isSectionHead: !!extra.sectionHead, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
+  renderLoginInfo({ canSignOut: !!sitePicPermissions.signOut, jobTitle: sitePicPermissions.jobTitle || "", isLeader: !!viewVis.isLeader, isDeveloper: !!viewVis.isDeveloper, isManager: !!extra.manager, isSectionHead: !!extra.sectionHead, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){

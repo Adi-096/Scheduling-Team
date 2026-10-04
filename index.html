@@ -1808,7 +1808,8 @@ async function loadAndRender(isInitial, fromCache){
   const careerTabs = []; // daftar kategori unik (Career), urut sesuai kemunculan pertama di sheet Master
   const renderedSecs = []; // section yang benar-benar tampil: {id, sheetKey, career, label, visIdx}
   let introHtml = "";
-  let fetchFailed = false;
+  let fetchFailed = false;   // (tidak dipakai lagi: sheet yang gagal dimuat dilewati, bukan menghentikan seluruh pembaruan)
+  const missingSheets = [];  // sheet Active yang tidak ditemukan di server (nama tab tidak cocok)
 
   // Mulai ambil semua sheet section yang akan ditampilkan SEKARANG juga
   // (paralel); hasilnya nanti dipakai oleh loop di bawah.
@@ -1882,16 +1883,11 @@ async function loadAndRender(isInitial, fromCache){
     try {
       rows = await rowsOf(sectionKey);
     } catch (err){
-      fetchFailed = true;
+      // Semua sheet datang dalam SATU respons server, jadi kegagalan di sini berarti
+      // sheet itu tidak ada / namanya tidak cocok -- bukan masalah jaringan. Sheet
+      // tsb dilewati; sheet lain tetap ditampilkan & diperbarui seperti biasa.
+      missingSheets.push(sectionKey);
       sigParts.push(`${sectionKey}:ERROR:${err.message}`);
-      if (isInitial){
-        sectionsHtml.push(`
-          <div class="notice error">
-            <strong>Gagal memuat sheet "${escapeHtml(sectionKey)}".</strong><br>
-            Cek apakah nama tab di Google Sheet sama persis dengan <code>${escapeHtml(sectionKey)}</code>.<br>
-            Pesan asli: ${escapeHtml(err.message)}
-          </div>`);
-      }
       continue;
     }
     sigParts.push(`${sectionKey}:${JSON.stringify(rows)}`);
@@ -1930,7 +1926,15 @@ async function loadAndRender(isInitial, fromCache){
   // Saat pengecekan diam-diam (bukan pemuatan awal) dan salah satu sheet gagal
   // diambil, jangan timpa tampilan yang sudah ada dengan hasil yang tidak
   // lengkap — biarkan seperti semula, dicoba lagi di siklus berikutnya.
-  if (!isInitial && fetchFailed) return;
+  if (missingSheets.length && viewVis.isLeader){
+    sectionsHtml.unshift(`
+      <div class="notice error">
+        <strong>${missingSheets.length} sheet berstatus Active tidak ditemukan sehingga tidak ditampilkan:</strong>
+        <ul>${missingSheets.map(n => `<li><code>${escapeHtml(n)}</code></li>`).join("")}</ul>
+        Samakan nama di baris "Sheet" (Master) dengan nama tab di Google Sheet (huruf, spasi, dan tanda hubung harus sama).
+        <br><small>(Pesan ini hanya tampil untuk Leader.)</small>
+      </div>`);
+  }
 
   // Simpan data terbaru untuk pembukaan halaman berikutnya (hanya dari hasil
   // jaringan yang lengkap).

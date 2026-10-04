@@ -2141,6 +2141,22 @@ let pendingEmail = "";
 // "Auto-login" (buka lagi, datanya sudah diingat browser).
 // Parameter "extra" adalah isian Unit (untuk @binus.edu) atau Kode Dosen
 // (untuk @binus.ac.id) yang akan ditulis Apps Script ke Kolom D Sheet Logs.
+// ID acak per perangkat/browser (disimpan di localStorage). Dikirim ke sheet Logs
+// supaya "Hapus Login" bisa menghapus semua log akun yang sama DI PERANGKAT YANG SAMA
+// (bukan di perangkat lain milik akun itu).
+function getDeviceId(){
+  try {
+    let id = localStorage.getItem("srsc_device_id");
+    if (!id){
+      const arr = new Uint8Array(6);
+      (window.crypto || window.msCrypto).getRandomValues(arr);
+      id = Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem("srsc_device_id", id);
+    }
+    return id;
+  } catch (e){ return ""; }
+}
+
 function logSignIn(email, status, extra, keterangan){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return;
   fetch(LOG_WEBAPP_URL, {
@@ -2154,7 +2170,7 @@ function logSignIn(email, status, extra, keterangan){
     // "status" sengaja dibuat SINGKAT ("Berhasil"/"Auto-login"/"Ditolak")
     // supaya Kolom C di sheet rapi -- penjelasan detailnya (kalau ada)
     // dikirim terpisah lewat "keterangan", ditulis ke Kolom E.
-    body: JSON.stringify({ email: email, status: status || "Berhasil", extra: extra || "", keterangan: keterangan || "" })
+    body: JSON.stringify({ email: email, status: status || "Berhasil", extra: extra || "", keterangan: keterangan || "", device: getDeviceId() })
   }).catch(() => { /* diamkan saja kalau gagal, jangan ganggu proses login */ });
 }
 
@@ -2242,7 +2258,7 @@ async function checkLoginRevoked(email){
     // bertanya ke server setiap kali, bukan memakai jawaban lama yang
     // sempat tersimpan di cache (URL-nya kalau tidak begini akan selalu
     // sama persis untuk email yang sama, jadi rawan di-cache browser).
-    const url = LOG_WEBAPP_URL + "?action=checkRevoked&email=" + encodeURIComponent(email) + "&_=" + Date.now();
+    const url = LOG_WEBAPP_URL + "?action=checkRevoked&email=" + encodeURIComponent(email) + "&device=" + encodeURIComponent(getDeviceId()) + "&_=" + Date.now();
     // Batas waktu 8 detik: kalau Apps Script lambat/macet, jangan biarkan
     // user menunggu selamanya -- anggap tidak revoked (sama seperti saat
     // jaringan gagal) lalu lanjut auto-login.

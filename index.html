@@ -343,12 +343,16 @@
     white-space:pre-line;
   }
   .team-card-actions{width:100%;display:flex;justify-content:center;margin-top:14px;}
+  .team-toolbar{width:100%;display:flex;justify-content:flex-end;margin-bottom:16px;}
+  .team-card-actions{gap:8px;flex-wrap:wrap;}
   .team-edit-btn{
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;
     text-transform:uppercase;color:var(--primary);background:var(--surface);
     border:1px solid var(--primary);border-radius:7px;padding:8px 13px;cursor:pointer;
   }
   .team-edit-btn:hover{background:var(--primary);color:#fff;}
+  .team-delete-btn{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#B3401F;background:var(--surface);border:1px solid #DFA394;border-radius:7px;padding:8px 13px;cursor:pointer;}
+  .team-delete-btn:hover{background:#B3401F;color:#fff;}
   .team-edit-form{max-width:600px;margin:0 auto;display:flex;flex-direction:column;gap:11px;}
   .team-edit-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-soft);}
   .team-edit-form input,.team-edit-form textarea{
@@ -929,7 +933,7 @@ function parseCSV(text){
 // langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
 // hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
 // dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
-const DATA_CACHE_KEY = "srsc_data_cache_v3";
+const DATA_CACHE_KEY = "srsc_data_cache_v4";
 let cacheSheets = null;
 let cacheExtra = null;
 function loadDataCache(){
@@ -1155,7 +1159,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
     <h2 class="header">${escapeHtml(header)}</h2>
     ${subheader ? `<p class="subheader">${escapeHtml(subheader)}</p>` : ""}
     ${empty
-      ? `<p class="subheader">No PIC data has been added for this section yet.</p>`
+      ? `<p class="subheader">No PIC data has been added for this section yet.</p><div class="section-actions">${siteDeveloperFlag ? `<button class="team-btn" data-target="${secId}">Our Team</button>` : ""}<span class="pic-slot" data-pic-slot="${idx}"></span></div>`
       : `<div class="section-actions"><button class="team-btn" data-target="${secId}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
           Our Team
@@ -1176,7 +1180,7 @@ function memberCardHtml(m, sectionIdx, memberIdx){
       <div class="task">${escapeHtml(m.task || "-")}</div>
       <hr>
       <div class="task-desc">${escapeHtml(m.desc || "-")}</div>
-      ${siteDeveloperFlag && m._row ? `<div class="team-card-actions"><button type="button" class="team-edit-btn" data-team-edit="${sectionIdx}" data-team-member="${memberIdx}">Edit</button></div>` : ""}
+      ${siteDeveloperFlag && m._row ? `<div class="team-card-actions"><button type="button" class="team-edit-btn" data-team-edit="${sectionIdx}" data-team-member="${memberIdx}">Edit</button><button type="button" class="team-delete-btn" data-team-delete="${sectionIdx}" data-team-member="${memberIdx}">Delete</button></div>` : ""}
     </div>`;
 }
 
@@ -1185,10 +1189,10 @@ let teamEditBusy = false;
 
 function openModal(header, sheetKey, members, sectionIdx){
   // Baris dengan Jabatan mengandung kata "Group" tidak ikut ditampilkan di popup
-  // "Our Team" (tapi tetap ada di daftar task pada halaman utama).
+  // "Our Team" untuk pengguna biasa; Developer tetap mendapat seluruh baris.
   const teamMembers = members.map((m, index) => ({ member: m, index: index }))
-    .filter(item => !isGroupRow(item.member.jabatan));
-  teamModalState = { header: header, sheetKey: sheetKey, sectionIdx: sectionIdx };
+    .filter(item => siteDeveloperFlag || !isGroupRow(item.member.jabatan));
+  teamModalState = { header: header, sheetKey: sheetKey, sectionIdx: sectionIdx, mode: "view" };
   setActivityDetail("Our Team / " + sheetKey);
 
   document.getElementById("modal-title").textContent = header;
@@ -1203,7 +1207,10 @@ function openModal(header, sheetKey, members, sectionIdx){
     .sort((a,b) => LEADER_TITLES.indexOf(normJabatan(a.member.jabatan)) - LEADER_TITLES.indexOf(normJabatan(b.member.jabatan)));
 
   const grid = document.getElementById("modal-grid");
-  grid.innerHTML = regular.map(item => memberCardHtml(item.member, sectionIdx, item.index)).join("")
+  const toolbar = siteDeveloperFlag
+    ? `<div class="team-toolbar"><button type="button" class="team-edit-btn" data-team-add="${sectionIdx}">Add Team Member / Task</button></div>`
+    : "";
+  grid.innerHTML = toolbar + regular.map(item => memberCardHtml(item.member, sectionIdx, item.index)).join("")
     + (leaders.length === 0 ? "" : `
       <div class="leaders-block">
         <div class="leaders-heading">Person In Charge</div>
@@ -1213,12 +1220,37 @@ function openModal(header, sheetKey, members, sectionIdx){
   document.getElementById("modal-overlay").classList.add("open");
 }
 
+function openTeamAddForm(sectionIdx){
+  if (!siteDeveloperFlag) return;
+  const meta = sectionMeta[sectionIdx];
+  if (!meta) return;
+  teamModalState = { header: meta.header, sheetKey: meta.sheetKey, sectionIdx: sectionIdx, memberIdx: null, mode: "add" };
+  setActivityDetail("Our Team add / " + meta.sheetKey);
+  document.getElementById("modal-title").textContent = "Add Team Member / Task";
+  document.getElementById("modal-sub").textContent = `${meta.sheetKey} — ${meta.career || "No career"}`;
+  document.getElementById("modal-grid").innerHTML = `
+    <form class="team-edit-form" id="team-edit-form" autocomplete="off">
+      <label>Name<input name="pic" type="text" maxlength="200"></label>
+      <label>Position / Jabatan<input name="jabatan" type="text" maxlength="120"></label>
+      <label>Task<input name="task" type="text" maxlength="300"></label>
+      <label>Task description<textarea name="desc" maxlength="2000"></textarea></label>
+      <label>Email<input name="email" type="text" maxlength="500"></label>
+      <label>WhatsApp / Phone<input name="whatsapp" type="text" maxlength="100"></label>
+      <label>Photo URL<input name="dp" type="url" maxlength="2000"></label>
+      <div class="team-edit-actions">
+        <button class="pic-btn" type="button" data-team-edit-cancel>Cancel</button>
+        <button class="pic-btn primary" type="submit" id="team-edit-save">Add</button>
+      </div>
+      <div class="team-edit-status" id="team-edit-status" role="status"></div>
+    </form>`;
+}
+
 function openTeamEditForm(sectionIdx, memberIdx){
   if (!siteDeveloperFlag) return;
   const meta = sectionMeta[sectionIdx];
   const member = (sectionMembers[sectionIdx] || [])[memberIdx];
   if (!meta || !member || !member._row) return;
-  teamModalState = { header: meta.header, sheetKey: meta.sheetKey, sectionIdx: sectionIdx, memberIdx: memberIdx };
+  teamModalState = { header: meta.header, sheetKey: meta.sheetKey, sectionIdx: sectionIdx, memberIdx: memberIdx, mode: "edit" };
   setActivityDetail("Our Team edit / " + meta.sheetKey);
   const input = (key, label, type, max) => `<label>${label}<input name="${key}" type="${type}" maxlength="${max}" value="${escapeHtml(member[key] || "")}"></label>`;
   document.getElementById("modal-title").textContent = "Edit Team Member";
@@ -1248,27 +1280,28 @@ function setTeamEditStatus(type, text){
 }
 
 async function saveTeamMember(){
-  if (teamEditBusy || !siteDeveloperFlag || !teamModalState || teamModalState.memberIdx == null) return;
+  if (teamEditBusy || !siteDeveloperFlag || !teamModalState) return;
   const ctx = teamModalState;
   const meta = sectionMeta[ctx.sectionIdx];
-  const member = (sectionMembers[ctx.sectionIdx] || [])[ctx.memberIdx];
+  const member = ctx.mode === "add" ? null : (sectionMembers[ctx.sectionIdx] || [])[ctx.memberIdx];
   const form = document.getElementById("team-edit-form");
-  if (!meta || !member || !form) return;
+  if (!meta || (ctx.mode !== "add" && !member) || !form) return;
   const fields = {};
   ["jabatan", "pic", "email", "whatsapp", "task", "desc", "dp"].forEach(key => {
     fields[key] = String(new FormData(form).get(key) || "").trim();
   });
   const expected = {};
-  ["jabatan", "pic", "email", "whatsapp", "task", "desc", "dp"].forEach(key => { expected[key] = member[key] || ""; });
+  if (ctx.mode !== "add") ["jabatan", "pic", "email", "whatsapp", "task", "desc", "dp"].forEach(key => { expected[key] = member[key] || ""; });
   const btn = document.getElementById("team-edit-save");
   teamEditBusy = true;
   if (btn){ btn.disabled = true; btn.textContent = "Saving..."; }
   setTeamEditStatus("", "");
   try {
+    const action = ctx.mode === "add" ? "addTeamMember" : "editTeamMember";
     const res = await fetch(LOG_WEBAPP_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "editTeamMember", actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member._row, fields: fields, expected: expected })
+      body: JSON.stringify({ action: action, actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member ? member._row : null, fields: fields, expected: expected })
     });
     const data = await res.json();
     if (!data || !data.ok){
@@ -1282,13 +1315,43 @@ async function saveTeamMember(){
     await loadAndRender(false, false);
     const freshIdx = sectionMeta.findIndex(item => normSheetName(item.sheetKey) === normSheetName(sectionKey));
     if (freshIdx >= 0) openModal(sectionHeader, sectionMeta[freshIdx].sheetKey, sectionMembers[freshIdx], freshIdx);
-    window.alert("Perubahan anggota Our Team berhasil disimpan.");
+    window.alert(ctx.mode === "add" ? "Team member/task added successfully." : "Our Team member updated successfully.");
   } catch (err){
     setTeamEditStatus("err", "Could not reach the server: " + err.message);
   } finally {
     teamEditBusy = false;
     const saveBtn = document.getElementById("team-edit-save");
-    if (saveBtn){ saveBtn.disabled = false; saveBtn.textContent = "Save changes"; }
+    if (saveBtn){ saveBtn.disabled = false; saveBtn.textContent = ctx.mode === "add" ? "Add" : "Save changes"; }
+  }
+}
+
+async function deleteTeamMember(sectionIdx, memberIdx){
+  if (!siteDeveloperFlag || teamEditBusy) return;
+  const meta = sectionMeta[sectionIdx];
+  const member = (sectionMembers[sectionIdx] || [])[memberIdx];
+  if (!meta || !member || !member._row) return;
+  if (!window.confirm(`Delete this team member/task from ${meta.sheetKey}?`)) return;
+  const expected = {};
+  ["jabatan", "pic", "email", "whatsapp", "task", "desc", "dp"].forEach(key => { expected[key] = member[key] || ""; });
+  teamEditBusy = true;
+  try {
+    const res = await fetch(LOG_WEBAPP_URL, {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "deleteTeamMember", actor: getCurrentUserEmail(), developerToken: getDeveloperToken(), sheet: meta.sheetKey, row: member._row, expected: expected })
+    });
+    const data = await res.json();
+    if (!data || !data.ok) { window.alert((data && data.error) || "Could not delete the team member/task."); return; }
+    const sectionKey = meta.sheetKey;
+    const sectionHeader = meta.header;
+    document.getElementById("modal-overlay").classList.remove("open");
+    lastDataSignature = null;
+    await loadAndRender(false, false);
+    const freshIdx = sectionMeta.findIndex(item => normSheetName(item.sheetKey) === normSheetName(sectionKey));
+    if (freshIdx >= 0) openModal(sectionHeader, sectionMeta[freshIdx].sheetKey, sectionMembers[freshIdx], freshIdx);
+  } catch (err){
+    window.alert("Could not reach the server: " + err.message);
+  } finally {
+    teamEditBusy = false;
   }
 }
 
@@ -1341,12 +1404,16 @@ document.getElementById("member-modal-overlay").addEventListener("click", (e) =>
 });
 
 document.addEventListener("click", (e) => {
+  const addBtn = e.target.closest("[data-team-add]");
+  if (addBtn){ openTeamAddForm(Number(addBtn.dataset.teamAdd)); return; }
   const editBtn = e.target.closest("[data-team-edit]");
   if (editBtn){
     e.preventDefault();
     openTeamEditForm(Number(editBtn.dataset.teamEdit), Number(editBtn.dataset.teamMember));
     return;
   }
+  const deleteBtn = e.target.closest("[data-team-delete]");
+  if (deleteBtn){ deleteTeamMember(Number(deleteBtn.dataset.teamDelete), Number(deleteBtn.dataset.teamMember)); return; }
   if (e.target.closest("[data-team-edit-cancel]") && teamModalState){
     const state = teamModalState;
     openModal(state.header, state.sheetKey, sectionMembers[state.sectionIdx] || [], state.sectionIdx);
@@ -1469,44 +1536,37 @@ function mapServerLinks(arr){
   })).filter(l => l.url);
 }
 
-// Siapa user yang sedang login: PIC di sheet mana saja, dan apakah dia leader.
-// Editor menu: email-email (boleh banyak, dipisah koma) di baris "Editor Menu" sheet
-// Master, pada kolom sheet yang bersangkutan -> boleh Add/Edit/Delete menu
-// untuk sheet itu saja. (Leader boleh untuk semua sheet.)
+// Role PIC Menu dari server. Editor Menu di Master menjadi Authorized PIC
+// dengan akses terbatas ke section yang ditetapkan.
 let siteLeaderFlag = false;   // status leader menurut server (termasuk sheet nonaktif)
 let siteDeveloperFlag = false; // status Developer dari whitelist server
+let siteManagerFlag = false;
+let siteSectionHeadFlag = false;
+let siteSectionHeadCareers = [];
 
 function getPicContext(){
-  const ctx = { sheets: new Set(), leader: false, developer: siteDeveloperFlag, editorSheets: new Set() };
+  const ctx = {
+    leader: siteLeaderFlag, developer: siteDeveloperFlag, manager: siteManagerFlag, sectionHead: siteSectionHeadFlag,
+    sectionHeadCareers: new Set(siteSectionHeadCareers.map(normSheetName)), editorSheets: new Set()
+  };
   const email = getCurrentUserEmail();
   if (!email) return ctx;
   sectionMeta.forEach((meta, i) => {
     if ((meta.editors || []).includes(email)) ctx.editorSheets.add(normSheetName(meta.sheetKey));
   });
-  sectionMembers.forEach((members, i) => {
-    const key = normSheetName((sectionMeta[i] || {}).sheetKey);
-    members.forEach(m => {
-      if (!splitEmails(m.email).includes(email)) return;
-      ctx.sheets.add(key);
-      if (LEADER_TITLES.includes(normJabatan(m.jabatan))) ctx.leader = true;
-    });
-  });
-  if (siteLeaderFlag) ctx.leader = true;
   return ctx;
 }
 
 function canSeePicLink(link, ctx){
-  if (ctx.leader || ctx.developer) return true;         // leader/developer: semua link
-  if (ctx.editorSheets.has(link.owner)) return true;   // editor menu: semua link di sheet yang dikelolanya
-  if (ctx.sheets.size === 0) return false;             // bukan PIC terdata
-  if (ctx.sheets.has(link.owner)) return true;         // PIC sheet pemilik link
-  if (link.visibleAll) return true;                    // "Master": semua PIC
-  return link.visibleTo.some(n => ctx.sheets.has(n));  // PIC sheet yang ditunjuk
+  if (ctx.developer || ctx.manager || ctx.sectionHead) return true;
+  return ctx.editorSheets.has(link.owner); // Authorized PIC hanya pada section yang ditugaskan
 }
 
 // Link yang boleh dilihat user, per section (dipakai juga saat popup dibuka).
 let picVisible = {};
-let picCanManage = false;   // boleh Add/Edit/Delete di section yang sedang dibuka
+let picViewMap = {};
+let picCanManage = false;   // boleh Add/Edit di section yang sedang dibuka
+let picCanDelete = false;   // Delete menu hanya untuk Developer
 let picManageMap = {};
 let picCurrentIdx = null;
 let picBusy = false;
@@ -1515,18 +1575,27 @@ let knownSheetsGlobal = new Set();
 function applyPicMenus(){
   const ctx = getPicContext();
   picVisible = {};
+  picViewMap = {};
   picManageMap = {};
   document.querySelectorAll("[data-pic-slot]").forEach(slot => {
     const idx = Number(slot.dataset.picSlot);
     const meta = sectionMeta[idx];
     const list = ((meta && meta.links) || []).filter(l => canSeePicLink(l, ctx));
-    // Boleh kelola (Add/Edit/Delete) = leader (semua sheet) ATAU PIC yang
-    // ditandai di kolom "Menu Editor" (hanya sheet-nya sendiri).
-    const canManage = !!meta && (ctx.leader || ctx.developer || ctx.editorSheets.has(normSheetName(meta.sheetKey)));
+    // Hak lihat dan Add/Edit dihitung terpisah: Manager semua career, Section
+    // Head hanya career scope, Authorized PIC hanya section Editor Menu.
+    // Hak Delete menu hanya diberikan kepada Developer di dalam modal.
+    const owner = normSheetName(meta && meta.sheetKey);
+    const career = normSheetName(meta && meta.career);
+    const isSectionHeadCareer = !!career && ctx.sectionHeadCareers.has(career);
+    const canView = !!meta && (ctx.developer || ctx.manager || ctx.sectionHead || ctx.editorSheets.has(owner));
+    const canManage = !!meta && (ctx.developer || ctx.manager || isSectionHeadCareer || ctx.editorSheets.has(owner));
     picVisible[idx] = list;
+    picViewMap[idx] = canView;
     picManageMap[idx] = canManage;
-    // Yang boleh kelola selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
-    slot.innerHTML = (list.length || canManage)
+    // Manager/Section Head dapat membuka menu lintas career; hanya career yang
+    // menjadi scope Section Head yang menyediakan Add/Edit. Authorized PIC hanya
+    // melihat section yang diberikan melalui Editor Menu.
+    slot.innerHTML = (canView && (list.length || canManage || ctx.manager || ctx.sectionHead || ctx.developer))
       ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
       : "";
   });
@@ -1596,7 +1665,7 @@ function renderPicModal(idx, note){
   const meta = sectionMeta[idx];
   if (!meta) return;
   const links = picVisible[idx] || [];
-  const deleting = picCanManage && picMode === "delete";
+  const deleting = picCanDelete && picMode === "delete";
   const picking  = picCanManage && picMode === "edit-pick";
   document.getElementById("pic-modal-sub").textContent =
     (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
@@ -1641,7 +1710,7 @@ function renderPicModal(idx, note){
         <div class="pic-actions">
           <button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>
           ${links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
-          ${links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
+          ${picCanDelete && links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
         </div>`;
     }
   }
@@ -1657,6 +1726,7 @@ function renderPicModal(idx, note){
 
 function setPicMode(mode){
   if (picBusy || picCurrentIdx === null) return;
+  if ((mode === "delete" && !picCanDelete) || (["add", "edit", "edit-pick"].includes(mode) && !picCanManage)) return;
   picMode = mode;
   if (mode !== "edit") picEditLink = null;
   renderPicModal(picCurrentIdx);
@@ -1666,8 +1736,9 @@ function openPicMenu(idx){
   const meta = sectionMeta[idx];
   if (!meta) return;
   picCanManage = !!picManageMap[idx];
-  if (!(picVisible[idx] || []).length && !picCanManage) return;
+  if (!picViewMap[idx]) return;
   picCurrentIdx = idx;
+  picCanDelete = !!siteDeveloperFlag;
   picMode = "view";
   picEditLink = null;
   renderPicModal(idx);
@@ -1791,6 +1862,7 @@ async function editPicLink(){
 
 // Tombol "Delete Menu" aktif hanya kalau ada yang dicentang.
 function updatePicDeleteButton(){
+  if (!picCanDelete) return;
   const btn = document.getElementById("pic-delete-confirm");
   if (!btn) return;
   const n = document.querySelectorAll("[data-pic-check]:checked").length;
@@ -1799,7 +1871,7 @@ function updatePicDeleteButton(){
 }
 
 async function deleteSelectedPicLinks(){
-  if (picBusy || !picCanManage || picCurrentIdx === null) return;
+  if (picBusy || !picCanDelete || picCurrentIdx === null) return;
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
   const visible = picVisible[idx] || [];
@@ -1983,6 +2055,10 @@ function renderLoginInfo(opts){
   const parts = [`<span class="acct-email">${escapeHtml(saved.email)}</span>`];
   if (opts.isDeveloper){
     parts.push(`<span class="acct-role">Developer</span>`);
+  } else if (opts.isManager){
+    parts.push(`<span class="acct-role">Manager / Senior Manager</span>`);
+  } else if (opts.isSectionHead){
+    parts.push(`<span class="acct-role">Section Head</span>`);
   } else if (opts.isLeader){
     parts.push(`<span class="acct-role">Leader</span>`);
   } else if (saved.role === "Dosen"){
@@ -2021,7 +2097,7 @@ async function loadAndRender(isInitial, fromCache){
 
   const sigParts = [];
   let masterRows;
-  let extra = { links: {}, editorFor: [], leader: false, developer: false };
+  let extra = { links: {}, editorFor: [], leader: false, manager: false, sectionHead: false, sectionHeadCareers: [], developer: false };
 
   // Setiap siklus (kecuali dari cache) mengambil data BARU dari server.
   if (!fromCache) serverDataPromise = null;
@@ -2038,13 +2114,16 @@ async function loadAndRender(isInitial, fromCache){
 
   try {
     masterRows = await rowsOf(MASTER_SHEET_NAME);
-    // Data pendamping per email: link PIC Menu yang boleh dilihat, sheet yang
-    // boleh dikelola (Editor Menu), dan status leader -- dihitung di server.
+    // Data pendamping per email: izin lihat/edit PIC Menu dan role dihitung di server.
     if (fromCache && cacheExtra){
       extra = cacheExtra;
     } else {
       const d = await getServerData();
-      extra = { links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader, developer: !!d.developer };
+      extra = {
+        links: d.links || {}, editorFor: d.editorFor || [], leader: !!d.leader,
+        manager: !!d.manager, sectionHead: !!d.sectionHead,
+        sectionHeadCareers: d.sectionHeadCareers || [], developer: !!d.developer
+      };
     }
     sigParts.push("extra:" + JSON.stringify(extra));
   } catch (err){
@@ -2059,6 +2138,11 @@ async function loadAndRender(isInitial, fromCache){
     // tampilan yang sudah ada dibiarkan apa adanya; dicoba lagi siklus berikutnya.
     return;
   }
+  siteLeaderFlag = !!extra.leader;
+  siteDeveloperFlag = !!extra.developer;
+  siteManagerFlag = !!extra.manager;
+  siteSectionHeadFlag = !!extra.sectionHead;
+  siteSectionHeadCareers = Array.isArray(extra.sectionHeadCareers) ? extra.sectionHeadCareers : [];
   sigParts.push(JSON.stringify(masterRows));
 
   const labelOf = (r) => (r[0] || "").toLowerCase().trim();
@@ -2191,7 +2275,7 @@ async function loadAndRender(isInitial, fromCache){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, career: career, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -2240,6 +2324,9 @@ async function loadAndRender(isInitial, fromCache){
   sectionMeta = newSectionMeta;
   siteLeaderFlag = !!extra.leader;
   siteDeveloperFlag = !!extra.developer;
+  siteManagerFlag = !!extra.manager;
+  siteSectionHeadFlag = !!extra.sectionHead;
+  siteSectionHeadCareers = Array.isArray(extra.sectionHeadCareers) ? extra.sectionHeadCareers : [];
 
   // Simpan posisi scroll supaya render ulang diam-diam tidak membuat tampilan "melompat".
   // (Tab/section yang dipilih disimpan di variabel currentSel.)
@@ -2247,7 +2334,7 @@ async function loadAndRender(isInitial, fromCache){
 
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
-  renderLoginInfo({ isLeader: !!viewVis.isLeader, isDeveloper: !!viewVis.isDeveloper, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
+  renderLoginInfo({ isLeader: !!viewVis.isLeader, isDeveloper: !!viewVis.isDeveloper, isManager: !!extra.manager, isSectionHead: !!extra.sectionHead, isPic: userIdx.size > 0 || !!(readSavedLoginState() || {}).pic, isEditor: (extra.editorFor || []).length > 0 });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){

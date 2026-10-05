@@ -474,6 +474,18 @@
   .pic-check{ flex:none;display:flex;align-items:center;padding-top:1px; }
   .pic-check input{ width:18px;height:18px;margin:0;accent-color:#B3401F;cursor:pointer; }
   .pic-check input[type="radio"]{ accent-color:var(--primary); }
+  .pic-list.reorder li{ cursor:grab;user-select:none;-webkit-user-select:none; }
+  .pic-list.reorder li.dragging{ opacity:.4; }
+  .pic-list.reorder li.drop-before{ box-shadow:0 -2px 0 0 var(--primary) inset; }
+  .pic-list.reorder li.drop-after{ box-shadow:0 2px 0 0 var(--primary) inset; }
+  .pic-grip{ flex:none;color:var(--ink-faint);font-size:16px;line-height:1;padding-top:2px;letter-spacing:-2px; }
+  .pic-move{ flex:none;display:flex;flex-direction:column;gap:4px; }
+  .pic-move button{
+    width:30px;height:24px;padding:0;line-height:1;font-size:12px;cursor:pointer;
+    border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);
+  }
+  .pic-move button:hover:not(:disabled){ background:var(--primary);color:#fff;border-color:var(--primary); }
+  .pic-move button:disabled{ opacity:.3;cursor:not-allowed; }
   .pic-form{ display:flex;flex-direction:column;gap:10px; }
   .pic-form input[type="text"],.pic-form input[type="url"],.pic-form select{
     width:100%;font-family:'Work Sans',sans-serif;font-size:14px;
@@ -1523,6 +1535,8 @@ function visibilityLabel(l){
 //   "edit-pick" (pilih 1 menu) | "edit" (form ubah)
 let picMode = "view";
 let picEditLink = null;
+let picReorderList = [];   // salinan kerja urutan menu saat mode "reorder"
+let picReorderDirty = false;
 
 function setPicStatus(type, text){
   const el = document.getElementById("pic-status");
@@ -1578,7 +1592,21 @@ function renderPicModal(idx, note){
     (meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ");
 
   // ---- Daftar menu (selalu tampil dulu) ----
-  const listHtml = links.length
+  const reordering = picCanCreate && picMode === "reorder";
+  const listHtml = reordering
+    ? `<ul class="pic-list reorder" id="pic-reorder-list">${picReorderList.map((l, i) => `
+        <li draggable="true" data-pic-row="${i}">
+          <span class="pic-grip" aria-hidden="true">&#8942;&#8942;</span>
+          <div class="pic-li-body">
+            <div class="pic-li-main">${escapeHtml(l.name)}</div>
+            ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
+          </div>
+          <div class="pic-move">
+            <button type="button" data-pic-up="${i}" aria-label="Move up" ${i === 0 ? "disabled" : ""}>&#9650;</button>
+            <button type="button" data-pic-down="${i}" aria-label="Move down" ${i === picReorderList.length - 1 ? "disabled" : ""}>&#9660;</button>
+          </div>
+        </li>`).join("")}</ul>`
+    : links.length
     ? `<ul class="pic-list">${links.map((l, i) => `
         <li>
           ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
@@ -1598,6 +1626,13 @@ function renderPicModal(idx, note){
       controlsHtml = `<div class="pic-block-title">Add menu</div>` + picFormHtml(idx, "pic-add-form", null, "Save");
     } else if (picMode === "edit" && picEditLink && picCanCreate){
       controlsHtml = `<div class="pic-block-title">Edit menu</div>` + picFormHtml(idx, "pic-edit-form", picEditLink, "Save changes");
+    } else if (picMode === "reorder" && picCanCreate){
+      controlsHtml = `
+        <p class="pic-hint">Drag a menu (or use the arrows) to change its position, then click <strong>Save Order</strong>. The order is also updated in the spreadsheet.</p>
+        <div class="pic-actions">
+          <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+          <button type="button" class="pic-btn primary" id="pic-reorder-save" ${picReorderDirty ? "" : "disabled"}>Save Order</button>
+        </div>`;
     } else if (picMode === "edit-pick" && picCanCreate){
       controlsHtml = `
         <p class="pic-hint">Select the menu you want to edit, then click <strong>Edit Menu</strong>.</p>
@@ -1617,6 +1652,7 @@ function renderPicModal(idx, note){
         <div class="pic-actions">
           ${picCanCreate ? `<button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>` : ""}
           ${picCanCreate && links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
+          ${picCanCreate && links.length > 1 ? `<button type="button" class="pic-btn" data-pic-mode="reorder">Reorder Menu</button>` : ""}
           ${picCanDelete && links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
         </div>`;
     }
@@ -1635,6 +1671,10 @@ function setPicMode(mode){
   if (picBusy || picCurrentIdx === null) return;
   picMode = mode;
   if (mode !== "edit") picEditLink = null;
+  if (mode === "reorder"){
+    picReorderList = (picVisible[picCurrentIdx] || []).slice();
+    picReorderDirty = false;
+  }
   renderPicModal(picCurrentIdx);
 }
 
@@ -1818,6 +1858,84 @@ async function deleteSelectedPicLinks(){
   }
 }
 
+// ---- Ubah urutan menu (Reorder Menu) ----
+function picMoveItem(from, to){
+  if (picBusy || to < 0 || to >= picReorderList.length || from === to) return;
+  const [it] = picReorderList.splice(from, 1);
+  picReorderList.splice(to, 0, it);
+  picReorderDirty = true;
+  renderPicModal(picCurrentIdx);
+}
+
+async function savePicOrder(){
+  if (picBusy || !picCanCreate || picCurrentIdx === null || !picReorderDirty) return;
+  const idx = picCurrentIdx;
+  const meta = sectionMeta[idx];
+  const btn = document.getElementById("pic-reorder-save");
+  picBusy = true; if (btn){ btn.disabled = true; btn.textContent = "Saving..."; }
+  setPicStatus("", "");
+  try {
+    const data = await picApi({
+      action: "reorderLinks", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
+      sheet: meta.sheetKey,
+      order: picReorderList.map(l => ({ name: l.rawName, url: l.rawUrl }))
+    });
+    if (!data || !data.ok){
+      picBusy = false;
+      setPicStatus("err", (data && data.error) || "Failed to save the order.");
+      if (btn){ btn.disabled = false; btn.textContent = "Save Order"; }
+      return;
+    }
+    const inList = new Set(picReorderList);
+    meta.links = picReorderList.concat((meta.links || []).filter(x => !inList.has(x)));
+    picBusy = false;
+    picMode = "view"; picReorderDirty = false;
+    refreshPicLocal(idx, { type: "ok", text: "Menu order saved to the spreadsheet." });
+  } catch (err){
+    picBusy = false;
+    setPicStatus("err", "Could not reach the server: " + err.message);
+    if (btn){ btn.disabled = false; btn.textContent = "Save Order"; }
+  }
+}
+
+// Drag & drop (desktop). Di layar sentuh gunakan tombol panah.
+let picDragFrom = null;
+function picClearDropMarks(){
+  document.querySelectorAll("#pic-reorder-list li").forEach(li => li.classList.remove("dragging", "drop-before", "drop-after"));
+}
+document.addEventListener("dragstart", (e) => {
+  const li = e.target.closest && e.target.closest("#pic-reorder-list li[data-pic-row]");
+  if (!li || picBusy) return;
+  picDragFrom = Number(li.dataset.picRow);
+  li.classList.add("dragging");
+  if (e.dataTransfer){ e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", String(picDragFrom)); } catch (_) {} }
+});
+document.addEventListener("dragover", (e) => {
+  if (picDragFrom === null) return;
+  const li = e.target.closest && e.target.closest("#pic-reorder-list li[data-pic-row]");
+  if (!li) return;
+  e.preventDefault();
+  const r = li.getBoundingClientRect();
+  const after = e.clientY > r.top + r.height / 2;
+  document.querySelectorAll("#pic-reorder-list li").forEach(x => x.classList.remove("drop-before", "drop-after"));
+  li.classList.add(after ? "drop-after" : "drop-before");
+});
+document.addEventListener("drop", (e) => {
+  if (picDragFrom === null) return;
+  const li = e.target.closest && e.target.closest("#pic-reorder-list li[data-pic-row]");
+  if (!li){ picDragFrom = null; picClearDropMarks(); return; }
+  e.preventDefault();
+  const r = li.getBoundingClientRect();
+  const after = e.clientY > r.top + r.height / 2;
+  let to = Number(li.dataset.picRow) + (after ? 1 : 0);
+  const from = picDragFrom;
+  if (from < to) to -= 1;
+  picDragFrom = null;
+  picClearDropMarks();
+  picMoveItem(from, to);
+});
+document.addEventListener("dragend", () => { picDragFrom = null; picClearDropMarks(); });
+
 document.addEventListener("click", (e) => {
   const open = e.target.closest("[data-pic-sec]");
   if (open){ openPicMenu(Number(open.dataset.picSec)); return; }
@@ -1830,7 +1948,12 @@ document.addEventListener("click", (e) => {
     if (picEditLink){ picMode = "edit"; renderPicModal(picCurrentIdx); }
     return;
   }
-  if (e.target.closest("#pic-delete-confirm")) deleteSelectedPicLinks();
+  if (e.target.closest("#pic-delete-confirm")){ deleteSelectedPicLinks(); return; }
+  const up = e.target.closest("[data-pic-up]");
+  if (up){ const i = Number(up.dataset.picUp); picMoveItem(i, i - 1); return; }
+  const down = e.target.closest("[data-pic-down]");
+  if (down){ const i = Number(down.dataset.picDown); picMoveItem(i, i + 1); return; }
+  if (e.target.closest("#pic-reorder-save")) savePicOrder();
 });
 document.addEventListener("change", (e) => {
   const t = e.target;

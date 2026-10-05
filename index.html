@@ -2510,9 +2510,13 @@ const Activity = (function(){
   const isVisible = () => document.visibilityState === "visible";
   const top = () => stack[stack.length - 1];
 
+  // Email terakhir yang diketahui di sesi ini: setelah Sign out, data login sudah dihapus tetapi
+  // pengiriman terakhir (sisa durasi) masih harus tercatat atas nama akun tersebut, bukan "(tidak ada email)".
+  let lastEmail = "";
   function emailNow(){
     const s = readSavedLoginState();
-    return s && s.email ? String(s.email).toLowerCase() : "";
+    if (s && s.email) lastEmail = String(s.email).toLowerCase();
+    return lastEmail;
   }
   function push(type, page, dur){
     if (type === "session_end"){
@@ -2589,6 +2593,7 @@ const Activity = (function(){
   function start(){
     if (started) return;
     started = true;
+    emailNow();   // catat email akun ini sekarang, sebelum ada kemungkinan Sign out menghapus data login
     stack.push({ page: "", acc: 0, since: isVisible() ? Date.now() : null });
     totalSince = isVisible() ? Date.now() : null;
 

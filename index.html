@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SRSC Team</title>
+<title>Scheduling Team</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1443,7 +1443,7 @@ function safeHttpUrl(u){
 }
 
 // Baca kolom link PIC di sebuah sheet tim -> [link, ...]
-// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[] }
+// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[], staffVisible }
 //   - kolom "is Visible from other PIC" kosong  -> hanya PIC sheet pemilik
 //   - berisi "Master"                           -> semua PIC di semua sheet
 //   - berisi nama sheet (boleh lebih dari satu, dipisah baris baru / ; / |)
@@ -1474,7 +1474,8 @@ function mapServerLinks(arr){
     rawUrl: l.rawUrl || "",
     desc: l.desc || "",
     visibleAll: !!l.visibleAll,
-    visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : []
+    visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : [],
+    staffVisible: !!l.staffVisible   // kolom "Staff Visibility" = Yes
   })).filter(l => l.url);
 }
 
@@ -1556,9 +1557,11 @@ function sheetDisplayName(norm){
   return m ? m.sheetKey : norm;
 }
 function visibilityLabel(l){
-  if (l.visibleAll) return "Visible to: all PICs";
-  if (l.visibleTo.length) return "Visible to: this sheet + " + l.visibleTo.map(sheetDisplayName).join(", ");
-  return "Visible to: this sheet's PIC only";
+  let t;
+  if (l.visibleAll) t = "Visible to: all PICs";
+  else if (l.visibleTo.length) t = "Visible to: this sheet + " + l.visibleTo.map(sheetDisplayName).join(", ");
+  else t = "Visible to: this sheet's PIC only";
+  return l.staffVisible ? t + " + Staff" : t;
 }
 
 // Mode tampilan popup:
@@ -1599,6 +1602,15 @@ function visSelectHtml(idx, link){
     </select>`;
 }
 
+// <select> Staff Visibility: Yes = menu juga tampil untuk Staff / user biasa (kecuali Dosen).
+function staffSelectHtml(link){
+  const on = !!(link && link.staffVisible);
+  return `<select id="pic-f-staff" aria-label="Staff visibility">
+      <option value=""${on ? "" : " selected"}>Not visible to Staff</option>
+      <option value="Yes"${on ? " selected" : ""}>Visible to Staff (not for Lecturers)</option>
+    </select>`;
+}
+
 function picFormHtml(idx, formId, link, submitLabel){
   return `
     <form id="${formId}" class="pic-form" autocomplete="off">
@@ -1606,6 +1618,7 @@ function picFormHtml(idx, formId, link, submitLabel){
       <input type="url" id="pic-f-url" placeholder="https://..." required value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
       <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
       ${visSelectHtml(idx, link)}
+      ${staffSelectHtml(link)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
         <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
@@ -1754,12 +1767,13 @@ function readPicForm(){
   const url  = document.getElementById("pic-f-url").value.trim();
   const desc = document.getElementById("pic-f-desc").value.trim();
   const vis  = document.getElementById("pic-f-vis").value;
+  const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
   }
-  return { name, url, desc, vis };
+  return { name, url, desc, vis, staff };
 }
 
 async function addPicLink(){
@@ -1775,7 +1789,7 @@ async function addPicLink(){
   try {
     const data = await picApi({
       action: "addLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
-      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
@@ -1784,7 +1798,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes"
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." });
@@ -1813,7 +1827,7 @@ async function editPicLink(){
     const data = await picApi({
       action: "editLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
-      name: f.name, url: f.url, desc: f.desc, visible: f.vis
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
@@ -1821,6 +1835,7 @@ async function editPicLink(){
       link.name = f.name; link.rawName = f.name;
       link.url = safeHttpUrl(f.url); link.rawUrl = f.url;
       link.desc = f.desc;
+      link.staffVisible = f.staff === "Yes";
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
         link.visibleAll = v.all; link.visibleTo = v.list;

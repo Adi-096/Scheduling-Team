@@ -1012,14 +1012,14 @@ function loadDataCache(){
   try {
     const c = JSON.parse(localStorage.getItem(DATA_CACHE_KEY) || "null");
     if (!c || !c.sheets || typeof c.sheets !== "object" || !c.extra) return null;
-    if (c.email !== getCurrentUserEmail()) return null;
+    if (c.email !== getCurrentUserEmail() || (c.guest || "") !== getGuestEmail()) return null;
     return c;
   } catch (e){ return null; }
 }
 function saveDataCache(store, extra){
   try {
     localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({
-      t: Date.now(), email: getCurrentUserEmail(), sheets: store, extra: extra
+      t: Date.now(), email: getCurrentUserEmail(), guest: getGuestEmail(), sheets: store, extra: extra
     }));
   } catch (e){ /* penuh / tidak tersedia -> abaikan */ }
 }
@@ -1031,12 +1031,21 @@ let serverDataPromise = null;
 let serverDataEmail = null;
 let serverDataViewAs = null;
 let serverDataSim = null;
+let serverDataGuest = null;
 
-async function fetchServerData(email, viewAs, simCareer){
+// Guest (mis. PIC yang memilih "Continue as Guest"): getCurrentUserEmail() sengaja kosong supaya
+// peran PIC tidak dipakai. Email guest tetap dikirim terpisah HANYA agar server tahu ia pengguna
+// biasa (Staff) dan menampilkan menu ber-Staff Visibility = Yes -- tanpa hak PIC apa pun.
+function getGuestEmail(){
+  const saved = readSavedLoginState();
+  return (saved && saved.guest && saved.email) ? String(saved.email).trim().toLowerCase() : "";
+}
+
+async function fetchServerData(email, viewAs, simCareer, guestEmail){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL belum diatur.");
   }
-  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&_=" + Date.now();
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&_=" + Date.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
@@ -1054,11 +1063,13 @@ function getServerData(){
   const email = getCurrentUserEmail();   // "" kalau belum login
   const va = email ? getViewAs() : "";   // role pilihan Role Switch (server memvalidasi ulang)
   const sc = va ? getSimCareer() : "";   // career simulasi (khusus Developer; server memvalidasi ulang)
-  if (!serverDataPromise || serverDataEmail !== email || serverDataViewAs !== va || serverDataSim !== sc){
+  const ge = email ? "" : getGuestEmail();
+  if (!serverDataPromise || serverDataEmail !== email || serverDataViewAs !== va || serverDataSim !== sc || serverDataGuest !== ge){
     serverDataEmail = email;
     serverDataViewAs = va;
     serverDataSim = sc;
-    serverDataPromise = fetchServerData(email, va, sc).catch(err => { serverDataPromise = null; throw err; });
+    serverDataGuest = ge;
+    serverDataPromise = fetchServerData(email, va, sc, ge).catch(err => { serverDataPromise = null; throw err; });
   }
   return serverDataPromise;
 }

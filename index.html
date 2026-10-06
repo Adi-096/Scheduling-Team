@@ -1044,6 +1044,7 @@ let serverDataEmail = null;
 let serverDataViewAs = null;
 let serverDataSim = null;
 let serverDataGuest = null;
+let serverDataSimJab = null;
 
 // Guest (mis. PIC yang memilih "Continue as Guest"): getCurrentUserEmail() sengaja kosong supaya
 // peran PIC tidak dipakai. Email guest tetap dikirim terpisah HANYA agar server tahu ia pengguna
@@ -1053,11 +1054,11 @@ function getGuestEmail(){
   return (saved && saved.guest && saved.email) ? String(saved.email).trim().toLowerCase() : "";
 }
 
-async function fetchServerData(email, viewAs, simCareer, guestEmail){
+async function fetchServerData(email, viewAs, simCareer, guestEmail, simJab){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL belum diatur.");
   }
-  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&_=" + Date.now();
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simJab=" + encodeURIComponent(simJab || "") + "&_=" + Date.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
@@ -1075,13 +1076,15 @@ function getServerData(){
   const email = getCurrentUserEmail();   // "" kalau belum login
   const va = email ? getViewAs() : "";   // role pilihan Role Switch (server memvalidasi ulang)
   const sc = va ? getSimCareer() : "";   // career simulasi (khusus Developer; server memvalidasi ulang)
+  const sj = sc ? getSimJab() : "";      // Jabatan / Posisi simulasi (khusus Developer)
   const ge = email ? "" : getGuestEmail();
-  if (!serverDataPromise || serverDataEmail !== email || serverDataViewAs !== va || serverDataSim !== sc || serverDataGuest !== ge){
+  if (!serverDataPromise || serverDataEmail !== email || serverDataViewAs !== va || serverDataSim !== sc || serverDataGuest !== ge || serverDataSimJab !== sj){
     serverDataEmail = email;
     serverDataViewAs = va;
     serverDataSim = sc;
     serverDataGuest = ge;
-    serverDataPromise = fetchServerData(email, va, sc, ge).catch(err => { serverDataPromise = null; throw err; });
+    serverDataSimJab = sj;
+    serverDataPromise = fetchServerData(email, va, sc, ge, sj).catch(err => { serverDataPromise = null; throw err; });
   }
   return serverDataPromise;
 }
@@ -1846,7 +1849,7 @@ async function addPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "addLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
+      action: "addLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simJab: viewPerms.simJab || "",
       sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat
     });
     if (!data || !data.ok){
@@ -1883,7 +1886,7 @@ async function editPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "editLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
+      action: "editLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simJab: viewPerms.simJab || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
       name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat
     });
@@ -1938,7 +1941,7 @@ async function deleteSelectedPicLinks(){
   try {
     for (const link of chosen){
       const data = await picApi({
-        action: "deleteLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
+        action: "deleteLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simJab: viewPerms.simJab || "",
         sheet: meta.sheetKey, name: link.rawName, url: link.rawUrl
       });
       if (data && (data.ok || data.notFound)){
@@ -1981,7 +1984,7 @@ async function savePicOrder(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "reorderLinks", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
+      action: "reorderLinks", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simJab: viewPerms.simJab || "",
       sheet: meta.sheetKey,
       order: picReorderList.map(l => ({ name: l.rawName, url: l.rawUrl }))
     });
@@ -2179,6 +2182,7 @@ const ROLE_LABELS = {
   bsp: "Staff", cc: "Staff", staff: "Staff", dosen: "Lecturer"
 };
 const VIEW_AS_KEY = "srsc_view_as";   // "" | kunci role di ROLE_ORDER  (Role Switch)
+const SIM_JAB_KEY = "srsc_sim_jab";   // KHUSUS Developer: Jabatan / Posisi yang disimulasikan ("" = semua posisi pada career itu)
 const SIM_CAREER_KEY = "srsc_sim_career";   // KHUSUS Developer: career yang disimulasikan saat View as ("" = tidak ada)
 
 // Urutan role dari yang tertinggi ke terendah. Role Switch menawarkan role DI BAWAH role sendiri:
@@ -2188,6 +2192,9 @@ const SWITCH_LABELS = Object.assign({}, ROLE_LABELS, { bsp: "Binus Support", cc:
 function rolesBelow(role){
   const i = ROLE_ORDER.indexOf(role);
   return i < 0 ? [] : ROLE_ORDER.slice(i + 1);
+}
+function getSimJab(){
+  try { return String(localStorage.getItem(SIM_JAB_KEY) || ""); } catch (e){ return ""; }
 }
 function getSimCareer(){
   try { return String(localStorage.getItem(SIM_CAREER_KEY) || ""); } catch (e){ return ""; }
@@ -2202,7 +2209,7 @@ function getViewAs(){
 // Item yang dipilih tapi tidak punya nilai (mis. Lecturer Code untuk Manager) tidak ditampilkan.
 const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kalau server belum mengirim kolom ini
 
-// opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, canSignOut }
+// opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simJab, jabatans, canSignOut }
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
@@ -2239,6 +2246,14 @@ function renderLoginInfo(opts){
           <option value=""${!opts.simCareer ? " selected" : ""}>Career: not set</option>
           ${opts.careers.map(c => `<option value="${escapeHtml(c.key)}"${opts.simCareer === c.key ? " selected" : ""}>Career: ${escapeHtml(c.name)}</option>`).join("")}
         </select>`);
+        // Pilih Jabatan / Posisi (non-leader) pada career itu: mis. Student Allocation / Course Scheduling /
+        // Student Registration. "All positions" = PIC pada semua section career tsb.
+        if (opts.simCareer && Array.isArray(opts.jabatans) && opts.jabatans.length){
+          parts.push(`<select class="acct-switch" id="acct-jab" aria-label="Simulated position">
+            <option value=""${!opts.simJab ? " selected" : ""}>Position: all</option>
+            ${opts.jabatans.map(j => `<option value="${escapeHtml(j)}"${opts.simJab === j ? " selected" : ""}>Position: ${escapeHtml(j)}</option>`).join("")}
+          </select>`);
+        }
       }
     }
   }
@@ -2251,7 +2266,7 @@ function renderLoginInfo(opts){
   const sw = document.getElementById("acct-switch");
   if (sw) sw.addEventListener("change", () => {
     const v = sw.value;
-    try { if (v) localStorage.setItem(VIEW_AS_KEY, v); else localStorage.removeItem(VIEW_AS_KEY); } catch (e){}
+    try { if (v) localStorage.setItem(VIEW_AS_KEY, v); else localStorage.removeItem(VIEW_AS_KEY); localStorage.removeItem(SIM_JAB_KEY); } catch (e){}
     Activity.event("role_switch", v ? "View as " + (SWITCH_LABELS[v] || v) : "Back to own role");
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
@@ -2262,8 +2277,19 @@ function renderLoginInfo(opts){
   const cs = document.getElementById("acct-career");
   if (cs) cs.addEventListener("change", () => {
     const v = cs.value;
-    try { if (v) localStorage.setItem(SIM_CAREER_KEY, v); else localStorage.removeItem(SIM_CAREER_KEY); } catch (e){}
+    try { if (v) localStorage.setItem(SIM_CAREER_KEY, v); else localStorage.removeItem(SIM_CAREER_KEY); localStorage.removeItem(SIM_JAB_KEY); } catch (e){}
     Activity.event("role_switch", v ? "Career: " + (cs.options[cs.selectedIndex].text.replace(/^Career:\s*/, "")) : "Career: not set");
+    lastDataSignature = null;
+    currentSel = { email: "", set: false, career: null, secKey: null };
+    loadAndRender(true).catch(() => {});
+    window.scrollTo(0, 0);
+  });
+
+  const js = document.getElementById("acct-jab");
+  if (js) js.addEventListener("change", () => {
+    const v = js.value;
+    try { if (v) localStorage.setItem(SIM_JAB_KEY, v); else localStorage.removeItem(SIM_JAB_KEY); } catch (e){}
+    Activity.event("role_switch", v ? "Position: " + v : "Position: all");
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
     loadAndRender(true).catch(() => {});
@@ -2278,6 +2304,7 @@ function renderLoginInfo(opts){
       localStorage.removeItem(DATA_CACHE_KEY);
       localStorage.removeItem(VIEW_AS_KEY);
       localStorage.removeItem(SIM_CAREER_KEY);
+      localStorage.removeItem(SIM_JAB_KEY);
     } catch (e){}
     location.reload();
   });
@@ -2288,7 +2315,7 @@ function extraFromServer(d){
   return {
     links: d.links || {}, editorFor: d.editorFor || [],
     leader: !!d.leader, developer: !!d.developer, title: d.title || "", job: d.jobTitle || "",
-    role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
+    role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simJab: d.simJab || "", jabatans: d.jabatans || [], simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
     createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], teamSheets: d.teamSheets || [],
     policy: d.policy || {}
   };
@@ -2321,14 +2348,14 @@ async function loadAndRender(isInitial, fromCache){
     masterRows = await rowsOf(MASTER_SHEET_NAME);
     // Data pendamping per email: link PIC Menu yang boleh dilihat, sheet yang
     // boleh dikelola (Editor Menu), dan status leader -- dihitung di server.
-    if (fromCache && cacheExtra && (cacheExtra.viewAs || "") === getViewAs() && (cacheExtra.simCareer || "") === (getViewAs() ? getSimCareer() : "")){
+    if (fromCache && cacheExtra && (cacheExtra.viewAs || "") === getViewAs() && (cacheExtra.simCareer || "") === (getViewAs() ? getSimCareer() : "") && (cacheExtra.simJab || "") === (getViewAs() && getSimCareer() ? getSimJab() : "")){
       extra = cacheExtra;
     } else {
       const d = await getServerData();
       extra = extraFromServer(d);
     }
     sigParts.push("extra:" + JSON.stringify(extra));
-    sigParts.push("viewAs:" + getViewAs() + "|" + getSimCareer());
+    sigParts.push("viewAs:" + getViewAs() + "|" + getSimCareer() + "|" + getSimJab());
   } catch (err){
     if (isInitial){
       renderError(`Tidak bisa membaca sheet "${MASTER_SHEET_NAME}".`, [
@@ -2430,6 +2457,12 @@ async function loadAndRender(isInitial, fromCache){
   if (simCareer && (!viewAs || simCareer !== (extra.simCareer || ""))){
     if (!viewAs || realRole !== "developer"){ simCareer = ""; try { localStorage.removeItem(SIM_CAREER_KEY); } catch (e){} }
     else simCareer = extra.simCareer || "";
+  }
+  // Jabatan simulasi hanya berlaku bila career simulasi aktif dan disetujui server; selain itu dibuang.
+  let simJab = getSimJab();
+  if (simJab && (!simCareer || simJab !== (extra.simJab || ""))){
+    simJab = simCareer ? (extra.simJab || "") : "";
+    if (!simJab){ try { localStorage.removeItem(SIM_JAB_KEY); } catch (e){} }
   }
   const effRole = viewAs || realRole || baseRole;
   const viewVis = resolveViewerVisibility({ role: effRole, pol: (extra.policy || {})[effRole] || {}, userIdx: userIdx, allIdx: allIdx });
@@ -2544,6 +2577,7 @@ async function loadAndRender(isInitial, fromCache){
   viewPerms = {
     viewAs: viewAs,
     simCareer: simCareer,
+    simJab: simJab,
     create: new Set(extra.createSheets || []),
     del: new Set(extra.deleteSheets || []),
     team: new Set(extra.teamSheets || [])
@@ -2556,7 +2590,7 @@ async function loadAndRender(isInitial, fromCache){
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
   renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", job: extra.job || "",
-                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, canSignOut: !!(extra.perms && extra.perms.signOut) });
+                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simJab: simJab, jabatans: extra.jabatans || [], canSignOut: !!(extra.perms && extra.perms.signOut) });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){
@@ -2978,7 +3012,7 @@ document.getElementById("tedit-form").addEventListener("submit", async (e) => {
   teamEditBusy = true; btn.disabled = true; btn.textContent = "Saving...";
   setTeditStatus("", "");
   try {
-    const data = await picApi({ action: "editMember", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", sheet: t.sheetKey, old: t.old, fields: f });
+    const data = await picApi({ action: "editMember", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simJab: viewPerms.simJab || "", sheet: t.sheetKey, old: t.old, fields: f });
     if (!data || !data.ok){
       setTeditStatus("err", (data && data.error) || "Failed to save changes.");
     } else {

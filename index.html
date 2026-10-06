@@ -2085,14 +2085,15 @@ document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
    VISIBILITY INDEX (baris "Visibility Index" di sheet Master)
    - Leader                          : semua index, urutan 1 / 2 / 3
    - PIC                             : hanya index milik sheet tempat dia terdaftar
-   - Unit Binus Support / BSP /
-     Contact Center                  : semua index, urutan 3 / 2 / 1
+   - Unit Binus Support / BSP        : semua index, urutan 3 / 2 / 1
+   - Unit Contact Center / CC        : role terpisah (baris "Contact Center / CC" di Role Policy)
    - Unit lain (karyawan @binus.edu) : semua index, urutan 1 / 2 / 3
    - Dosen                           : hanya index 1 dan 3 (urutan 1 / 3)
    "Urutan" = prioritas tampilan pertama kali: dipilih index pertama dalam
    urutan itu yang section-nya Active. Sheet Inactive otomatis dilewati.
    ========================================================================= */
-const SUPPORT_UNIT_PATTERN = /\bbinus\s*support\b|\bbsp\b|\bcontact\s*center\b/i;
+const SUPPORT_UNIT_PATTERN = /\bbinus\s*support\b|\bbsp\b/i;   // Binus Support / BSP
+const CC_UNIT_PATTERN = /\bcontact\s*center\b|\bcc\b/i;           // Contact Center / CC (role terpisah dari BSP)
 const DOSEN_ALLOWED_INDEXES = [1, 3];
 
 /* ---- URUTAN PRIORITAS (mana yang tampil pertama kali) ----------------------
@@ -2108,6 +2109,7 @@ const DOSEN_ALLOWED_INDEXES = [1, 3];
 const DEFAULT_PRIORITY = {
   leader: [1, 2, 3],
   bsp:    [2, 3, 1],
+  cc:     [2, 3, 1],
   staff:  [1, 2, 3],
   dosen:  [1, 3]
 };
@@ -2126,7 +2128,8 @@ function readPriorityConfig(masterRows){
     if (!label.startsWith("priority") && !label.startsWith("prioritas")) return;
     let key = null;
     if (/leader/.test(label)) key = "leader";
-    else if (/bsp|support|contact/.test(label)) key = "bsp";
+    else if (/contact|\bcc\b/.test(label)) key = "cc";
+    else if (/bsp|support/.test(label)) key = "bsp";
     else if (/dosen|lecturer/.test(label)) key = "dosen";
     else if (/staff|lain|other|unit/.test(label)) key = "staff";
     if (!key) return;
@@ -2173,15 +2176,15 @@ function resolveViewerVisibility(ctx){
 const ROLE_LABELS = {
   developer: "Developer", seniormanager: "Senior Manager", manager: "Manager", sectionhead: "Section Head",
   authorizedpic: "Authorized PIC", registeredpic: "Registered PIC",
-  bsp: "Staff", staff: "Staff", dosen: "Lecturer"
+  bsp: "Staff", cc: "Staff", staff: "Staff", dosen: "Lecturer"
 };
 const VIEW_AS_KEY = "srsc_view_as";   // "" | kunci role di ROLE_ORDER  (Role Switch)
 const SIM_CAREER_KEY = "srsc_sim_career";   // KHUSUS Developer: career yang disimulasikan saat View as ("" = tidak ada)
 
 // Urutan role dari yang tertinggi ke terendah. Role Switch menawarkan role DI BAWAH role sendiri:
 // Developer -> Senior Manager ... Lecturer; Manager -> Section Head ... Lecturer; dst.
-const ROLE_ORDER = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic", "bsp", "staff", "dosen"];
-const SWITCH_LABELS = Object.assign({}, ROLE_LABELS, { bsp: "Binus Support" });   // di daftar pilihan, BSP disebut jelas
+const ROLE_ORDER = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic", "bsp", "cc", "staff", "dosen"];
+const SWITCH_LABELS = Object.assign({}, ROLE_LABELS, { bsp: "Binus Support", cc: "Contact Center" });   // di daftar pilihan, BSP disebut jelas
 function rolesBelow(role){
   const i = ROLE_ORDER.indexOf(role);
   return i < 0 ? [] : ROLE_ORDER.slice(i + 1);
@@ -2415,7 +2418,8 @@ async function loadAndRender(isInitial, fromCache){
   const realRole = extra.role || "";
   const canSwitch = !!(extra.perms && extra.perms.roleSwitch);
   const baseRole = (savedLogin.role === "Dosen" || savedLogin.domain === DOMAIN_AC_ID) ? "dosen"
-                 : (SUPPORT_UNIT_PATTERN.test(String(savedLogin.unit || "")) ? "bsp" : "staff");
+                 : (CC_UNIT_PATTERN.test(String(savedLogin.unit || "")) ? "cc"
+                 : (SUPPORT_UNIT_PATTERN.test(String(savedLogin.unit || "")) ? "bsp" : "staff"));
   // Role Switch hanya boleh ke role DI BAWAH role sendiri; pilihan lama yang tidak berlaku lagi dibuang.
   let viewAs = getViewAs();
   if (viewAs && (!canSwitch || !rolesBelow(realRole || baseRole).includes(viewAs) || viewAs !== (extra.viewAs || ""))){

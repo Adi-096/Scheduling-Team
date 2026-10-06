@@ -456,6 +456,18 @@
     text-transform:uppercase;color:var(--ink-faint);margin:22px 0 10px;
   }
   .pic-list{ list-style:none;margin:0;padding:0; }
+  .pic-cat{ margin-top:18px; }
+  .pic-cat:first-child{ margin-top:4px; }
+  .pic-cat-title{
+    display:flex;align-items:center;gap:8px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
+    padding:0 2px 8px;
+  }
+  .pic-cat-count{
+    font-weight:500;color:var(--ink-faint);letter-spacing:0;
+    border:1px solid var(--line);border-radius:999px;padding:0 7px;line-height:16px;font-size:10.5px;
+  }
   .pic-list li{ border-top:1px solid var(--line);padding:12px 2px; }
   .pic-list li:last-child{ border-bottom:1px solid var(--line); }
   .pic-list .pic-li-main{ font-weight:500;font-size:14.5px;color:var(--ink); }
@@ -1454,7 +1466,7 @@ function safeHttpUrl(u){
 }
 
 // Baca kolom link PIC di sebuah sheet tim -> [link, ...]
-// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[], staffVisible }
+// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[], staffVisible, category }
 //   - kolom "is Visible from other PIC" kosong  -> hanya PIC sheet pemilik
 //   - berisi "Master"                           -> semua PIC di semua sheet
 //   - berisi nama sheet (boleh lebih dari satu, dipisah baris baru / ; / |)
@@ -1486,7 +1498,8 @@ function mapServerLinks(arr){
     desc: l.desc || "",
     visibleAll: !!l.visibleAll,
     visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : [],
-    staffVisible: !!l.staffVisible   // kolom "Staff Visibility" = Yes
+    staffVisible: !!l.staffVisible,  // kolom "Staff Visibility" = Yes
+    category: String(l.category || "").trim()   // kolom "Category" (opsional)
   })).filter(l => l.url);
 }
 
@@ -1613,6 +1626,32 @@ function visSelectHtml(idx, link){
     </select>`;
 }
 
+// Kelompokkan link per kategori. Urutan kategori = kemunculan pertama di sheet; link tanpa
+// kategori ditaruh di grup terakhir ("Other"). Jika tidak ada satu pun kategori -> satu grup tanpa judul.
+// Setiap item membawa indeks aslinya (i) supaya mode Edit / Delete tetap menunjuk baris yang benar.
+function picGroupLinks(links){
+  const map = new Map();
+  links.forEach((l, i) => {
+    const label = (l.category || "").trim();
+    const key = label.toLowerCase();
+    if (!map.has(key)) map.set(key, { cat: label, items: [] });
+    map.get(key).items.push({ l, i });
+  });
+  const groups = [...map.values()];
+  const named = groups.filter(g => g.cat);
+  const none = groups.filter(g => !g.cat);
+  return named.concat(none);
+}
+
+function categoryFieldHtml(idx, link){
+  const seen = new Set();
+  const opts = (picVisible[idx] || []).map(l => (l.category || "").trim())
+    .filter(c => c && !seen.has(c.toLowerCase()) && seen.add(c.toLowerCase()))
+    .map(c => `<option value="${escapeHtml(c)}"></option>`).join("");
+  return `<input type="text" id="pic-f-cat" list="pic-cat-options" placeholder="Category (optional), e.g. Monitoring" maxlength="60" value="${link ? escapeHtml(link.category || "") : ""}">
+      <datalist id="pic-cat-options">${opts}</datalist>`;
+}
+
 // <select> Staff Visibility: Yes = menu juga tampil untuk Staff / user biasa (kecuali Dosen).
 function staffSelectHtml(link){
   const on = !!(link && link.staffVisible);
@@ -1628,6 +1667,7 @@ function picFormHtml(idx, formId, link, submitLabel){
       <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
       <input type="url" id="pic-f-url" placeholder="https://..." required value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
       <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
+      ${categoryFieldHtml(idx, link)}
       ${visSelectHtml(idx, link)}
       ${staffSelectHtml(link)}
       <div class="pic-actions">
@@ -1655,6 +1695,7 @@ function renderPicModal(idx, note){
           <div class="pic-li-body">
             <div class="pic-li-main">${escapeHtml(l.name)}</div>
             ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
+            ${l.category ? `<span class="pic-tag">${escapeHtml(l.category)}</span>` : ""}
           </div>
           <div class="pic-move">
             <button type="button" data-pic-up="${i}" aria-label="Move up" ${i === 0 ? "disabled" : ""}>&#9650;</button>
@@ -1662,7 +1703,8 @@ function renderPicModal(idx, note){
           </div>
         </li>`).join("")}</ul>`
     : links.length
-    ? `<ul class="pic-list">${links.map((l, i) => `
+    ? picGroupLinks(links).map((g, gi, all) => {
+        const lis = g.items.map(({ l, i }) => `
         <li>
           ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
           ${picking ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
@@ -1671,7 +1713,11 @@ function renderPicModal(idx, note){
             ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
             ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
           </div>
-        </li>`).join("")}</ul>`
+        </li>`).join("");
+        const ul = `<ul class="pic-list">${lis}</ul>`;
+        if (all.length === 1 && !g.cat) return ul;   // tanpa kategori sama sekali: tampilan lama
+        return `<div class="pic-cat"><div class="pic-cat-title">${escapeHtml(g.cat || "Other")}<span class="pic-cat-count">${g.items.length}</span></div>${ul}</div>`;
+      }).join("")
     : `<p class="pic-empty">No menus yet.</p>`;
 
   // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
@@ -1779,12 +1825,13 @@ function readPicForm(){
   const desc = document.getElementById("pic-f-desc").value.trim();
   const vis  = document.getElementById("pic-f-vis").value;
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
+  const cat = document.getElementById("pic-f-cat") ? document.getElementById("pic-f-cat").value.replace(/\s+/g, " ").trim() : "";
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
   }
-  return { name, url, desc, vis, staff };
+  return { name, url, desc, vis, staff, cat };
 }
 
 async function addPicLink(){
@@ -1800,7 +1847,7 @@ async function addPicLink(){
   try {
     const data = await picApi({
       action: "addLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
-      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
@@ -1809,7 +1856,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes"
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." });
@@ -1838,7 +1885,7 @@ async function editPicLink(){
     const data = await picApi({
       action: "editLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
-      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
@@ -1847,6 +1894,7 @@ async function editPicLink(){
       link.url = safeHttpUrl(f.url); link.rawUrl = f.url;
       link.desc = f.desc;
       link.staffVisible = f.staff === "Yes";
+      link.category = f.cat;
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
         link.visibleAll = v.all; link.visibleTo = v.list;

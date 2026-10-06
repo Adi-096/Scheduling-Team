@@ -180,6 +180,16 @@
     white-space:pre-line;
   }
   .hero-title a{ color:var(--accent); }
+  /* Layar lebar: judul utama boleh lebih lebar dari kolom konten supaya link
+     (mis. https://support.binus.ac.id/get-support/) tetap satu baris, tidak terputus. */
+  @media (min-width:1000px){
+    .hero-title{
+      max-width:none;
+      width:min(1040px, calc(100vw - 48px));
+      position:relative; left:50%; transform:translateX(-50%);
+    }
+    .hero-title a{ white-space:nowrap; }
+  }
 
   .team-btn{
     font-family:'IBM Plex Mono',monospace;

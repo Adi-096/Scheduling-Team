@@ -900,7 +900,7 @@
 <div class="modal-overlay" id="pic-modal-overlay">
   <div class="modal pic-modal">
     <button class="modal-close" id="pic-modal-close">Tutup ✕</button>
-    <h3>PIC Menu</h3>
+    <h3>Our Links</h3>
     <div class="modal-sub" id="pic-modal-sub"></div>
     <div id="pic-modal-content"></div>
   </div>
@@ -1558,7 +1558,7 @@ function applyPicMenus(){
     picManageMap[idx] = canCreate || canDelete;
     // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
     slot.innerHTML = (list.length || canCreate)
-      ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}PIC Menu</button>`
+      ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}Our Links</button>`
       : "";
   });
 }
@@ -2809,7 +2809,7 @@ const Activity = (function(){
 
   function labelFor(id){
     const s = ctx.sheet || "";
-    if (id === "pic-modal-overlay") return "PIC Menu / " + s;
+    if (id === "pic-modal-overlay") return "Our Links / " + s;
     if (id === "member-modal-overlay") return "Member Card / " + s;
     if (id === "tedit-modal-overlay") return "Team Edit / " + s;
     return "Our Team / " + s;
@@ -2842,7 +2842,7 @@ const Activity = (function(){
     document.addEventListener("click", (e) => {
       const link = e.target.closest && e.target.closest("#pic-modal-content a[href]");
       if (link){
-        event("link_click", "PIC Menu / " + ctx.sheet + " > " + (link.textContent || "").replace(/→/g, "").trim());
+        event("link_click", "Our Links / " + ctx.sheet + " > " + (link.textContent || "").replace(/→/g, "").trim());
         return;
       }
       const c = e.target.closest && e.target.closest("a.icon-btn, a.member-action-btn");

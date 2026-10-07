@@ -502,6 +502,33 @@
   .pic-list{ list-style:none;margin:0;padding:0; }
   .pic-cat{ margin-top:18px; }
   .pic-cat:first-child{ margin-top:4px; }
+  /* Kategori besar (> 2 link): tampil sebagai baris folder; isinya muncul setelah diklik */
+  .pic-cat-row{
+    display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+    background:none;border:0;border-bottom:1px solid var(--line);
+    padding:16px 4px;cursor:pointer;font:inherit;color:var(--primary);
+  }
+  .pic-cat-row:first-child{ border-top:1px solid var(--line); }
+  .pic-cat-row:hover{ background:var(--surface-soft); }
+  .pic-cat-row-name{
+    flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
+  }
+  .pic-cat-chev{ font-size:22px;line-height:1;color:var(--ink-faint); }
+  .pic-cat-row:hover .pic-cat-chev{ color:var(--primary); }
+  /* Navigasi direktori di dalam satu kategori */
+  .pic-crumb{
+    display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+    margin:0 0 4px;padding:0 2px 10px;border-bottom:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;
+  }
+  .pic-crumb-link{
+    background:none;border:0;padding:6px 2px;cursor:pointer;font:inherit;
+    color:var(--accent);text-decoration:underline;text-underline-offset:3px;
+  }
+  .pic-crumb-link:hover{ color:var(--primary); }
+  .pic-crumb-sep{ color:var(--ink-faint); }
+  .pic-crumb-cur{ color:var(--ink);font-weight:600;text-transform:uppercase; }
   .pic-cat-title{
     display:flex;align-items:center;gap:8px;
     font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
@@ -1653,6 +1680,7 @@ function visibilityLabel(l){
 //   "edit-pick" (pilih 1 menu) | "edit" (form ubah)
 let picMode = "view";
 let picEditLink = null;
+let picCatOpen = null;       // kategori yang sedang dibuka di popup Our Links (null = daftar kategori)
 let picReorderList = [];   // salinan kerja urutan menu saat mode "reorder"
 let picReorderDirty = false;
 
@@ -1758,8 +1786,23 @@ function renderPicModal(idx, note){
 
   // ---- Daftar menu (selalu tampil dulu) ----
   const reordering = picCanCreate && picMode === "reorder";
-  const listHtml = reordering
-    ? `<ul class="pic-list reorder" id="pic-reorder-list">${picReorderList.map((l, i) => `
+  const COLLAPSE_OVER = 2;   // kategori dengan lebih dari 2 link: tampil sebagai folder dulu, isinya setelah diklik
+  const catKey  = (g) => g.cat ? g.cat.toLowerCase() : "__other__";
+  const catName = (g) => g.cat || "Other";
+  const itemLi = ({ l, i }) => `
+        <li>
+          ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
+          ${picking ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
+          <div class="pic-li-body">
+            <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
+            ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
+            ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
+          </div>
+        </li>`;
+  const manageView = deleting || picking;   // mode kelola: semua link tampil penuh agar bisa dipilih
+  let listHtml;
+  if (reordering){
+    listHtml = `<ul class="pic-list reorder" id="pic-reorder-list">${picReorderList.map((l, i) => `
         <li draggable="true" data-pic-row="${i}">
           <span class="pic-grip" aria-hidden="true">&#8942;&#8942;</span>
           <div class="pic-li-body">
@@ -1771,24 +1814,39 @@ function renderPicModal(idx, note){
             <button type="button" data-pic-up="${i}" aria-label="Move up" ${i === 0 ? "disabled" : ""}>&#9650;</button>
             <button type="button" data-pic-down="${i}" aria-label="Move down" ${i === picReorderList.length - 1 ? "disabled" : ""}>&#9660;</button>
           </div>
-        </li>`).join("")}</ul>`
-    : (deleting || picking ? links.length : links.some(l => !l.pinned))
-    ? picGroupLinks(links, (deleting || picking) ? null : (l => !l.pinned)).map((g, gi, all) => {
-        const lis = g.items.map(({ l, i }) => `
-        <li>
-          ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
-          ${picking ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
-          <div class="pic-li-body">
-            <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
-            ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
-            ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
-          </div>
-        </li>`).join("");
-        const ul = `<ul class="pic-list">${lis}</ul>`;
-        if (all.length === 1 && !g.cat) return ul;   // tanpa kategori sama sekali: tampilan lama
-        return `<div class="pic-cat"><div class="pic-cat-title">${escapeHtml(g.cat || "Other")}<span class="pic-cat-count">${g.items.length}</span></div>${ul}</div>`;
-      }).join("")
-    : `<p class="pic-empty">${links.length ? "All links here are shown as On Going on the main page." : "No menus yet."}</p>`;
+        </li>`).join("")}</ul>`;
+  } else if (!(manageView ? links.length : links.some(l => !l.pinned))){
+    listHtml = `<p class="pic-empty">${links.length ? "All links here are shown as On Going on the main page." : "No menus yet."}</p>`;
+  } else {
+    const groups = picGroupLinks(links, manageView ? null : (l => !l.pinned));
+    const hasCats = !(groups.length === 1 && !groups[0].cat);
+    let opened = null;
+    if (!manageView && hasCats && picCatOpen){
+      opened = groups.find(g => catKey(g) === picCatOpen) || null;
+      if (!opened) picCatOpen = null;
+    }
+    if (opened){
+      // Tampilan isi satu kategori + navigasi direktori (breadcrumb) di bagian atas.
+      listHtml = `<nav class="pic-crumb" aria-label="Breadcrumb">
+          <button type="button" class="pic-crumb-link" data-pic-cat-root>&lsaquo; Our Links</button>
+          <span class="pic-crumb-sep" aria-hidden="true">&rsaquo;</span>
+          <span class="pic-crumb-cur">${escapeHtml(catName(opened))}</span>
+        </nav><ul class="pic-list">${opened.items.map(itemLi).join("")}</ul>`;
+    } else {
+      listHtml = groups.map(g => {
+        const ul = `<ul class="pic-list">${g.items.map(itemLi).join("")}</ul>`;
+        if (!hasCats) return ul;   // tanpa kategori sama sekali: tampilan lama
+        if (!manageView && g.items.length > COLLAPSE_OVER){
+          return `<button type="button" class="pic-cat-row" data-pic-cat="${escapeHtml(catKey(g))}">
+              <span class="pic-cat-row-name">${escapeHtml(catName(g))}</span>
+              <span class="pic-cat-count">${g.items.length}</span>
+              <span class="pic-cat-chev" aria-hidden="true">&rsaquo;</span>
+            </button>`;
+        }
+        return `<div class="pic-cat"><div class="pic-cat-title">${escapeHtml(catName(g))}<span class="pic-cat-count">${g.items.length}</span></div>${ul}</div>`;
+      }).join("");
+    }
+  }
 
   // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
   let controlsHtml = "";
@@ -1860,6 +1918,7 @@ function openPicMenu(idx){
   picCurrentIdx = idx;
   picMode = "view";
   picEditLink = null;
+  picCatOpen = null;
   renderPicModal(idx);
   document.getElementById("pic-modal-overlay").classList.add("open");
 }
@@ -2116,6 +2175,17 @@ document.addEventListener("dragend", () => { picDragFrom = null; picClearDropMar
 document.addEventListener("click", (e) => {
   const open = e.target.closest("[data-pic-sec]");
   if (open){ openPicMenu(Number(open.dataset.picSec)); return; }
+  const catBtn = e.target.closest("[data-pic-cat]");
+  const catRoot = e.target.closest("[data-pic-cat-root]");
+  if (catBtn || catRoot){
+    picCatOpen = catBtn ? catBtn.dataset.picCat : null;
+    renderPicModal(picCurrentIdx);
+    const ov = document.getElementById("pic-modal-overlay");
+    const md = ov && ov.querySelector(".modal");
+    if (ov) ov.scrollTop = 0;
+    if (md) md.scrollTop = 0;
+    return;
+  }
   const modeBtn = e.target.closest("[data-pic-mode]");
   if (modeBtn){ setPicMode(modeBtn.dataset.picMode); return; }
   if (e.target.closest("#pic-edit-continue")){

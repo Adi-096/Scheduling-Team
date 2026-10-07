@@ -455,6 +455,36 @@
   .pic-slot:empty{ display:none; }
   .section-actions .team-btn, .section-actions .pic-menu-btn{ margin:0; line-height:1.2; }
   .pic-modal{ max-width:560px; }
+  /* On Going: link berstatus Master, tampil langsung di bawah tombol Our Team / Our Links */
+  .pinned-wrap{
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    margin:-4px 0 22px;
+  }
+  .pinned-wrap:empty{ display:none; }
+  .pinned-label{
+    display:inline-flex;align-items:center;gap:7px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--accent);
+  }
+  .pinned-label::before{
+    content:"";width:7px;height:7px;border-radius:50%;background:#2e9e5b;
+    box-shadow:0 0 0 0 rgba(46,158,91,.5);animation:pinned-pulse 2s infinite;
+  }
+  @keyframes pinned-pulse{
+    0%{ box-shadow:0 0 0 0 rgba(46,158,91,.45); }
+    70%{ box-shadow:0 0 0 7px rgba(46,158,91,0); }
+    100%{ box-shadow:0 0 0 0 rgba(46,158,91,0); }
+  }
+  @media (prefers-reduced-motion: reduce){ .pinned-label::before{ animation:none; } }
+  .pinned-list{ display:flex;flex-wrap:wrap;justify-content:center;gap:10px; }
+  .pinned-link{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:9px 18px;border-radius:999px;
+    background:var(--surface);border:1px solid var(--line);
+    color:var(--primary);font-size:14px;font-weight:600;text-decoration:none;
+    transition:background .15s ease,color .15s ease,border-color .15s ease;
+  }
+  .pinned-link:hover{ background:var(--primary);color:#fff;border-color:var(--primary); }
   /* Our Links: judul popup + nama section rata tengah (daftar menu tetap rata kiri).
      Padding kiri-kanan judul sama besar supaya benar-benar di tengah dan tidak menabrak tombol Tutup. */
   #pic-modal-overlay .modal h3{ text-align:center; padding:0 72px; }
@@ -1270,6 +1300,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.2"/><path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
           Our Team
         </button><span class="pic-slot" data-pic-slot="${idx}"></span></div>
+        <div class="pinned-wrap" data-pinned-slot="${idx}"></div>
         <ul class="task-list">${taskLinks}</ul>`}
   </section>`;
 }
@@ -1483,7 +1514,7 @@ function safeHttpUrl(u){
 }
 
 // Baca kolom link PIC di sebuah sheet tim -> [link, ...]
-// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[], staffVisible, category }
+// Setiap link: { owner, name, url, desc, visibleAll, visibleTo[], staffVisible, category, pinned }
 //   - kolom "is Visible from other PIC" kosong  -> hanya PIC sheet pemilik
 //   - berisi "Master"                           -> semua PIC di semua sheet
 //   - berisi nama sheet (boleh lebih dari satu, dipisah baris baru / ; / |)
@@ -1516,7 +1547,8 @@ function mapServerLinks(arr){
     visibleAll: !!l.visibleAll,
     visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : [],
     staffVisible: !!l.staffVisible,  // kolom "Staff Visibility" = Yes
-    category: String(l.category || "").trim()   // kolom "Category" (opsional)
+    category: String(l.category || "").trim(),  // kolom "Category" (opsional)
+    pinned: !!l.pinned                          // kolom "Link Status" = Master -> link On Going
   })).filter(l => l.url);
 }
 
@@ -1583,11 +1615,20 @@ function applyPicMenus(){
     const canCreate = !!meta && viewPerms.create.has(key);
     const canDelete = !!meta && viewPerms.del.has(key);
     picVisible[idx] = list;
+    // On Going: link berstatus Master tampil langsung di halaman (di luar daftar Our Links).
+    const pinSlot = document.querySelector('[data-pinned-slot="' + idx + '"]');
+    const pinned = list.filter(l => l.pinned);
+    if (pinSlot){
+      pinSlot.innerHTML = pinned.length
+        ? `<span class="pinned-label">On Going</span><div class="pinned-list">${pinned.map(l =>
+            `<a class="pinned-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener"${l.desc ? ` title="${escapeHtml(l.desc)}"` : ""}>${escapeHtml(l.name)} &rarr;</a>`).join("")}</div>`
+        : "";
+    }
     picCreateMap[idx] = canCreate;
     picDeleteMap[idx] = canDelete;
     picManageMap[idx] = canCreate || canDelete;
     // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
-    slot.innerHTML = (list.length || canCreate)
+    slot.innerHTML = (list.some(l => !l.pinned) || canCreate)
       ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}Our Links</button>`
       : "";
   });
@@ -1602,7 +1643,9 @@ function visibilityLabel(l){
   if (l.visibleAll) t = "Visible to: all PICs";
   else if (l.visibleTo.length) t = "Visible to: this sheet + " + l.visibleTo.map(sheetDisplayName).join(", ");
   else t = "Visible to: this sheet's PIC only";
-  return l.staffVisible ? t + " + Staff" : t;
+  if (l.staffVisible) t += " + Staff";
+  if (l.pinned) t += " | On Going (shown on the page)";
+  return t;
 }
 
 // Mode tampilan popup:
@@ -1646,9 +1689,10 @@ function visSelectHtml(idx, link){
 // Kelompokkan link per kategori. Urutan kategori = kemunculan pertama di sheet; link tanpa
 // kategori ditaruh di grup terakhir ("Other"). Jika tidak ada satu pun kategori -> satu grup tanpa judul.
 // Setiap item membawa indeks aslinya (i) supaya mode Edit / Delete tetap menunjuk baris yang benar.
-function picGroupLinks(links){
+function picGroupLinks(links, keep){
   const map = new Map();
   links.forEach((l, i) => {
+    if (keep && !keep(l)) return;
     const label = (l.category || "").trim();
     const key = label.toLowerCase();
     if (!map.has(key)) map.set(key, { cat: label, items: [] });
@@ -1678,6 +1722,14 @@ function staffSelectHtml(link){
     </select>`;
 }
 
+function linkStatusSelectHtml(link){
+  const on = !!(link && link.pinned);
+  return `<select id="pic-f-status" aria-label="Link status">
+      <option value=""${on ? "" : " selected"}>Normal (listed in Our Links)</option>
+      <option value="Master"${on ? " selected" : ""}>Master: On Going (shown on the page, not in Our Links)</option>
+    </select>`;
+}
+
 function picFormHtml(idx, formId, link, submitLabel){
   return `
     <form id="${formId}" class="pic-form" autocomplete="off">
@@ -1687,6 +1739,7 @@ function picFormHtml(idx, formId, link, submitLabel){
       ${categoryFieldHtml(idx, link)}
       ${visSelectHtml(idx, link)}
       ${staffSelectHtml(link)}
+      ${linkStatusSelectHtml(link)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
         <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
@@ -1719,8 +1772,8 @@ function renderPicModal(idx, note){
             <button type="button" data-pic-down="${i}" aria-label="Move down" ${i === picReorderList.length - 1 ? "disabled" : ""}>&#9660;</button>
           </div>
         </li>`).join("")}</ul>`
-    : links.length
-    ? picGroupLinks(links).map((g, gi, all) => {
+    : (deleting || picking ? links.length : links.some(l => !l.pinned))
+    ? picGroupLinks(links, (deleting || picking) ? null : (l => !l.pinned)).map((g, gi, all) => {
         const lis = g.items.map(({ l, i }) => `
         <li>
           ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
@@ -1735,7 +1788,7 @@ function renderPicModal(idx, note){
         if (all.length === 1 && !g.cat) return ul;   // tanpa kategori sama sekali: tampilan lama
         return `<div class="pic-cat"><div class="pic-cat-title">${escapeHtml(g.cat || "Other")}<span class="pic-cat-count">${g.items.length}</span></div>${ul}</div>`;
       }).join("")
-    : `<p class="pic-empty">No menus yet.</p>`;
+    : `<p class="pic-empty">${links.length ? "All links here are shown as On Going on the main page." : "No menus yet."}</p>`;
 
   // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
   let controlsHtml = "";
@@ -1770,7 +1823,7 @@ function renderPicModal(idx, note){
         <div class="pic-actions">
           ${picCanCreate ? `<button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>` : ""}
           ${picCanCreate && links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
-          ${picCanCreate && links.length > 1 ? `<button type="button" class="pic-btn" data-pic-mode="reorder">Reorder Menu</button>` : ""}
+          ${picCanCreate && links.filter(l => !l.pinned).length > 1 ? `<button type="button" class="pic-btn" data-pic-mode="reorder">Reorder Menu</button>` : ""}
           ${picCanDelete && links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
         </div>`;
     }
@@ -1790,7 +1843,7 @@ function setPicMode(mode){
   picMode = mode;
   if (mode !== "edit") picEditLink = null;
   if (mode === "reorder"){
-    picReorderList = (picVisible[picCurrentIdx] || []).slice();
+    picReorderList = (picVisible[picCurrentIdx] || []).filter(l => !l.pinned);
     picReorderDirty = false;
   }
   renderPicModal(picCurrentIdx);
@@ -1842,13 +1895,14 @@ function readPicForm(){
   const desc = document.getElementById("pic-f-desc").value.trim();
   const vis  = document.getElementById("pic-f-vis").value;
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
+  const status = document.getElementById("pic-f-status") ? document.getElementById("pic-f-status").value : "";
   const cat = document.getElementById("pic-f-cat") ? document.getElementById("pic-f-cat").value.replace(/\s+/g, " ").trim() : "";
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
   }
-  return { name, url, desc, vis, staff, cat };
+  return { name, url, desc, vis, staff, cat, status };
 }
 
 async function addPicLink(){
@@ -1864,7 +1918,7 @@ async function addPicLink(){
   try {
     const data = await picApi({
       action: "addLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
-      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
@@ -1873,7 +1927,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: f.status === "Master"
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." });
@@ -1902,7 +1956,7 @@ async function editPicLink(){
     const data = await picApi({
       action: "editLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
-      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
@@ -1912,6 +1966,7 @@ async function editPicLink(){
       link.desc = f.desc;
       link.staffVisible = f.staff === "Yes";
       link.category = f.cat;
+      link.pinned = f.status === "Master";
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
         link.visibleAll = v.all; link.visibleTo = v.list;
@@ -2970,6 +3025,12 @@ const Activity = (function(){
 
     // Klik link PIC Menu & tombol kontak (Email / WhatsApp)
     document.addEventListener("click", (e) => {
+      const pin = e.target.closest && e.target.closest(".pinned-link");
+      if (pin){
+        const sec = pin.closest("section");
+        event("link_click", "On Going / " + (sec ? sec.dataset.sheet : ctx.sheet) + " > " + (pin.textContent || "").replace(/→/g, "").trim());
+        return;
+      }
       const link = e.target.closest && e.target.closest("#pic-modal-content a[href]");
       if (link){
         event("link_click", "Our Links / " + ctx.sheet + " > " + (link.textContent || "").replace(/→/g, "").trim());

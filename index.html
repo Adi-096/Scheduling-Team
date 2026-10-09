@@ -2467,7 +2467,7 @@ function getViewAs(){
 // Item yang dipilih tapi tidak punya nilai (mis. Lecturer Code untuk Manager) tidak ditampilkan.
 const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kalau server belum mengirim kolom ini
 
-// opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simSec, secOptions, asPic, picOptions, canSignOut }
+// opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simSec, secOptions, asPic, picList, devUi, uiViewAs/uiCareer/uiSec, canSignOut }
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
@@ -2489,33 +2489,38 @@ function renderLoginInfo(opts){
   };
   const parts = ["email", "role", "job", "code", "unit"].filter(k => card.includes(k) && items[k]).map(k => items[k]);
 
-  // KHUSUS Developer: "masuk sebagai" seorang PIC -> seluruh pengaturan PIC itu (Role Policy, section, link,
-  // hak edit) yang tampil. Saat mode ini aktif, pilihan paling atas = kembali ke role sendiri.
-  const picSelectHtml = (opts.picOptions && opts.picOptions.length) ? `<select class="acct-switch" id="acct-aspic" aria-label="Sign in as PIC">
-        <option value=""${!opts.asPic ? " selected" : ""}>${opts.asPic ? "Back to my role (Developer)" : "As PIC: choose…"}</option>
-        ${opts.picOptions.map(e => `<option value="${escapeHtml(e)}"${opts.asPic === e ? " selected" : ""}>As PIC: ${escapeHtml(e)}</option>`).join("")}
-      </select>` : "";
-  if (opts.asPic){
-    if (picSelectHtml) parts.push(picSelectHtml);
-  } else if (opts.canSwitch){
-    const below = rolesBelow(ownRole);
+  // KHUSUS Developer. Urutan pilihan: View as > Career > Section > As PIC.
+  //   View as / Career / Section = simulasi role pada sub-section tertentu.
+  //   As PIC = "masuk sebagai" seorang PIC pada section/career itu -> seluruh pengaturan PIC tsb yang tampil.
+  // Role lain dengan Role Switch = Yes hanya mendapat pilihan View as.
+  const devUi = !!opts.devUi;
+  const uView = devUi ? opts.uiViewAs : opts.viewAs;
+  const uCareer = devUi ? opts.uiCareer : opts.simCareer;
+  const uSec = devUi ? opts.uiSec : opts.simSec;
+  if (devUi || opts.canSwitch){
+    const uRole = devUi ? "developer" : ownRole;
+    const below = rolesBelow(uRole);
     if (below.length){
       parts.push(`<select class="acct-switch" id="acct-switch" aria-label="Switch role view">
-        <option value=""${opts.viewAs === "" ? " selected" : ""}>My role</option>
-        ${below.map(k => `<option value="${k}"${opts.viewAs === k ? " selected" : ""}>View as ${escapeHtml(SWITCH_LABELS[k])}</option>`).join("")}
+        <option value=""${!uView ? " selected" : ""}>My role</option>
+        ${below.map(k => `<option value="${k}"${uView === k ? " selected" : ""}>View as ${escapeHtml(SWITCH_LABELS[k])}</option>`).join("")}
       </select>`);
-      if (ownRole === "developer" && picSelectHtml) parts.push(picSelectHtml);
-      // KHUSUS Developer: pilih career untuk disimulasikan (View as Authorized PIC = PIC pada section career itu,
-      // View as Registered PIC = PIC pada career itu).
-      if (ownRole === "developer" && opts.viewAs && Array.isArray(opts.careers) && opts.careers.length){
+      if (uRole === "developer" && uView && Array.isArray(opts.careers) && opts.careers.length){
         parts.push(`<select class="acct-switch" id="acct-career" aria-label="Simulated career">
-          <option value=""${!opts.simCareer ? " selected" : ""}>Career: not set</option>
-          ${opts.careers.map(c => `<option value="${escapeHtml(c.key)}"${opts.simCareer === c.key ? " selected" : ""}>Career: ${escapeHtml(c.name)}</option>`).join("")}
+          <option value=""${!uCareer ? " selected" : ""}>Career: not set</option>
+          ${opts.careers.map(c => `<option value="${escapeHtml(c.key)}"${uCareer === c.key ? " selected" : ""}>Career: ${escapeHtml(c.name)}</option>`).join("")}
         </select>`);
-        // Pilih sub-section (sheet) yang Active pada career itu. Tidak ada opsi "all": selalu satu sub-section.
-        if (opts.simCareer && Array.isArray(opts.secOptions) && opts.secOptions.length > 1){
+        // Sub-section (sheet) yang Active pada career itu. Tidak ada opsi "all": selalu satu sub-section.
+        if (uCareer && Array.isArray(opts.secOptions) && opts.secOptions.length > 1){
           parts.push(`<select class="acct-switch" id="acct-sec" aria-label="Simulated section">
-            ${opts.secOptions.map(o => `<option value="${escapeHtml(o.key)}"${opts.simSec === o.key ? " selected" : ""}>Section: ${escapeHtml(o.label)}</option>`).join("")}
+            ${opts.secOptions.map(o => `<option value="${escapeHtml(o.key)}"${uSec === o.key ? " selected" : ""}>Section: ${escapeHtml(o.label)}</option>`).join("")}
+          </select>`);
+        }
+        // As PIC: hanya PIC yang terdapat pada section / career terpilih.
+        if (Array.isArray(opts.picList) && opts.picList.length){
+          parts.push(`<select class="acct-switch" id="acct-aspic" aria-label="Sign in as PIC">
+            <option value=""${!opts.asPic ? " selected" : ""}>As PIC: none</option>
+            ${opts.picList.map(e => `<option value="${escapeHtml(e)}"${opts.asPic === e ? " selected" : ""}>As PIC: ${escapeHtml(e)}</option>`).join("")}
           </select>`);
         }
       }
@@ -2530,7 +2535,7 @@ function renderLoginInfo(opts){
   const sw = document.getElementById("acct-switch");
   if (sw) sw.addEventListener("change", () => {
     const v = sw.value;
-    try { if (v) localStorage.setItem(VIEW_AS_KEY, v); else localStorage.removeItem(VIEW_AS_KEY); localStorage.removeItem(SIM_SEC_KEY); } catch (e){}
+    try { if (v) localStorage.setItem(VIEW_AS_KEY, v); else localStorage.removeItem(VIEW_AS_KEY); localStorage.removeItem(SIM_SEC_KEY); localStorage.removeItem(SIM_PIC_KEY); } catch (e){}
     Activity.event("role_switch", v ? "View as " + (SWITCH_LABELS[v] || v) : "Back to own role");
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
@@ -2541,16 +2546,8 @@ function renderLoginInfo(opts){
   const ps = document.getElementById("acct-aspic");
   if (ps) ps.addEventListener("change", () => {
     const v = ps.value;
-    try {
-      if (v){
-        localStorage.setItem(SIM_PIC_KEY, v);
-        // Mode "sebagai PIC" tidak bercampur dengan View as / Career / Section.
-        localStorage.removeItem(VIEW_AS_KEY); localStorage.removeItem(SIM_CAREER_KEY); localStorage.removeItem(SIM_SEC_KEY);
-      } else {
-        localStorage.removeItem(SIM_PIC_KEY);
-      }
-    } catch (e){}
-    Activity.event("role_switch", v ? "As PIC: " + v : "Back to own role");
+    try { if (v) localStorage.setItem(SIM_PIC_KEY, v); else localStorage.removeItem(SIM_PIC_KEY); } catch (e){}
+    Activity.event("role_switch", v ? "As PIC: " + v : "As PIC: none");
     effectiveAsPic = "";
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
@@ -2561,7 +2558,7 @@ function renderLoginInfo(opts){
   const cs = document.getElementById("acct-career");
   if (cs) cs.addEventListener("change", () => {
     const v = cs.value;
-    try { if (v) localStorage.setItem(SIM_CAREER_KEY, v); else localStorage.removeItem(SIM_CAREER_KEY); localStorage.removeItem(SIM_SEC_KEY); } catch (e){}
+    try { if (v) localStorage.setItem(SIM_CAREER_KEY, v); else localStorage.removeItem(SIM_CAREER_KEY); localStorage.removeItem(SIM_SEC_KEY); localStorage.removeItem(SIM_PIC_KEY); } catch (e){}
     Activity.event("role_switch", v ? "Career: " + (cs.options[cs.selectedIndex].text.replace(/^Career:\s*/, "")) : "Career: not set");
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
@@ -2572,7 +2569,7 @@ function renderLoginInfo(opts){
   const js = document.getElementById("acct-sec");
   if (js) js.addEventListener("change", () => {
     const v = js.value;
-    try { if (v) localStorage.setItem(SIM_SEC_KEY, v); } catch (e){}
+    try { if (v) localStorage.setItem(SIM_SEC_KEY, v); localStorage.removeItem(SIM_PIC_KEY); } catch (e){}
     Activity.event("role_switch", "Section: " + (js.options[js.selectedIndex].text.replace(/^Section:\s*/, "")));
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
@@ -2600,7 +2597,7 @@ function extraFromServer(d){
   return {
     links: d.links || {}, editorFor: d.editorFor || [],
     leader: !!d.leader, developer: !!d.developer, title: d.title || "", job: d.jobTitle || "",
-    role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", asPic: d.asPic || "", picOptions: d.picOptions || [], sheetPics: d.sheetPics || {}, simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
+    role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", asPic: d.asPic || "", picsBySheet: d.picsBySheet || {}, sheetPics: d.sheetPics || {}, simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
     createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], teamSheets: d.teamSheets || [],
     policy: d.policy || {}
   };
@@ -2737,21 +2734,41 @@ async function loadAndRender(isInitial, fromCache){
                  : (CC_UNIT_PATTERN.test(String(savedLogin.unit || "")) ? "cc"
                  : (SUPPORT_UNIT_PATTERN.test(String(savedLogin.unit || "")) ? "bsp" : "staff"));
   // Role Switch hanya boleh ke role DI BAWAH role sendiri; pilihan lama yang tidak berlaku lagi dibuang.
+  // Mode "As PIC" (Developer): peran efektif = peran PIC itu (extra.role), jadi View as / Career / Section
+  // TIDAK dipakai untuk perhitungan, tetapi pilihannya tetap diingat dan ditampilkan di login card.
+  const asPicMode = !!extra.asPic;
   let viewAs = getViewAs();
-  if (viewAs && (!canSwitch || !rolesBelow(realRole || baseRole).includes(viewAs) || viewAs !== (extra.viewAs || ""))){
+  if (asPicMode){
+    viewAs = "";
+  } else if (viewAs && (!canSwitch || !rolesBelow(realRole || baseRole).includes(viewAs) || viewAs !== (extra.viewAs || ""))){
     viewAs = ""; try { localStorage.removeItem(VIEW_AS_KEY); } catch (e){}
   }
   // Career simulasi hanya berlaku untuk Developer yang sedang View as; selain itu dibuang.
   let simCareer = getSimCareer();
-  if (simCareer && (!viewAs || simCareer !== (extra.simCareer || ""))){
+  if (asPicMode){
+    simCareer = "";
+  } else if (simCareer && (!viewAs || simCareer !== (extra.simCareer || ""))){
     if (!viewAs || realRole !== "developer"){ simCareer = ""; try { localStorage.removeItem(SIM_CAREER_KEY); } catch (e){} }
     else simCareer = extra.simCareer || "";
   }
   // Section simulasi = yang disetujui server (selalu satu sub-section bila career simulasi aktif).
   const simSec = simCareer ? (extra.simSec || "") : "";
-  if (!simSec && getSimSec()){ try { localStorage.removeItem(SIM_SEC_KEY); } catch (e){} }
+  if (!asPicMode && !simSec && getSimSec()){ try { localStorage.removeItem(SIM_SEC_KEY); } catch (e){} }
+  // Pilihan yang TAMPIL di login card Developer (urutan: View as > Career > Section > As PIC).
+  const uiViewAs = asPicMode ? getViewAs() : viewAs;
+  const uiCareer = asPicMode ? getSimCareer() : simCareer;
+  const uiSec = asPicMode ? (uiCareer ? resolveSimSec() : "") : simSec;
+  const uiSecOptions = simSectionOptionsFor(uiCareer, masterRows);
+  // Daftar PIC untuk "As PIC": hanya PIC pada section terpilih (atau pada career terpilih bila belum ada section).
+  const uiPicList = (() => {
+    if (!(uiViewAs && uiCareer)) return [];
+    const keys = uiSec ? [uiSec] : uiSecOptions.map(o => o.key);
+    const set = new Set();
+    keys.forEach(k => ((extra.picsBySheet || {})[k] || []).forEach(e => set.add(e)));
+    return Array.from(set).sort();
+  })();
   // Pilihan section = semua sub-section yang Active pada career simulasi (tidak ikut disaring Visibility Index).
-  const simSecOptions = simSectionOptionsFor(simCareer, masterRows);
+  const simSecOptions = uiSecOptions;
   const effRole = viewAs || realRole || baseRole;
   const viewVis = resolveViewerVisibility({ role: effRole, pol: (extra.policy || {})[effRole] || {}, userIdx: userIdx, allIdx: allIdx });
   const canSeeIdx = (vi) => {
@@ -2879,7 +2896,7 @@ async function loadAndRender(isInitial, fromCache){
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
   renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", job: extra.job || "",
-                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picOptions: extra.picOptions || [], canSignOut: !!(extra.perms && extra.perms.signOut) });
+                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picList: uiPicList, devUi: !!extra.developer && (asPicMode || (realRole === "developer" && canSwitch)), uiViewAs: uiViewAs, uiCareer: uiCareer, uiSec: uiSec, canSignOut: !!(extra.perms && extra.perms.signOut) });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){

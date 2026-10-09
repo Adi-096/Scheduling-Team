@@ -1116,6 +1116,7 @@ let serverDataViewAs = null;
 let serverDataSim = null;
 let serverDataGuest = null;
 let serverDataSimJab = null;
+let serverDataAsPic = null;
 
 // Guest (mis. PIC yang memilih "Continue as Guest"): getCurrentUserEmail() sengaja kosong supaya
 // peran PIC tidak dipakai. Email guest tetap dikirim terpisah HANYA agar server tahu ia pengguna
@@ -1125,11 +1126,11 @@ function getGuestEmail(){
   return (saved && saved.guest && saved.email) ? String(saved.email).trim().toLowerCase() : "";
 }
 
-async function fetchServerData(email, viewAs, simCareer, guestEmail, simSec){
+async function fetchServerData(email, viewAs, simCareer, guestEmail, simSec, asPic){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL belum diatur.");
   }
-  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simSec=" + encodeURIComponent(simSec || "") + "&_=" + Date.now();
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simSec=" + encodeURIComponent(simSec || "") + "&asPic=" + encodeURIComponent(asPic || "") + "&_=" + Date.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
@@ -1144,18 +1145,20 @@ async function fetchServerData(email, viewAs, simCareer, guestEmail, simSec){
 }
 
 function getServerData(){
-  const email = getCurrentUserEmail();   // "" kalau belum login
+  const email = getRealEmail();   // "" kalau belum login (selalu email ASLI; PIC simulasi dikirim terpisah)
   const va = email ? getViewAs() : "";   // role pilihan Role Switch (server memvalidasi ulang)
   const sc = va ? getSimCareer() : "";   // career simulasi (khusus Developer; server memvalidasi ulang)
+  const ap = email ? getAsPic() : "";      // Developer sebagai PIC (server memvalidasi ulang)
   const sj = sc ? resolveSimSec() : "";      // sub-section simulasi (khusus Developer)
   const ge = email ? "" : getGuestEmail();
-  if (!serverDataPromise || serverDataEmail !== email || serverDataViewAs !== va || serverDataSim !== sc || serverDataGuest !== ge || serverDataSimJab !== sj){
+  if (!serverDataPromise || serverDataEmail !== email || serverDataViewAs !== va || serverDataSim !== sc || serverDataGuest !== ge || serverDataSimJab !== sj || serverDataAsPic !== ap){
     serverDataEmail = email;
     serverDataViewAs = va;
     serverDataSim = sc;
     serverDataGuest = ge;
     serverDataSimJab = sj;
-    serverDataPromise = fetchServerData(email, va, sc, ge, sj).catch(err => { serverDataPromise = null; throw err; });
+    serverDataAsPic = ap;
+    serverDataPromise = fetchServerData(email, va, sc, ge, sj, ap).catch(err => { serverDataPromise = null; throw err; });
   }
   return serverDataPromise;
 }
@@ -1525,12 +1528,25 @@ function splitEmails(raw){
   return String(raw || "").toLowerCase().split(/[\s,;]+/).filter(isValidEmail);
 }
 
-function getCurrentUserEmail(){
+// Email akun yang SEBENARNYA login (dipakai untuk komunikasi ke server).
+function getRealEmail(){
   const saved = readSavedLoginState();
   // Guest = pengguna biasa: email TIDAK dipakai untuk mencari peran di spreadsheet
   // (bukan PIC / Leader / Editor), jadi dianggap tidak punya identitas peran.
   if (saved && saved.guest) return "";
   return saved && saved.email ? String(saved.email).trim().toLowerCase() : "";
+}
+// KHUSUS Developer: email PIC yang sedang disimulasikan ("Sign in as PIC"). Diisi dari jawaban server
+// (sudah divalidasi); kosong = tidak sedang menyimulasikan PIC.
+let effectiveAsPic = "";
+// Email yang dipakai untuk logika tampilan (kartu saya, section milik saya, dst.): PIC yang disimulasikan
+// bila ada, kalau tidak email asli.
+function getCurrentUserEmail(){
+  return effectiveAsPic || getRealEmail();
+}
+const SIM_PIC_KEY = "srsc_sim_pic";
+function getAsPic(){
+  try { return String(localStorage.getItem(SIM_PIC_KEY) || ""); } catch (e){ return ""; }
 }
 
 function safeHttpUrl(u){
@@ -1575,7 +1591,8 @@ function mapServerLinks(arr){
     visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : [],
     staffVisible: !!l.staffVisible,  // kolom "Staff Visibility" = Yes
     category: String(l.category || "").trim(),  // kolom "Category" (opsional)
-    pinned: !!l.pinned                          // kolom "Link Status" = Master -> link On Going
+    pinned: !!l.pinned,                         // kolom "Link Status" = Master -> link On Going
+    onlyFor: Array.isArray(l.onlyFor) ? l.onlyFor : []   // kolom "Only Shown Menu as" (email PIC)
   })).filter(l => l.url);
 }
 
@@ -1676,6 +1693,7 @@ function visibilityLabel(l){
   else t = "Visible to: this sheet's PIC only";
   if (l.staffVisible) t += " + Staff";
   if (l.pinned) t += " | On Going (shown on the page)";
+  if (l.onlyFor && l.onlyFor.length) t += " | Only shown to: " + l.onlyFor.join(", ");
   return t;
 }
 
@@ -1754,6 +1772,20 @@ function staffSelectHtml(link){
     </select>`;
 }
 
+// Pilihan "Only Shown Menu as": kosong = semua yang berhak melihat menu ini; atau satu email PIC pada section ini.
+function onlyShownSelectHtml(idx, link){
+  const pics = (sectionMeta[idx] && sectionMeta[idx].pics) || [];
+  if (!pics.length) return "";
+  const cur = (link && link.onlyFor) || [];
+  const multi = cur.length > 1;
+  const sel = cur.length === 1 ? cur[0] : "";
+  return `<select id="pic-f-only" aria-label="Only shown to PIC">
+      <option value=""${!multi && !sel ? " selected" : ""}>Shown to everyone who can see this menu</option>
+      ${multi ? `<option value="__keep__" selected>Keep current (${cur.length} PICs)</option>` : ""}
+      ${pics.map(e => `<option value="${escapeHtml(e)}"${sel === e ? " selected" : ""}>Only shown to: ${escapeHtml(e)}</option>`).join("")}
+    </select>`;
+}
+
 function linkStatusSelectHtml(link){
   const on = !!(link && link.pinned);
   return `<select id="pic-f-status" aria-label="Link status">
@@ -1772,6 +1804,7 @@ function picFormHtml(idx, formId, link, submitLabel){
       ${visSelectHtml(idx, link)}
       ${staffSelectHtml(link)}
       ${linkStatusSelectHtml(link)}
+      ${onlyShownSelectHtml(idx, link)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
         <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
@@ -2008,13 +2041,14 @@ function readPicForm(){
   const vis  = document.getElementById("pic-f-vis").value;
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
   const status = document.getElementById("pic-f-status") ? document.getElementById("pic-f-status").value : "";
+  const only = document.getElementById("pic-f-only") ? document.getElementById("pic-f-only").value : "";
   const cat = document.getElementById("pic-f-cat") ? document.getElementById("pic-f-cat").value.replace(/\s+/g, " ").trim() : "";
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
   }
-  return { name, url, desc, vis, staff, cat, status };
+  return { name, url, desc, vis, staff, cat, status, only };
 }
 
 async function addPicLink(){
@@ -2029,8 +2063,8 @@ async function addPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "addLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
-      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status
+      action: "addLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, onlyFor: f.only
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
@@ -2039,7 +2073,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: f.status === "Master"
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: f.status === "Master", onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -2066,9 +2100,9 @@ async function editPicLink(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "editLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
+      action: "editLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
-      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, onlyFor: f.only
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
@@ -2079,6 +2113,7 @@ async function editPicLink(){
       link.staffVisible = f.staff === "Yes";
       link.category = f.cat;
       link.pinned = f.status === "Master";
+      if (f.only !== "__keep__") link.onlyFor = f.only ? [f.only] : [];
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
         link.visibleAll = v.all; link.visibleTo = v.list;
@@ -2122,7 +2157,7 @@ async function deleteSelectedPicLinks(){
   try {
     for (const link of chosen){
       const data = await picApi({
-        action: "deleteLink", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
+        action: "deleteLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
         sheet: meta.sheetKey, name: link.rawName, url: link.rawUrl
       });
       if (data && (data.ok || data.notFound)){
@@ -2166,7 +2201,7 @@ async function savePicOrder(){
   setPicStatus("", "");
   try {
     const data = await picApi({
-      action: "reorderLinks", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
+      action: "reorderLinks", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey,
       order: picReorderList.map(l => ({ name: l.rawName, url: l.rawUrl }))
     });
@@ -2432,7 +2467,7 @@ function getViewAs(){
 // Item yang dipilih tapi tidak punya nilai (mis. Lecturer Code untuk Manager) tidak ditampilkan.
 const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kalau server belum mengirim kolom ini
 
-// opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simSec, secOptions, canSignOut }
+// opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simSec, secOptions, asPic, picOptions, canSignOut }
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
@@ -2446,7 +2481,7 @@ function renderLoginInfo(opts){
     : ((opts.realRole && ["seniormanager", "manager", "sectionhead"].includes(opts.realRole) && opts.title)
         ? opts.title : (ROLE_LABELS[ownRole] || ""));
   const items = {
-    email: saved.email ? `<span class="acct-email">${escapeHtml(saved.email)}</span>` : "",
+    email: (opts.asPic || saved.email) ? `<span class="acct-email">${escapeHtml(opts.asPic || saved.email)}</span>` : "",
     role:  roleText ? `<span class="acct-role">${escapeHtml(roleText)}</span>` : "",
     job:   opts.job ? `<span class="acct-job">${escapeHtml(opts.job)}</span>` : "",
     code:  saved.kodeDosen ? `<span>${escapeHtml(saved.kodeDosen)}</span>` : "",
@@ -2454,14 +2489,22 @@ function renderLoginInfo(opts){
   };
   const parts = ["email", "role", "job", "code", "unit"].filter(k => card.includes(k) && items[k]).map(k => items[k]);
 
-  // Role Switch = Yes (Role Policy): boleh berpindah tampilan ke role di bawah role sendiri.
-  if (opts.canSwitch){
+  // KHUSUS Developer: "masuk sebagai" seorang PIC -> seluruh pengaturan PIC itu (Role Policy, section, link,
+  // hak edit) yang tampil. Saat mode ini aktif, pilihan paling atas = kembali ke role sendiri.
+  const picSelectHtml = (opts.picOptions && opts.picOptions.length) ? `<select class="acct-switch" id="acct-aspic" aria-label="Sign in as PIC">
+        <option value=""${!opts.asPic ? " selected" : ""}>${opts.asPic ? "Back to my role (Developer)" : "As PIC: choose…"}</option>
+        ${opts.picOptions.map(e => `<option value="${escapeHtml(e)}"${opts.asPic === e ? " selected" : ""}>As PIC: ${escapeHtml(e)}</option>`).join("")}
+      </select>` : "";
+  if (opts.asPic){
+    if (picSelectHtml) parts.push(picSelectHtml);
+  } else if (opts.canSwitch){
     const below = rolesBelow(ownRole);
     if (below.length){
       parts.push(`<select class="acct-switch" id="acct-switch" aria-label="Switch role view">
         <option value=""${opts.viewAs === "" ? " selected" : ""}>My role</option>
         ${below.map(k => `<option value="${k}"${opts.viewAs === k ? " selected" : ""}>View as ${escapeHtml(SWITCH_LABELS[k])}</option>`).join("")}
       </select>`);
+      if (ownRole === "developer" && picSelectHtml) parts.push(picSelectHtml);
       // KHUSUS Developer: pilih career untuk disimulasikan (View as Authorized PIC = PIC pada section career itu,
       // View as Registered PIC = PIC pada career itu).
       if (ownRole === "developer" && opts.viewAs && Array.isArray(opts.careers) && opts.careers.length){
@@ -2489,6 +2532,26 @@ function renderLoginInfo(opts){
     const v = sw.value;
     try { if (v) localStorage.setItem(VIEW_AS_KEY, v); else localStorage.removeItem(VIEW_AS_KEY); localStorage.removeItem(SIM_SEC_KEY); } catch (e){}
     Activity.event("role_switch", v ? "View as " + (SWITCH_LABELS[v] || v) : "Back to own role");
+    lastDataSignature = null;
+    currentSel = { email: "", set: false, career: null, secKey: null };
+    loadAndRender(true).catch(() => {});
+    window.scrollTo(0, 0);
+  });
+
+  const ps = document.getElementById("acct-aspic");
+  if (ps) ps.addEventListener("change", () => {
+    const v = ps.value;
+    try {
+      if (v){
+        localStorage.setItem(SIM_PIC_KEY, v);
+        // Mode "sebagai PIC" tidak bercampur dengan View as / Career / Section.
+        localStorage.removeItem(VIEW_AS_KEY); localStorage.removeItem(SIM_CAREER_KEY); localStorage.removeItem(SIM_SEC_KEY);
+      } else {
+        localStorage.removeItem(SIM_PIC_KEY);
+      }
+    } catch (e){}
+    Activity.event("role_switch", v ? "As PIC: " + v : "Back to own role");
+    effectiveAsPic = "";
     lastDataSignature = null;
     currentSel = { email: "", set: false, career: null, secKey: null };
     loadAndRender(true).catch(() => {});
@@ -2526,6 +2589,7 @@ function renderLoginInfo(opts){
       localStorage.removeItem(VIEW_AS_KEY);
       localStorage.removeItem(SIM_CAREER_KEY);
       localStorage.removeItem(SIM_SEC_KEY);
+      localStorage.removeItem(SIM_PIC_KEY);
     } catch (e){}
     location.reload();
   });
@@ -2536,7 +2600,7 @@ function extraFromServer(d){
   return {
     links: d.links || {}, editorFor: d.editorFor || [],
     leader: !!d.leader, developer: !!d.developer, title: d.title || "", job: d.jobTitle || "",
-    role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
+    role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", asPic: d.asPic || "", picOptions: d.picOptions || [], sheetPics: d.sheetPics || {}, simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
     createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], teamSheets: d.teamSheets || [],
     policy: d.policy || {}
   };
@@ -2570,12 +2634,15 @@ async function loadAndRender(isInitial, fromCache){
     lastMasterRows = masterRows;
     // Data pendamping per email: link PIC Menu yang boleh dilihat, sheet yang
     // boleh dikelola (Editor Menu), dan status leader -- dihitung di server.
-    if (fromCache && cacheExtra && (cacheExtra.viewAs || "") === getViewAs() && (cacheExtra.simCareer || "") === (getViewAs() ? getSimCareer() : "") && (cacheExtra.simSec || "") === resolveSimSec()){
+    if (fromCache && cacheExtra && (cacheExtra.viewAs || "") === getViewAs() && (cacheExtra.simCareer || "") === (getViewAs() ? getSimCareer() : "") && (cacheExtra.simSec || "") === resolveSimSec() && (cacheExtra.asPic || "") === getAsPic()){
       extra = cacheExtra;
     } else {
       const d = await getServerData();
       extra = extraFromServer(d);
     }
+    // PIC simulasi yang disahkan server menentukan "email saya" untuk seluruh logika tampilan.
+    effectiveAsPic = extra.asPic || "";
+    if (!effectiveAsPic && getAsPic()){ try { localStorage.removeItem(SIM_PIC_KEY); } catch (e){} }
     sigParts.push("extra:" + JSON.stringify(extra));
     sigParts.push("viewAs:" + getViewAs() + "|" + getSimCareer() + "|" + resolveSimSec());
   } catch (err){
@@ -2747,7 +2814,7 @@ async function loadAndRender(isInitial, fromCache){
     })).filter(m => m.pic || m.task || m.email || m.whatsapp || m.dp);
 
     newSectionMembers.push(members);
-    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
+    newSectionMeta.push({ header: header, sheetKey: sectionKey, links: mapServerLinks(extra.links[normSheetName(sectionKey)]), pics: ((extra.sheetPics || {})[normSheetName(sectionKey)] || []), editors: extra.editorFor.includes(normSheetName(sectionKey)) ? [getCurrentUserEmail()] : [] });
     const secIdx = newSectionMembers.length - 1;
     sectionsHtml.push(buildSection(secIdx, sectionKey, header, subheader, members, career));
     if (career){
@@ -2796,6 +2863,7 @@ async function loadAndRender(isInitial, fromCache){
   sectionMeta = newSectionMeta;
   siteLeaderFlag = !!extra.leader;
   viewPerms = {
+    asPic: extra.asPic || "",
     viewAs: viewAs,
     simCareer: simCareer,
     simSec: simSec,
@@ -2811,7 +2879,7 @@ async function loadAndRender(isInitial, fromCache){
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
   renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", job: extra.job || "",
-                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, canSignOut: !!(extra.perms && extra.perms.signOut) });
+                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picOptions: extra.picOptions || [], canSignOut: !!(extra.perms && extra.perms.signOut) });
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){
@@ -3239,7 +3307,7 @@ document.getElementById("tedit-form").addEventListener("submit", async (e) => {
   teamEditBusy = true; btn.disabled = true; btn.textContent = "Saving...";
   setTeditStatus("", "");
   try {
-    const data = await picApi({ action: "editMember", actor: getCurrentUserEmail(), viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "", sheet: t.sheetKey, old: t.old, fields: f });
+    const data = await picApi({ action: "editMember", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "", sheet: t.sheetKey, old: t.old, fields: f });
     if (!data || !data.ok){
       setTeditStatus("err", (data && data.error) || "Failed to save changes.");
     } else {

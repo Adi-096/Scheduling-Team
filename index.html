@@ -853,9 +853,9 @@
 
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
-<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocId>
-<mso:_dlc_DocIdItemGuid msdt:dt="string">115ec381-ecf8-496f-922c-3ae72a955231</mso:_dlc_DocIdItemGuid>
-<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353195, 3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocIdUrl>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353436</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">3ece743b-3ea5-4d79-aaec-fff5fbd302ca</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353436, 3ZXFJ3NKVQQC-643343547-353436</mso:_dlc_DocIdUrl>
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
@@ -1088,7 +1088,7 @@ function parseCSV(text){
 // langsung dibuat dari cache (instan), lalu data terbaru diambil diam-diam dan
 // hanya menggantikan tampilan kalau ternyata ada perubahan. Cache hanya
 // dipakai kalau dibuat oleh email yang sama dengan yang sedang login.
-const DATA_CACHE_KEY = "srsc_data_cache_v4";
+const DATA_CACHE_KEY = "srsc_data_cache_v5";
 let cacheSheets = null;
 let cacheExtra = null;
 function loadDataCache(){
@@ -1126,11 +1126,20 @@ function getGuestEmail(){
   return (saved && saved.guest && saved.email) ? String(saved.email).trim().toLowerCase() : "";
 }
 
+// Petunjuk jenis pengguna biasa (dosen / cc / bsp / staff) dari data sign in. Dikirim ke server hanya agar
+// link On Going berstatus "Public" (termasuk Contact Center) dan "Staff" (tanpa Contact Center) bisa dibedakan.
+function getBaseRoleHint(){
+  const s = readSavedLoginState() || {};
+  if (s.role === "Dosen" || s.domain === DOMAIN_AC_ID) return "dosen";
+  const u = String(s.unit || "");
+  return CC_UNIT_PATTERN.test(u) ? "cc" : (SUPPORT_UNIT_PATTERN.test(u) ? "bsp" : "staff");
+}
+
 async function fetchServerData(email, viewAs, simCareer, guestEmail, simSec, asPic){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL belum diatur.");
   }
-  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simSec=" + encodeURIComponent(simSec || "") + "&asPic=" + encodeURIComponent(asPic || "") + "&_=" + Date.now();
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simSec=" + encodeURIComponent(simSec || "") + "&asPic=" + encodeURIComponent(asPic || "") + "&baseRole=" + encodeURIComponent(getBaseRoleHint()) + "&_=" + Date.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
@@ -1591,7 +1600,9 @@ function mapServerLinks(arr){
     visibleTo: Array.isArray(l.visibleTo) ? l.visibleTo : [],
     staffVisible: !!l.staffVisible,  // kolom "Staff Visibility" = Yes
     category: String(l.category || "").trim(),  // kolom "Category" (opsional)
-    pinned: !!l.pinned,                         // kolom "Link Status" = Master -> link On Going
+    pinned: !!l.pinned,                         // kolom "On-Going Status" terisi -> link On Going (tidak masuk daftar Our Links)
+    pinMode: l.pinMode || (l.pinned ? "master" : ""),   // master | pic | public | staff
+    onGoing: l.onGoing !== false,               // true = tampil di halaman untuk user ini (dihitung server)
     onlyFor: Array.isArray(l.onlyFor) ? l.onlyFor : []   // kolom "Only Shown Menu as" (email PIC)
   })).filter(l => l.url);
 }
@@ -1658,7 +1669,7 @@ function renderPicSlot(idx){
   picVisible[idx] = list;
   // On Going: link berstatus Master tampil langsung di halaman (di luar daftar Our Links).
   const pinSlot = document.querySelector('[data-pinned-slot="' + idx + '"]');
-  const pinned = list.filter(l => l.pinned);
+  const pinned = list.filter(l => l.pinned && l.onGoing);
   if (pinSlot){
     pinSlot.innerHTML = pinned.length
       ? `<span class="pinned-label">On Going</span><div class="pinned-list">${pinned.map(l =>
@@ -1692,7 +1703,7 @@ function visibilityLabel(l){
   else if (l.visibleTo.length) t = "Visible to: this sheet + " + l.visibleTo.map(sheetDisplayName).join(", ");
   else t = "Visible to: this sheet's PIC only";
   if (l.staffVisible) t += " + Staff";
-  if (l.pinned) t += " | On Going (shown on the page)";
+  if (l.pinned) t += " | On Going: " + (PIN_MODE_LABELS[l.pinMode || "master"] || "all roles");
   if (l.onlyFor && l.onlyFor.length) t += " | Only shown to: " + l.onlyFor.join(", ");
   return t;
 }
@@ -1786,11 +1797,25 @@ function onlyShownSelectHtml(idx, link){
     </select>`;
 }
 
+// On-Going Status: nilai yang ditulis ke sheet <-> kode mode yang dipakai server.
+const STATUS_MODE = { "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" };
+const PIN_MODE_LABELS = {
+  master: "all roles",
+  pic: "PICs of this section only",
+  "public": "Staff incl. Contact Center",
+  staff: "Staff excl. Contact Center"
+};
+const statusToMode = (s) => STATUS_MODE[s] || "";
+
 function linkStatusSelectHtml(link){
-  const on = !!(link && link.pinned);
-  return `<select id="pic-f-status" aria-label="Link status">
-      <option value=""${on ? "" : " selected"}>Normal (listed in Our Links)</option>
-      <option value="Master"${on ? " selected" : ""}>Master: On Going (shown on the page, not in Our Links)</option>
+  const cur = (link && link.pinned) ? (link.pinMode || "master") : "";
+  const sel = (m) => cur === m ? " selected" : "";
+  return `<select id="pic-f-status" aria-label="On-Going status">
+      <option value=""${sel("")}>Normal (listed in Our Links)</option>
+      <option value="Master"${sel("master")}>Master: On Going for all roles (not in Our Links)</option>
+      <option value="PIC Only"${sel("pic")}>PIC Only: On Going for PICs of this section</option>
+      <option value="Public"${sel("public")}>Public: On Going for Staff incl. Contact Center</option>
+      <option value="Staff"${sel("staff")}>Staff: On Going for Staff excl. Contact Center</option>
     </select>`;
 }
 
@@ -2073,7 +2098,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: f.status === "Master", onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!statusToMode(f.status), pinMode: statusToMode(f.status), onGoing: statusToMode(f.status) === "master", onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -2112,7 +2137,9 @@ async function editPicLink(){
       link.desc = f.desc;
       link.staffVisible = f.staff === "Yes";
       link.category = f.cat;
-      link.pinned = f.status === "Master";
+      link.pinMode = statusToMode(f.status);
+      link.pinned = !!link.pinMode;
+      link.onGoing = link.pinMode === "master";   // nilai pasti (sesuai audiens) menyusul dari server lewat pembacaan ulang
       if (f.only !== "__keep__") link.onlyFor = f.only ? [f.only] : [];
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);

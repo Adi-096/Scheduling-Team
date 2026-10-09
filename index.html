@@ -1628,37 +1628,41 @@ let viewPerms = { viewAs: "", create: new Set(), del: new Set(), team: new Set()
 let picCanCreate = false, picCanDelete = false;
 let picCreateMap = {}, picDeleteMap = {};
 
+// Gambar ulang SATU slot Our Links (tombol + link On Going) dari data section idx.
+function renderPicSlot(idx){
+  const slot = document.querySelector('[data-pic-slot="' + idx + '"]');
+  if (!slot) return;
+  const meta = sectionMeta[idx];
+  const key = meta ? normSheetName(meta.sheetKey) : "";
+  // Link sudah disaring server sesuai scope "PIC Menu > View" di Role Policy.
+  const list = meta ? (meta.links || []) : [];
+  const canCreate = !!meta && viewPerms.create.has(key);
+  const canDelete = !!meta && viewPerms.del.has(key);
+  picVisible[idx] = list;
+  // On Going: link berstatus Master tampil langsung di halaman (di luar daftar Our Links).
+  const pinSlot = document.querySelector('[data-pinned-slot="' + idx + '"]');
+  const pinned = list.filter(l => l.pinned);
+  if (pinSlot){
+    pinSlot.innerHTML = pinned.length
+      ? `<span class="pinned-label">On Going</span><div class="pinned-list">${pinned.map(l =>
+          `<a class="pinned-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener"${l.desc ? ` title="${escapeHtml(l.desc)}"` : ""}>${escapeHtml(l.name)} &rarr;</a>`).join("")}</div>`
+      : "";
+  }
+  picCreateMap[idx] = canCreate;
+  picDeleteMap[idx] = canDelete;
+  picManageMap[idx] = canCreate || canDelete;
+  // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
+  slot.innerHTML = (list.some(l => !l.pinned) || canCreate)
+    ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}Our Links</button>`
+    : "";
+}
+
 function applyPicMenus(){
   picVisible = {};
   picManageMap = {};
   picCreateMap = {};
   picDeleteMap = {};
-  document.querySelectorAll("[data-pic-slot]").forEach(slot => {
-    const idx = Number(slot.dataset.picSlot);
-    const meta = sectionMeta[idx];
-    const key = meta ? normSheetName(meta.sheetKey) : "";
-    // Link sudah disaring server sesuai scope "PIC Menu > View" di Role Policy.
-    const list = meta ? (meta.links || []) : [];
-    const canCreate = !!meta && viewPerms.create.has(key);
-    const canDelete = !!meta && viewPerms.del.has(key);
-    picVisible[idx] = list;
-    // On Going: link berstatus Master tampil langsung di halaman (di luar daftar Our Links).
-    const pinSlot = document.querySelector('[data-pinned-slot="' + idx + '"]');
-    const pinned = list.filter(l => l.pinned);
-    if (pinSlot){
-      pinSlot.innerHTML = pinned.length
-        ? `<span class="pinned-label">On Going</span><div class="pinned-list">${pinned.map(l =>
-            `<a class="pinned-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener"${l.desc ? ` title="${escapeHtml(l.desc)}"` : ""}>${escapeHtml(l.name)} &rarr;</a>`).join("")}</div>`
-        : "";
-    }
-    picCreateMap[idx] = canCreate;
-    picDeleteMap[idx] = canDelete;
-    picManageMap[idx] = canCreate || canDelete;
-    // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
-    slot.innerHTML = (list.some(l => !l.pinned) || canCreate)
-      ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}Our Links</button>`
-      : "";
-  });
+  document.querySelectorAll("[data-pic-slot]").forEach(slot => renderPicSlot(Number(slot.dataset.picSlot)));
 }
 
 function sheetDisplayName(norm){
@@ -1941,10 +1945,59 @@ async function picApi(payload){
   return data;
 }
 
-function refreshPicLocal(idx, note){
+// Ada perubahan menu (add / edit / delete / reorder) sejak popup dibuka -> saat popup ditutup,
+// halaman dimuat ulang dari server supaya yang tampil = isi spreadsheet sebenarnya.
+let picChanged = false;
+
+function refreshPicLocal(idx, note, expect){
   const meta = sectionMeta[idx];
   picVisible[idx] = meta.links || [];
+  renderPicSlot(idx);            // tombol Our Links + link On Going di halaman ikut langsung berubah
   renderPicModal(idx, note);
+  if (note && note.type === "ok"){
+    picChanged = true;
+    try { localStorage.removeItem(DATA_CACHE_KEY); } catch (e){}   // cache lama tidak boleh tampil lagi saat refresh
+    reconcilePicSection(idx, note, expect || {});
+  }
+}
+
+// Baca ulang data section ini dari server dan cocokkan dengan perubahan yang barusan disimpan.
+// expect: { present:[{name,url}], gone:[{name,url}] }. Hasil dicocokkan; kalau cocok, isi popup
+// diganti dengan data server (urutan / kategori / status persis seperti di spreadsheet).
+async function reconcilePicSection(idx, note, expect){
+  const meta = sectionMeta[idx];
+  if (!meta) return;
+  const sameLink = (l, x) => l.rawName === x.name && l.rawUrl === x.url;
+  try {
+    serverDataPromise = null;                 // paksa ambil data segar
+    const d = await getServerData();
+    const arr = d && d.links ? d.links[normSheetName(meta.sheetKey)] : null;
+    if (!arr) return;
+    const fresh = mapServerLinks(arr);
+    const okPresent = (expect.present || []).every(x => fresh.some(l => sameLink(l, x)));
+    const okGone = (expect.gone || []).every(x => !fresh.some(l => sameLink(l, x)));
+    if (!okPresent || !okGone){
+      if (picCurrentIdx === idx) setPicStatus("err", "Saved, but the change is not visible yet when re-checking the spreadsheet. Please reload the page to confirm.");
+      return;
+    }
+    meta.links = fresh;
+    picVisible[idx] = fresh;
+    renderPicSlot(idx);
+    if (picCurrentIdx === idx && !picBusy && picMode === "view" && document.getElementById("pic-modal-overlay").classList.contains("open")){
+      renderPicModal(idx, { type: "ok", text: note.text.replace("saved to the spreadsheet", "confirmed in the spreadsheet") });
+    }
+  } catch (err){
+    /* gagal membaca ulang: tampilan lokal tetap dipakai; refresh penuh dilakukan saat popup ditutup */
+  }
+}
+
+function closePicModal(){
+  document.getElementById("pic-modal-overlay").classList.remove("open");
+  if (picChanged){
+    picChanged = false;
+    serverDataPromise = null;
+    loadAndRender(false).catch(() => {});   // sinkronkan seluruh halaman dengan isi spreadsheet
+  }
 }
 
 // Baca & validasi isi form (dipakai Add dan Edit). Mengembalikan null kalau tidak valid.
@@ -1989,7 +2042,7 @@ async function addPicLink(){
         visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: f.status === "Master"
       });
       picMode = "view";
-      refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." });
+      refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
     }
   } catch (err){
     setPicStatus("err", "Could not reach the server: " + err.message);
@@ -2031,7 +2084,7 @@ async function editPicLink(){
         link.visibleAll = v.all; link.visibleTo = v.list;
       }
       picMode = "view"; picEditLink = null;
-      refreshPicLocal(idx, { type: "ok", text: "Menu updated and saved to the spreadsheet." });
+      refreshPicLocal(idx, { type: "ok", text: "Menu updated and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
     }
   } catch (err){
     setPicStatus("err", "Could not reach the server: " + err.message);
@@ -2090,7 +2143,8 @@ async function deleteSelectedPicLinks(){
   if (failMsg){
     refreshPicLocal(idx, { type: "err", text: `${done} of ${chosen.length} deleted. ${failMsg}` });
   } else {
-    refreshPicLocal(idx, { type: "ok", text: `${done} menu${done === 1 ? "" : "s"} deleted from the spreadsheet.` });
+    refreshPicLocal(idx, { type: "ok", text: `${done} menu${done === 1 ? "" : "s"} deleted from the spreadsheet.` },
+      { gone: chosen.map(l => ({ name: l.rawName, url: l.rawUrl })) });
   }
 }
 
@@ -2216,11 +2270,9 @@ document.addEventListener("submit", (e) => {
   if (id === "pic-add-form"){ e.preventDefault(); addPicLink(); }
   else if (id === "pic-edit-form"){ e.preventDefault(); editPicLink(); }
 });
-document.getElementById("pic-modal-close").addEventListener("click", () => {
-  document.getElementById("pic-modal-overlay").classList.remove("open");
-});
+document.getElementById("pic-modal-close").addEventListener("click", closePicModal);
 document.getElementById("pic-modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "pic-modal-overlay") e.target.classList.remove("open");
+  if (e.target.id === "pic-modal-overlay") closePicModal();
 });
 
 /* =========================================================================
@@ -3317,12 +3369,11 @@ async function checkLoginRevoked(email){
   }
 }
 
-// Auto-login OPTIMISTIS: kalau browser sudah punya data login yang lengkap,
-// halaman LANGSUNG ditampilkan -- tidak menunggu Apps Script (yang bisa lambat
-// saat "cold start"). Pengecekan "dipaksa logout" (Hapus Login) berjalan di
-// latar belakang; kalau ternyata di-revoke, data login dihapus dan halaman
-// dimuat ulang ke form Sign In. (Server menghapus tanda revoke begitu
-// dibaca, jadi hasilnya HARUS selalu ditindaklanjuti seperti di bawah.)
+// Auto-login dengan VERIFIKASI: kalau browser punya data login lengkap, halaman ditahan di
+// layar "Verifying access…" sampai pengecekan "dipaksa logout" (Hapus Login di Sheet Logs)
+// selesai (maks. 8 detik; gagal cek = tetap masuk). Kalau di-revoke, data login dihapus dan
+// form Sign In ditampilkan. (Server menghapus tanda revoke begitu dibaca, jadi hasilnya
+// HARUS selalu ditindaklanjuti seperti di bawah.)
 async function tryAutoLogin(){
   const saved = readSavedLoginState();
   if (!saved) return false;
@@ -3336,17 +3387,23 @@ async function tryAutoLogin(){
     return false;
   }
 
+  // Selama akses diverifikasi (cek "Hapus Login" di Sheet Logs), halaman TIDAK dibuka: yang tampil
+  // hanya "Verifying access…" (state "checking" sudah dipasang sejak awal halaman dimuat).
+  // Data halaman disiapkan paralel di belakang layar supaya setelah terverifikasi langsung siap.
+  document.getElementById("login-gate").classList.add("checking");
+  try { getServerData().catch(() => {}); } catch (e){}
+
+  const revoked = await checkLoginRevoked(saved.email);   // gagal / lambat (> 8 dtk) = dianggap tidak di-revoke
+  if (revoked){
+    // Login dihapus dari Sheet Logs -> hapus data login di browser ini lalu tampilkan form Sign In.
+    try { localStorage.removeItem(LOGIN_STORAGE_KEY); localStorage.removeItem(DATA_CACHE_KEY); } catch (e){}
+    serverDataPromise = null;
+    return false;
+  }
+
   hideLoginGate();
   main();
-
-  checkLoginRevoked(saved.email).then(revoked => {
-    if (revoked){
-      localStorage.removeItem(LOGIN_STORAGE_KEY);
-      location.reload();
-      return;
-    }
-    logSignIn(saved.email, "Auto-login", extraForLog, "sudah pernah sign in");
-  });
+  logSignIn(saved.email, "Auto-login", extraForLog, "sudah pernah sign in");
   return true;
 }
 

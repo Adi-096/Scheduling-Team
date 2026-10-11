@@ -1126,11 +1126,22 @@ function getGuestEmail(){
   return (saved && saved.guest && saved.email) ? String(saved.email).trim().toLowerCase() : "";
 }
 
+// Petunjuk untuk server: jenis pengguna non-PIC menurut isian saat sign in (cc / bsp / staff / dosen).
+// Server memakainya untuk audiens link On Going "Public" / "Staff" (Contact Center vs Staff biasa).
+function getBaseRoleHint(){
+  const saved = readSavedLoginState() || {};
+  const unit = String(saved.unit || "");
+  if (saved.role === "Dosen" || saved.domain === "binus.ac.id") return "dosen";
+  if (CC_UNIT_PATTERN.test(unit)) return "cc";
+  if (SUPPORT_UNIT_PATTERN.test(unit)) return "bsp";
+  return "staff";
+}
+
 async function fetchServerData(email, viewAs, simCareer, guestEmail, simSec, asPic){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){
     throw new Error("Web App URL belum diatur.");
   }
-  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simSec=" + encodeURIComponent(simSec || "") + "&asPic=" + encodeURIComponent(asPic || "") + "&_=" + Date.now();
+  const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simSec=" + encodeURIComponent(simSec || "") + "&asPic=" + encodeURIComponent(asPic || "") + "&baseRole=" + encodeURIComponent(getBaseRoleHint()) + "&_=" + Date.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
@@ -1592,7 +1603,9 @@ function mapServerLinks(arr){
     staffVisible: !!l.staffVisible,  // kolom "Staff Visibility" = Yes
     category: String(l.category || "").trim(),  // kolom "Category" (opsional)
     pinned: !!l.pinned,                         // kolom "On-Going Status" (Master / PIC Only) -> link On Going
-    picOnly: !!l.picOnly,                       // PIC Only: hanya tampil untuk PIC
+    pinMode: l.pinMode || (l.picOnly ? "pic" : (l.pinned ? "master" : "")),   // master / pic / public / staff
+    picOnly: (l.pinMode || (l.picOnly ? "pic" : "")) === "pic",
+    onGoing: l.onGoing !== false,               // false = link On Going yang tidak ditujukan untuk pengguna ini (hanya untuk pengelola)
     ownerSheet: l.owner || "",                  // sheet pemilik (beda dengan section ini = link dari sheet lain)
     onlyFor: Array.isArray(l.onlyFor) ? l.onlyFor : []   // kolom "Only Shown Menu as" (email PIC)
   })).filter(l => l.url);
@@ -1660,7 +1673,7 @@ function renderPicSlot(idx){
   picVisible[idx] = list;
   // On Going: link berstatus Master tampil langsung di halaman (di luar daftar Our Links).
   const pinSlot = document.querySelector('[data-pinned-slot="' + idx + '"]');
-  const own = list.filter(l => l.pinned);
+  const own = list.filter(l => l.pinned && l.onGoing !== false);
   const seenUrl = new Set(own.map(l => l.url));
   const extraPinned = ((meta && meta.pinnedFrom) || []).filter(l => !seenUrl.has(l.url));
   const pinned = own.concat(extraPinned);   // + link On Going dari sheet lain yang menyebut section ini di Other PIC Visibility
@@ -1697,7 +1710,10 @@ function visibilityLabel(l){
   else if (l.visibleTo.length) t = "Visible to: this sheet + " + l.visibleTo.map(sheetDisplayName).join(", ");
   else t = "Visible to: this sheet's PIC only";
   if (l.staffVisible) t += " + Staff";
-  if (l.pinned) t += l.picOnly ? " | On Going (PIC only)" : " | On Going (shown on the page)";
+  if (l.pinned){
+    const who = { master: "everyone", pic: "PIC only", "public": "Public (staff incl. Contact Center)", staff: "Staff (excl. Contact Center)" }[l.pinMode] || "everyone";
+    t += " | On Going: " + who + (l.onGoing === false ? " (not shown to you)" : "");
+  }
   if (l.onlyFor && l.onlyFor.length) t += " | Only shown to: " + l.onlyFor.join(", ");
   return t;
 }
@@ -1792,11 +1808,14 @@ function onlyShownSelectHtml(idx, link){
 }
 
 function linkStatusSelectHtml(link){
-  const on = !!(link && link.pinned);
-  return `<select id="pic-f-status" aria-label="Link status">
-      <option value=""${on ? "" : " selected"}>Normal (listed in Our Links)</option>
-      <option value="Master"${on && !link.picOnly ? " selected" : ""}>Master: On Going (shown to everyone who can see it)</option>
-      <option value="PIC Only"${on && link.picOnly ? " selected" : ""}>PIC Only: On Going (shown to PICs only)</option>
+  const cur = (link && link.pinned) ? (link.pinMode || "master") : "";
+  const opt = (v, label) => `<option value="${v}"${cur === (v === "" ? "" : v.toLowerCase().replace(" only", "")) ? " selected" : ""}>${label}</option>`;
+  return `<select id="pic-f-status" aria-label="On-Going status">
+      ${opt("", "Normal (listed in Our Links)")}
+      ${opt("Master", "Master: On Going (shown to everyone who signs in)")}
+      ${opt("PIC Only", "PIC Only: On Going (PICs of this section and the sections in Other PIC Visibility)")}
+      ${opt("Public", "Public: On Going (staff incl. Contact Center)")}
+      ${opt("Staff", "Staff: On Going (staff excl. Contact Center)")}
     </select>`;
 }
 
@@ -2080,7 +2099,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status, picOnly: f.status === "PIC Only", onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status, pinMode: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -2120,7 +2139,9 @@ async function editPicLink(){
       link.staffVisible = f.staff === "Yes";
       link.category = f.cat;
       link.pinned = !!f.status;
+      link.pinMode = ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "";
       link.picOnly = f.status === "PIC Only";
+      link.onGoing = true;
       if (f.only !== "__keep__") link.onlyFor = f.only ? [f.only] : [];
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);

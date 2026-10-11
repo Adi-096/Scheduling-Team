@@ -1147,7 +1147,7 @@ async function fetchServerData(email, viewAs, simCareer, guestEmail, simSec, asP
 function getServerData(){
   const email = getRealEmail();   // "" kalau belum login (selalu email ASLI; PIC simulasi dikirim terpisah)
   const va = email ? getViewAs() : "";   // role pilihan Role Switch (server memvalidasi ulang)
-  const sc = va ? getSimCareer() : "";   // career simulasi (khusus Developer; server memvalidasi ulang)
+  const sc = va ? effectiveSimCareer() : "";   // career simulasi (khusus Developer; server memvalidasi ulang)
   const ap = email ? getAsPic() : "";      // Developer sebagai PIC (server memvalidasi ulang)
   const sj = sc ? resolveSimSec() : "";      // sub-section simulasi (khusus Developer)
   const ge = email ? "" : getGuestEmail();
@@ -2449,15 +2449,42 @@ function simSectionOptionsFor(career, rows){
   return out;
 }
 let lastMasterRows = [];
-// Section simulasi yang dipakai: pilihan tersimpan bila masih sah, kalau tidak -> sub-section pertama career itu.
-// (Tidak ada opsi "all": Developer selalu menyimulasikan satu sub-section.)
-function resolveSimSec(){
-  const career = getViewAs() ? getSimCareer() : "";
+// Pilihan lanjutan di login card Developer menurut role yang dipilih di "View as" ("" = role Developer sendiri):
+//   Developer              : Career > Section > As PIC
+//   Senior Manager/Manager : hanya Career
+//   Section Head           : Career > Section (bila ada lebih dari satu sub-section)
+//   Authorized PIC         : sama seperti Section Head
+//   Registered PIC         : Career > Section + As PIC
+//   Binus Support / Contact Center / Staff / Lecturer : tidak ada pilihan lanjutan
+const SIM_CAP = {
+  "":            { career: true, section: true,  pic: true  },
+  seniormanager: { career: true, section: false, pic: false },
+  manager:       { career: true, section: false, pic: false },
+  sectionhead:   { career: true, section: true,  pic: false },
+  authorizedpic: { career: true, section: true,  pic: false },
+  registeredpic: { career: true, section: true,  pic: true  }
+};
+const SIM_CAP_NONE = { career: false, section: false, pic: false };
+function simCapFor(viewAs){ return SIM_CAP[viewAs || ""] || SIM_CAP_NONE; }
+
+// Section untuk sebuah career: pilihan tersimpan bila masih sah, kalau tidak -> sub-section pertama career itu.
+// (Tidak ada opsi "all": selalu satu sub-section.)
+function resolveUiSec(career){
   if (!career) return "";
   const opts = simSectionOptionsFor(career, lastMasterRows);
   const stored = getSimSec();
   if (stored && opts.some(o => o.key === stored)) return stored;
   return opts.length ? opts[0].key : "";
+}
+// Career / Section yang benar-benar dikirim ke server (hanya bila View as dipilih dan role itu memakainya).
+function effectiveSimCareer(){
+  const va = getViewAs();
+  return (va && simCapFor(va).career) ? getSimCareer() : "";
+}
+function resolveSimSec(){
+  const va = getViewAs();
+  if (!va || !simCapFor(va).career || !simCapFor(va).section) return "";
+  return resolveUiSec(getSimCareer());
 }
 function getSimSec(){
   try { return String(localStorage.getItem(SIM_SEC_KEY) || ""); } catch (e){ return ""; }
@@ -2513,19 +2540,23 @@ function renderLoginInfo(opts){
         <option value=""${!uView ? " selected" : ""}>My role</option>
         ${below.map(k => `<option value="${k}"${uView === k ? " selected" : ""}>View as ${escapeHtml(SWITCH_LABELS[k])}</option>`).join("")}
       </select>`);
-      if (uRole === "developer" && uView && Array.isArray(opts.careers) && opts.careers.length){
+    }
+    // Pilihan lanjutan hanya untuk Developer, menurut role yang dipilih (SIM_CAP).
+    if (devUi){
+      const cap = simCapFor(uView);
+      if (cap.career && Array.isArray(opts.careers) && opts.careers.length){
         parts.push(`<select class="acct-switch" id="acct-career" aria-label="Simulated career">
           <option value=""${!uCareer ? " selected" : ""}>Career: not set</option>
           ${opts.careers.map(c => `<option value="${escapeHtml(c.key)}"${uCareer === c.key ? " selected" : ""}>Career: ${escapeHtml(c.name)}</option>`).join("")}
         </select>`);
-        // Sub-section (sheet) yang Active pada career itu. Tidak ada opsi "all": selalu satu sub-section.
-        if (uCareer && Array.isArray(opts.secOptions) && opts.secOptions.length > 1){
+        // Sub-section (sheet) yang Active pada career itu; hanya bila ada lebih dari satu. Tidak ada opsi "all".
+        if (cap.section && uCareer && Array.isArray(opts.secOptions) && opts.secOptions.length > 1){
           parts.push(`<select class="acct-switch" id="acct-sec" aria-label="Simulated section">
             ${opts.secOptions.map(o => `<option value="${escapeHtml(o.key)}"${uSec === o.key ? " selected" : ""}>Section: ${escapeHtml(o.label)}</option>`).join("")}
           </select>`);
         }
         // As PIC: hanya PIC yang terdapat pada section / career terpilih.
-        if (Array.isArray(opts.picList) && opts.picList.length){
+        if (cap.pic && uCareer && Array.isArray(opts.picList) && opts.picList.length){
           parts.push(`<select class="acct-switch" id="acct-aspic" aria-label="Sign in as PIC">
             <option value=""${!opts.asPic ? " selected" : ""}>As PIC: none</option>
             ${opts.picList.map(e => `<option value="${escapeHtml(e)}"${opts.asPic === e ? " selected" : ""}>As PIC: ${escapeHtml(e)}</option>`).join("")}
@@ -2639,7 +2670,7 @@ async function loadAndRender(isInitial, fromCache){
     lastMasterRows = masterRows;
     // Data pendamping per email: link PIC Menu yang boleh dilihat, sheet yang
     // boleh dikelola (Editor Menu), dan status leader -- dihitung di server.
-    if (fromCache && cacheExtra && (cacheExtra.viewAs || "") === getViewAs() && (cacheExtra.simCareer || "") === (getViewAs() ? getSimCareer() : "") && (cacheExtra.simSec || "") === resolveSimSec() && (cacheExtra.asPic || "") === getAsPic()){
+    if (fromCache && cacheExtra && (cacheExtra.viewAs || "") === getViewAs() && (cacheExtra.simCareer || "") === effectiveSimCareer() && (cacheExtra.simSec || "") === resolveSimSec() && (cacheExtra.asPic || "") === getAsPic()){
       extra = cacheExtra;
     } else {
       const d = await getServerData();
@@ -2649,7 +2680,7 @@ async function loadAndRender(isInitial, fromCache){
     effectiveAsPic = extra.asPic || "";
     if (!effectiveAsPic && getAsPic()){ try { localStorage.removeItem(SIM_PIC_KEY); } catch (e){} }
     sigParts.push("extra:" + JSON.stringify(extra));
-    sigParts.push("viewAs:" + getViewAs() + "|" + getSimCareer() + "|" + resolveSimSec());
+    sigParts.push("viewAs:" + getViewAs() + "|" + effectiveSimCareer() + "|" + resolveSimSec() + "|" + getAsPic());
   } catch (err){
     if (isInitial){
       renderError(`Tidak bisa membaca sheet "${MASTER_SHEET_NAME}".`, [
@@ -2756,20 +2787,24 @@ async function loadAndRender(isInitial, fromCache){
   if (asPicMode){
     simCareer = "";
   } else if (simCareer && (!viewAs || simCareer !== (extra.simCareer || ""))){
-    if (!viewAs || realRole !== "developer"){ simCareer = ""; try { localStorage.removeItem(SIM_CAREER_KEY); } catch (e){} }
+    // Developer: pilihan Career tetap diingat walau View as = "My role" (dipakai untuk memilih As PIC).
+    if (!viewAs || realRole !== "developer"){ simCareer = ""; if (realRole !== "developer"){ try { localStorage.removeItem(SIM_CAREER_KEY); } catch (e){} } }
     else simCareer = extra.simCareer || "";
   }
   // Section simulasi = yang disetujui server (selalu satu sub-section bila career simulasi aktif).
   const simSec = simCareer ? (extra.simSec || "") : "";
-  if (!asPicMode && !simSec && getSimSec()){ try { localStorage.removeItem(SIM_SEC_KEY); } catch (e){} }
-  // Pilihan yang TAMPIL di login card Developer (urutan: View as > Career > Section > As PIC).
-  const uiViewAs = asPicMode ? getViewAs() : viewAs;
-  const uiCareer = asPicMode ? getSimCareer() : simCareer;
-  const uiSec = asPicMode ? (uiCareer ? resolveSimSec() : "") : simSec;
+  const isDevReal = !!extra.developer;
+  if (!asPicMode && !simSec && getSimSec() && !isDevReal){ try { localStorage.removeItem(SIM_SEC_KEY); } catch (e){} }
+  // Pilihan yang TAMPIL di login card Developer (urutan: View as > Career > Section > As PIC);
+  // pilihan lanjutan yang muncul bergantung pada role di "View as" (lihat SIM_CAP).
+  const uiViewAs = isDevReal ? getViewAs() : viewAs;
+  const uiCap = simCapFor(uiViewAs);
+  const uiCareer = isDevReal ? (uiCap.career ? getSimCareer() : "") : simCareer;
+  const uiSec = isDevReal ? ((uiCap.section && uiCareer) ? resolveUiSec(uiCareer) : "") : simSec;
   const uiSecOptions = simSectionOptionsFor(uiCareer, masterRows);
   // Daftar PIC untuk "As PIC": hanya PIC pada section terpilih (atau pada career terpilih bila belum ada section).
   const uiPicList = (() => {
-    if (!(uiViewAs && uiCareer)) return [];
+    if (!(isDevReal && uiCap.pic && uiCareer)) return [];
     const keys = uiSec ? [uiSec] : uiSecOptions.map(o => o.key);
     const set = new Set();
     keys.forEach(k => ((extra.picsBySheet || {})[k] || []).forEach(e => set.add(e)));

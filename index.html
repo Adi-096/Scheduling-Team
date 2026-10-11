@@ -1657,9 +1657,16 @@ let knownSheetsGlobal = new Set();
 // Hak efektif pengguna ini (dari Role Policy lewat server). viewAs = role yang sedang
 // dipilih lewat Role Switch -> hak (PIC Menu, Our Team, Sign out) mengikuti Role Policy
 // role itu; server membatasi agar tidak pernah melebihi hak role asli.
-let viewPerms = { viewAs: "", create: new Set(), del: new Set(), team: new Set() };
+let viewPerms = { viewAs: "", create: new Set(), del: new Set(), team: new Set(), createOwn: new Set(), delOwn: new Set() };
 let picCanCreate = false, picCanDelete = false;
 let picCreateMap = {}, picDeleteMap = {};
+// Hak "Own Only" (Role Policy): hanya boleh mengelola LINK PRIBADI (baris ber-"Only Shown Menu as" = emailnya sendiri).
+let picOwnCreate = false, picOwnDelete = false;
+let picOwnCreateMap = {}, picOwnDeleteMap = {};
+function isOwnLink(l){
+  const me = String(getCurrentUserEmail() || "").trim().toLowerCase();
+  return !!me && Array.isArray(l.onlyFor) && l.onlyFor.length === 1 && String(l.onlyFor[0]).toLowerCase() === me;
+}
 
 // Gambar ulang SATU slot Our Links (tombol + link On Going) dari data section idx.
 function renderPicSlot(idx){
@@ -1686,6 +1693,8 @@ function renderPicSlot(idx){
   }
   picCreateMap[idx] = canCreate;
   picDeleteMap[idx] = canDelete;
+  picOwnCreateMap[idx] = canCreate && viewPerms.createOwn.has(key);
+  picOwnDeleteMap[idx] = canDelete && viewPerms.delOwn.has(key);
   picManageMap[idx] = canCreate || canDelete;
   // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
   slot.innerHTML = (list.some(l => !l.pinned) || canCreate)
@@ -1698,6 +1707,8 @@ function applyPicMenus(){
   picManageMap = {};
   picCreateMap = {};
   picDeleteMap = {};
+  picOwnCreateMap = {};
+  picOwnDeleteMap = {};
   document.querySelectorAll("[data-pic-slot]").forEach(slot => renderPicSlot(Number(slot.dataset.picSlot)));
 }
 
@@ -1832,7 +1843,28 @@ function ogScopeSelectHtml(link){
     </select>`;
 }
 
+// Form untuk hak "Own Only": hanya nama, URL, keterangan, dan status On Going (Normal / PIC Only).
+// Kategori, visibilitas, dan "Only Shown Menu as" dipaksa server (My Links, hanya untuk emailnya sendiri).
+function picOwnFormHtml(formId, link, submitLabel){
+  const pic = !!(link && link.pinned && link.pinMode === "pic");
+  return `
+    <form id="${formId}" class="pic-form" autocomplete="off">
+      <input type="text" id="pic-f-name" placeholder="Link name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
+      <input type="url" id="pic-f-url" placeholder="https://..." required value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
+      <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
+      <select id="pic-f-status" aria-label="On-Going status">
+        <option value=""${pic ? "" : " selected"}>Normal (listed in my Our Links)</option>
+        <option value="PIC Only"${pic ? " selected" : ""}>On Going (shown on the page, only to me)</option>
+      </select>
+      <div class="pic-actions">
+        <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+        <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
+      </div>
+    </form>`;
+}
+
 function picFormHtml(idx, formId, link, submitLabel){
+  if (picOwnCreate) return picOwnFormHtml(formId, link, submitLabel);
   return `
     <form id="${formId}" class="pic-form" autocomplete="off">
       <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
@@ -1867,8 +1899,8 @@ function renderPicModal(idx, note){
   const catName = (g) => g.cat || "Other";
   const itemLi = ({ l, i }) => `
         <li>
-          ${deleting ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
-          ${picking ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
+          ${deleting && (!picOwnDelete || isOwnLink(l)) ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
+          ${picking && (!picOwnCreate || isOwnLink(l)) ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
           <div class="pic-li-body">
             <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
             ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
@@ -1927,8 +1959,9 @@ function renderPicModal(idx, note){
   // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
   let controlsHtml = "";
   if (picCanManage){
+    if (picMode === "reorder" && picOwnCreate) picMode = "view";
     if (picMode === "add" && picCanCreate){
-      controlsHtml = `<div class="pic-block-title">Add menu</div>` + picFormHtml(idx, "pic-add-form", null, "Save");
+      controlsHtml = `<div class="pic-block-title">${picOwnCreate ? "Add my link (only visible to you)" : "Add menu"}</div>` + picFormHtml(idx, "pic-add-form", null, "Save");
     } else if (picMode === "edit" && picEditLink && picCanCreate){
       controlsHtml = `<div class="pic-block-title">Edit menu</div>` + picFormHtml(idx, "pic-edit-form", picEditLink, "Save changes");
     } else if (picMode === "reorder" && picCanCreate){
@@ -1955,10 +1988,10 @@ function renderPicModal(idx, note){
     } else {
       controlsHtml = `
         <div class="pic-actions">
-          ${picCanCreate ? `<button type="button" class="pic-btn primary" data-pic-mode="add">Add Menu</button>` : ""}
-          ${picCanCreate && links.length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">Edit Menu</button>` : ""}
-          ${picCanCreate && links.filter(l => !l.pinned).length > 1 ? `<button type="button" class="pic-btn" data-pic-mode="reorder">Reorder Menu</button>` : ""}
-          ${picCanDelete && links.length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">Delete Menu</button>` : ""}
+          ${picCanCreate ? `<button type="button" class="pic-btn primary" data-pic-mode="add">${picOwnCreate ? "Add My Link" : "Add Menu"}</button>` : ""}
+          ${picCanCreate && links.filter(l => !picOwnCreate || isOwnLink(l)).length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">${picOwnCreate ? "Edit My Link" : "Edit Menu"}</button>` : ""}
+          ${picCanCreate && !picOwnCreate && links.filter(l => !l.pinned).length > 1 ? `<button type="button" class="pic-btn" data-pic-mode="reorder">Reorder Menu</button>` : ""}
+          ${picCanDelete && links.filter(l => !picOwnDelete || isOwnLink(l)).length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">${picOwnDelete ? "Delete My Link" : "Delete Menu"}</button>` : ""}
         </div>`;
     }
   }
@@ -1988,6 +2021,8 @@ function openPicMenu(idx){
   if (!meta) return;
   picCanCreate = !!picCreateMap[idx];
   picCanDelete = !!picDeleteMap[idx];
+  picOwnCreate = !!picOwnCreateMap[idx];
+  picOwnDelete = !!picOwnDeleteMap[idx];
   picCanManage = picCanCreate || picCanDelete;
   if (!(picVisible[idx] || []).length && !picCanCreate) return;
   Activity.ctx.sheet = meta.sheetKey;
@@ -2078,7 +2113,8 @@ function readPicForm(){
   const name = document.getElementById("pic-f-name").value.trim();
   const url  = document.getElementById("pic-f-url").value.trim();
   const desc = document.getElementById("pic-f-desc").value.trim();
-  const vis  = document.getElementById("pic-f-vis").value;
+  const visEl = document.getElementById("pic-f-vis");
+  const vis  = visEl ? visEl.value : "";
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
   const status = document.getElementById("pic-f-status") ? document.getElementById("pic-f-status").value : "";
   const only = document.getElementById("pic-f-only") ? document.getElementById("pic-f-only").value : "";
@@ -2088,6 +2124,10 @@ function readPicForm(){
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
+  }
+  if (picOwnCreate){   // link pribadi: server memaksa isian lain; tampilan lokal mengikuti
+    const me = getCurrentUserEmail();
+    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None" };
   }
   return { name, url, desc, vis, staff, cat, status, only, og };
 }
@@ -2674,7 +2714,7 @@ function extraFromServer(d){
     links: d.links || {}, editorFor: d.editorFor || [],
     leader: !!d.leader, developer: !!d.developer, title: d.title || "", job: d.jobTitle || "",
     role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", pinnedFrom: d.pinnedFrom || {}, asPic: d.asPic || "", picsBySheet: d.picsBySheet || {}, sheetPics: d.sheetPics || {}, simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
-    createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], teamSheets: d.teamSheets || [],
+    createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], createOwnSheets: d.createOwnSheets || [], deleteOwnSheets: d.deleteOwnSheets || [], teamSheets: d.teamSheets || [],
     policy: d.policy || {}
   };
 }
@@ -2966,6 +3006,8 @@ async function loadAndRender(isInitial, fromCache){
     simSec: simSec,
     create: new Set(extra.createSheets || []),
     del: new Set(extra.deleteSheets || []),
+    createOwn: new Set(extra.createOwnSheets || []),
+    delOwn: new Set(extra.deleteOwnSheets || []),
     team: new Set(extra.teamSheets || [])
   };
 

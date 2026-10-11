@@ -853,9 +853,9 @@
 
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
-<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocId>
-<mso:_dlc_DocIdItemGuid msdt:dt="string">115ec381-ecf8-496f-922c-3ae72a955231</mso:_dlc_DocIdItemGuid>
-<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353195, 3ZXFJ3NKVQQC-643343547-353195</mso:_dlc_DocIdUrl>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353436</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">3ece743b-3ea5-4d79-aaec-fff5fbd302ca</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353436, 3ZXFJ3NKVQQC-643343547-353436</mso:_dlc_DocIdUrl>
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
@@ -1605,6 +1605,7 @@ function mapServerLinks(arr){
     pinned: !!l.pinned,                         // kolom "On-Going Status" (Master / PIC Only) -> link On Going
     pinMode: l.pinMode || (l.picOnly ? "pic" : (l.pinned ? "master" : "")),   // master / pic / public / staff
     picOnly: (l.pinMode || (l.picOnly ? "pic" : "")) === "pic",
+    ogScope: l.ogScope || "legacy",             // kolom "On-Going Other PIC Visibility Status": none / only / section / career / legacy
     onGoing: l.onGoing !== false,               // false = link On Going yang tidak ditujukan untuk pengguna ini (hanya untuk pengelola)
     ownerSheet: l.owner || "",                  // sheet pemilik (beda dengan section ini = link dari sheet lain)
     onlyFor: Array.isArray(l.onlyFor) ? l.onlyFor : []   // kolom "Only Shown Menu as" (email PIC)
@@ -1819,6 +1820,18 @@ function linkStatusSelectHtml(link){
     </select>`;
 }
 
+// <select> On-Going Other PIC Visibility Status: di mana link On Going tampil untuk PIC lain.
+function ogScopeSelectHtml(link){
+  const cur = (link && link.ogScope && link.ogScope !== "legacy") ? link.ogScope : "none";
+  const opt = (v, key, label) => `<option value="${v}"${cur === key ? " selected" : ""}>${label}</option>`;
+  return `<select id="pic-f-ogscope" aria-label="On-Going other PIC visibility status">
+      ${opt("None", "none", "On Going for other PICs: None (this section only)")}
+      ${opt("Section Only", "only", "On Going for other PICs: Section Only (only when this section is open)")}
+      ${opt("All Section", "section", "On Going for other PICs: All Section (every section in this career)")}
+      ${opt("All Career", "career", "On Going for other PICs: All Career (every career)")}
+    </select>`;
+}
+
 function picFormHtml(idx, formId, link, submitLabel){
   return `
     <form id="${formId}" class="pic-form" autocomplete="off">
@@ -1829,6 +1842,7 @@ function picFormHtml(idx, formId, link, submitLabel){
       ${visSelectHtml(idx, link)}
       ${staffSelectHtml(link)}
       ${linkStatusSelectHtml(link)}
+      ${ogScopeSelectHtml(link)}
       ${onlyShownSelectHtml(idx, link)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
@@ -2068,13 +2082,14 @@ function readPicForm(){
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
   const status = document.getElementById("pic-f-status") ? document.getElementById("pic-f-status").value : "";
   const only = document.getElementById("pic-f-only") ? document.getElementById("pic-f-only").value : "";
+  const og = document.getElementById("pic-f-ogscope") ? document.getElementById("pic-f-ogscope").value : "None";
   const cat = document.getElementById("pic-f-cat") ? document.getElementById("pic-f-cat").value.replace(/\s+/g, " ").trim() : "";
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
   }
-  return { name, url, desc, vis, staff, cat, status, only };
+  return { name, url, desc, vis, staff, cat, status, only, og };
 }
 
 async function addPicLink(){
@@ -2090,7 +2105,7 @@ async function addPicLink(){
   try {
     const data = await picApi({
       action: "addLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
-      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, onlyFor: f.only
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, onlyFor: f.only
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
@@ -2099,7 +2114,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status, pinMode: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status, pinMode: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only", ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -2128,7 +2143,7 @@ async function editPicLink(){
     const data = await picApi({
       action: "editLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
-      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, onlyFor: f.only
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, onlyFor: f.only
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
@@ -2141,6 +2156,7 @@ async function editPicLink(){
       link.pinned = !!f.status;
       link.pinMode = ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "";
       link.picOnly = f.status === "PIC Only";
+      link.ogScope = ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none";
       link.onGoing = true;
       if (f.only !== "__keep__") link.onlyFor = f.only ? [f.only] : [];
       if (f.vis !== "__keep__"){

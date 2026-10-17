@@ -3741,15 +3741,20 @@ async function localPicLookup(email){
 // Memeriksa password PIC ke Apps Script (password dibandingkan di server,
 // bukan di browser).
 async function verifyPicPassword(email, password){
+  // Timeout 25 detik: kalau Apps Script lambat/tidak menjawab, tombol tidak menggantung selamanya.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25000);
   try {
     const url = LOG_WEBAPP_URL + "?action=verifyPicPassword&email=" + encodeURIComponent(email) +
                 "&password=" + encodeURIComponent(password) + "&_=" + Date.now();
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    const res = await fetch(url, { method: "GET", cache: "no-store", signal: ctrl.signal });
     const data = await res.json();
     return { ok: true, valid: !!data.valid, locked: !!data.locked };
   } catch (err){
     console.warn("verifyPicPassword gagal:", err && err.name, err && err.message);
-    return { ok: false, valid: false, locked: false };
+    return { ok: false, valid: false, locked: false, timeout: !!(err && err.name === "AbortError") };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -3880,7 +3885,7 @@ document.getElementById("password-form").addEventListener("submit", async (e) =>
   submitBtn.textContent = originalLabel;
 
   if (!result.ok){
-    showLoginError("Failed to verify password. Please check your internet connection and try again.");
+    showLoginError(result.timeout ? "The server is taking too long to respond. Please try again in a moment." : "Failed to verify password. Please check your internet connection and try again.");
     return;
   }
   if (result.locked){

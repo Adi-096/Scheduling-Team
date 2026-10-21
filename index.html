@@ -554,6 +554,15 @@
     color:var(--ink-soft);background:var(--surface-soft);
     border-radius:10px;padding:2px 9px;
   }
+  .pic-list li.pic-edit-li{ align-items:center;cursor:pointer;border-radius:8px;transition:background .15s ease; }
+  .pic-list li.pic-edit-li:hover, .pic-list li.pic-edit-li:focus-visible{ background:var(--surface-soft);outline:none; }
+  .pic-list li.pic-edit-li.disabled{ opacity:.45;cursor:not-allowed; }
+  .pic-list li.pic-edit-li:hover .pic-edit-pill, .pic-list li.pic-edit-li:focus-visible .pic-edit-pill{ background:var(--primary);color:#fff; }
+  .pic-edit-pill{
+    flex:none;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--primary);border:1px solid var(--primary);border-radius:999px;padding:4px 12px;
+    transition:background .15s ease,color .15s ease;
+  }
   .pic-check{ flex:none;display:flex;align-items:center;padding-top:1px; }
   .pic-check input{ width:18px;height:18px;margin:0;accent-color:#B3401F;cursor:pointer; }
   .pic-check input[type="radio"]{ accent-color:var(--primary); }
@@ -1897,10 +1906,17 @@ function renderPicModal(idx, note){
   const reorderingCat = picCanCreate && picMode === "reorder-cat";
   const catKey  = (g) => g.cat ? g.cat.toLowerCase() : "__other__";
   const catName = (g) => g.cat || "Other";
-  const itemLi = ({ l, i }) => `
+  const itemLi = ({ l, i }) => picking ? `
+        <li class="pic-edit-li${!picOwnCreate || isOwnLink(l) ? "" : " disabled"}" ${!picOwnCreate || isOwnLink(l) ? `data-pic-edit-row="${i}" tabindex="0" role="button" aria-label="Edit ${escapeHtml(l.name)}"` : ""}>
+          <div class="pic-li-body">
+            <div class="pic-li-main">${escapeHtml(l.name)}</div>
+            ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
+            ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
+          </div>
+          ${!picOwnCreate || isOwnLink(l) ? `<span class="pic-edit-pill">Edit</span>` : ""}
+        </li>` : `
         <li>
           ${deleting && (!picOwnDelete || isOwnLink(l)) ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
-          ${picking && (!picOwnCreate || isOwnLink(l)) ? `<label class="pic-check"><input type="radio" name="pic-edit-pick" data-pic-radio="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
           <div class="pic-li-body">
             <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
             ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
@@ -1943,7 +1959,7 @@ function renderPicModal(idx, note){
     const groups = picGroupLinks(links, manageView ? null : (l => !l.pinned));
     const hasCats = !(groups.length === 1 && !groups[0].cat);
     let opened = null;
-    if (!manageView && hasCats && picCatOpen){
+    if (hasCats && picCatOpen && (!manageView || picking)){   // Edit Menu dari dalam kategori: hanya menu kategori itu
       opened = groups.find(g => catKey(g) === picCatOpen) || null;
       if (!opened) picCatOpen = null;
     }
@@ -1970,6 +1986,9 @@ function renderPicModal(idx, note){
     }
   }
 
+  // Sedang mengedit satu menu: daftar disembunyikan supaya form langsung terlihat (tanpa scroll).
+  if (picMode === "edit" && picEditLink && picCanCreate) listHtml = "";
+
   // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
   let controlsHtml = "";
   if (picCanManage){
@@ -1994,10 +2013,9 @@ function renderPicModal(idx, note){
         </div>`;
     } else if (picMode === "edit-pick" && picCanCreate){
       controlsHtml = `
-        <p class="pic-hint">Select the menu you want to edit, then click <strong>Edit Menu</strong>.</p>
+        <p class="pic-hint">Click a menu (or its <strong>Edit</strong> button) to edit it.</p>
         <div class="pic-actions">
           <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
-          <button type="button" class="pic-btn primary" id="pic-edit-continue" disabled>Edit Menu</button>
         </div>`;
     } else if (picMode === "delete" && picCanDelete){
       controlsHtml = `
@@ -2043,6 +2061,20 @@ function setPicMode(mode){
     picReorderDirty = false;
   }
   renderPicModal(picCurrentIdx);
+}
+
+// Klik satu baris di mode Edit Menu: langsung buka form ubah untuk menu itu.
+function startPicEdit(i){
+  if (picBusy || picCurrentIdx === null || !picCanCreate) return;
+  const l = (picVisible[picCurrentIdx] || [])[i];
+  if (!l || (picOwnCreate && !isOwnLink(l))) return;
+  picEditLink = l;
+  picMode = "edit";
+  renderPicModal(picCurrentIdx);
+  const ov = document.getElementById("pic-modal-overlay");
+  const md = ov && ov.querySelector(".modal");
+  if (ov) ov.scrollTop = 0;
+  if (md) md.scrollTop = 0;
 }
 
 function openPicMenu(idx){
@@ -2406,13 +2438,8 @@ document.addEventListener("click", (e) => {
   }
   const modeBtn = e.target.closest("[data-pic-mode]");
   if (modeBtn){ setPicMode(modeBtn.dataset.picMode); return; }
-  if (e.target.closest("#pic-edit-continue")){
-    const r = document.querySelector("[data-pic-radio]:checked");
-    if (!r) return;
-    picEditLink = (picVisible[picCurrentIdx] || [])[Number(r.dataset.picRadio)] || null;
-    if (picEditLink){ picMode = "edit"; renderPicModal(picCurrentIdx); }
-    return;
-  }
+  const editRow = e.target.closest("[data-pic-edit-row]");
+  if (editRow){ startPicEdit(Number(editRow.dataset.picEditRow)); return; }
   if (e.target.closest("#pic-delete-confirm")){ deleteSelectedPicLinks(); return; }
   const up = e.target.closest("[data-pic-up]");
   if (up){ const i = Number(up.dataset.picUp); picMoveItem(i, i - 1); return; }
@@ -2424,10 +2451,13 @@ document.addEventListener("change", (e) => {
   const t = e.target;
   if (!t || !t.matches) return;
   if (t.matches("[data-pic-check]")) updatePicDeleteButton();
-  if (t.matches("[data-pic-radio]")){
-    const b = document.getElementById("pic-edit-continue");
-    if (b) b.disabled = false;
-  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const row = e.target && e.target.closest && e.target.closest("[data-pic-edit-row]");
+  if (!row) return;
+  e.preventDefault();
+  startPicEdit(Number(row.dataset.picEditRow));
 });
 document.addEventListener("submit", (e) => {
   const id = e.target && e.target.id;

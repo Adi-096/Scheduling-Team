@@ -502,7 +502,7 @@
   .pic-list{ list-style:none;margin:0;padding:0; }
   .pic-cat{ margin-top:18px; }
   .pic-cat:first-child{ margin-top:4px; }
-  /* Kategori besar (> 2 link): tampil sebagai baris folder; isinya muncul setelah diklik */
+  /* Setiap kategori tampil sebagai baris folder; isinya muncul setelah diklik */
   .pic-cat-row{
     display:flex;align-items:center;gap:10px;width:100%;text-align:left;
     background:none;border:0;border-bottom:1px solid var(--line);
@@ -1894,7 +1894,7 @@ function renderPicModal(idx, note){
 
   // ---- Daftar menu (selalu tampil dulu) ----
   const reordering = picCanCreate && picMode === "reorder";
-  const COLLAPSE_OVER = 2;   // kategori dengan lebih dari 2 link: tampil sebagai folder dulu, isinya setelah diklik
+  const reorderingCat = picCanCreate && picMode === "reorder-cat";
   const catKey  = (g) => g.cat ? g.cat.toLowerCase() : "__other__";
   const catName = (g) => g.cat || "Other";
   const itemLi = ({ l, i }) => `
@@ -1909,7 +1909,21 @@ function renderPicModal(idx, note){
         </li>`;
   const manageView = deleting || picking;   // mode kelola: semua link tampil penuh agar bisa dipilih
   let listHtml;
-  if (reordering){
+  if (reorderingCat){
+    const hasOther = (picVisible[idx] || []).some(l => !l.pinned && !(l.category || "").trim());
+    listHtml = `<ul class="pic-list reorder" id="pic-reorder-list">${picReorderList.map((c, i) => `
+        <li draggable="true" data-pic-row="${i}">
+          <span class="pic-grip" aria-hidden="true">&#8942;&#8942;</span>
+          <div class="pic-li-body">
+            <div class="pic-li-main">${escapeHtml(c.name)}</div>
+            <div class="pic-li-sub">${c.count} menu${c.count > 1 ? "s" : ""}</div>
+          </div>
+          <div class="pic-move">
+            <button type="button" data-pic-up="${i}" aria-label="Move up" ${i === 0 ? "disabled" : ""}>&#9650;</button>
+            <button type="button" data-pic-down="${i}" aria-label="Move down" ${i === picReorderList.length - 1 ? "disabled" : ""}>&#9660;</button>
+          </div>
+        </li>`).join("")}</ul>${hasOther ? `<p class="pic-hint">Menus without a category ("Other") always stay at the end.</p>` : ""}`;
+  } else if (reordering){
     listHtml = `<ul class="pic-list reorder" id="pic-reorder-list">${picReorderList.map((l, i) => `
         <li draggable="true" data-pic-row="${i}">
           <span class="pic-grip" aria-hidden="true">&#8942;&#8942;</span>
@@ -1944,7 +1958,7 @@ function renderPicModal(idx, note){
       listHtml = groups.map(g => {
         const ul = `<ul class="pic-list">${g.items.map(itemLi).join("")}</ul>`;
         if (!hasCats) return ul;   // tanpa kategori sama sekali: tampilan lama
-        if (!manageView && g.items.length > COLLAPSE_OVER){
+        if (!manageView){   // semua kategori tampil sebagai folder dulu; link muncul setelah kategori dibuka
           return `<button type="button" class="pic-cat-row" data-pic-cat="${escapeHtml(catKey(g))}">
               <span class="pic-cat-row-name">${escapeHtml(catName(g))}</span>
               <span class="pic-cat-count">${g.items.length}</span>
@@ -1959,7 +1973,7 @@ function renderPicModal(idx, note){
   // ---- Bagian di bawah daftar, tergantung mode (khusus yang boleh kelola) ----
   let controlsHtml = "";
   if (picCanManage){
-    if (picMode === "reorder" && picOwnCreate) picMode = "view";
+    if ((picMode === "reorder" || picMode === "reorder-cat") && picOwnCreate) picMode = "view";
     if (picMode === "add" && picCanCreate){
       controlsHtml = `<div class="pic-block-title">${picOwnCreate ? "Add my link (only visible to you)" : "Add menu"}</div>` + picFormHtml(idx, "pic-add-form", null, "Save");
     } else if (picMode === "edit" && picEditLink && picCanCreate){
@@ -1967,6 +1981,13 @@ function renderPicModal(idx, note){
     } else if (picMode === "reorder" && picCanCreate){
       controlsHtml = `
         <p class="pic-hint">Drag a menu (or use the arrows) to change its position, then click <strong>Save Order</strong>. The order is also updated in the spreadsheet.</p>
+        <div class="pic-actions">
+          <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
+          <button type="button" class="pic-btn primary" id="pic-reorder-save" ${picReorderDirty ? "" : "disabled"}>Save Order</button>
+        </div>`;
+    } else if (picMode === "reorder-cat" && picCanCreate){
+      controlsHtml = `
+        <p class="pic-hint">Drag a category (or use the arrows) to change its position, then click <strong>Save Order</strong>. Menus keep their order inside each category. The order is also updated in the spreadsheet.</p>
         <div class="pic-actions">
           <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
           <button type="button" class="pic-btn primary" id="pic-reorder-save" ${picReorderDirty ? "" : "disabled"}>Save Order</button>
@@ -1991,6 +2012,7 @@ function renderPicModal(idx, note){
           ${picCanCreate ? `<button type="button" class="pic-btn primary" data-pic-mode="add">${picOwnCreate ? "Add My Link" : "Add Menu"}</button>` : ""}
           ${picCanCreate && links.filter(l => !picOwnCreate || isOwnLink(l)).length ? `<button type="button" class="pic-btn" data-pic-mode="edit-pick">${picOwnCreate ? "Edit My Link" : "Edit Menu"}</button>` : ""}
           ${picCanCreate && !picOwnCreate && links.filter(l => !l.pinned).length > 1 ? `<button type="button" class="pic-btn" data-pic-mode="reorder">Reorder Menu</button>` : ""}
+          ${picCanCreate && !picOwnCreate && picGroupLinks(links, l => !l.pinned).filter(g => g.cat).length > 1 ? `<button type="button" class="pic-btn" data-pic-mode="reorder-cat">Reorder Category</button>` : ""}
           ${picCanDelete && links.filter(l => !picOwnDelete || isOwnLink(l)).length ? `<button type="button" class="pic-btn danger" data-pic-mode="delete">${picOwnDelete ? "Delete My Link" : "Delete Menu"}</button>` : ""}
         </div>`;
     }
@@ -2011,6 +2033,13 @@ function setPicMode(mode){
   if (mode !== "edit") picEditLink = null;
   if (mode === "reorder"){
     picReorderList = (picVisible[picCurrentIdx] || []).filter(l => !l.pinned);
+    picReorderDirty = false;
+  }
+  if (mode === "reorder-cat"){
+    // Urutan awal = urutan kategori yang sedang tampil (berdasarkan kemunculan pertama di sheet).
+    picReorderList = picGroupLinks(picVisible[picCurrentIdx] || [], l => !l.pinned)
+      .filter(g => g.cat)
+      .map(g => ({ key: g.cat.toLowerCase(), name: g.cat, count: g.items.length }));
     picReorderDirty = false;
   }
   renderPicModal(picCurrentIdx);
@@ -2282,13 +2311,28 @@ async function savePicOrder(){
   const idx = picCurrentIdx;
   const meta = sectionMeta[idx];
   const btn = document.getElementById("pic-reorder-save");
+  // Mode kategori: susun ulang semua menu per kategori sesuai urutan kategori baru
+  // (urutan menu di dalam kategori tetap; menu tanpa kategori di akhir).
+  let newLinks = picReorderList;
+  const catMode = picMode === "reorder-cat";
+  if (catMode){
+    const byCat = new Map();
+    (picVisible[idx] || []).filter(l => !l.pinned).forEach(l => {
+      const k = (l.category || "").trim().toLowerCase();
+      if (!byCat.has(k)) byCat.set(k, []);
+      byCat.get(k).push(l);
+    });
+    newLinks = [];
+    picReorderList.forEach(c => { (byCat.get(c.key) || []).forEach(l => newLinks.push(l)); byCat.delete(c.key); });
+    byCat.forEach(arr => arr.forEach(l => newLinks.push(l)));
+  }
   picBusy = true; if (btn){ btn.disabled = true; btn.textContent = "Saving..."; }
   setPicStatus("", "");
   try {
     const data = await picApi({
       action: "reorderLinks", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey,
-      order: picReorderList.map(l => ({ name: l.rawName, url: l.rawUrl }))
+      order: newLinks.map(l => ({ name: l.rawName, url: l.rawUrl }))
     });
     if (!data || !data.ok){
       picBusy = false;
@@ -2296,11 +2340,11 @@ async function savePicOrder(){
       if (btn){ btn.disabled = false; btn.textContent = "Save Order"; }
       return;
     }
-    const inList = new Set(picReorderList);
-    meta.links = picReorderList.concat((meta.links || []).filter(x => !inList.has(x)));
+    const inList = new Set(newLinks);
+    meta.links = newLinks.concat((meta.links || []).filter(x => !inList.has(x)));
     picBusy = false;
     picMode = "view"; picReorderDirty = false;
-    refreshPicLocal(idx, { type: "ok", text: "Menu order saved to the spreadsheet." });
+    refreshPicLocal(idx, { type: "ok", text: catMode ? "Category order saved to the spreadsheet." : "Menu order saved to the spreadsheet." });
   } catch (err){
     picBusy = false;
     setPicStatus("err", "Could not reach the server: " + err.message);

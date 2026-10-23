@@ -554,6 +554,23 @@
     color:var(--ink-soft);background:var(--surface-soft);
     border-radius:10px;padding:2px 9px;
   }
+  .pic-search{ position:relative;margin:0 0 12px; }
+  .pic-search input{
+    width:100%;box-sizing:border-box;font:inherit;font-size:14px;color:var(--ink);
+    padding:11px 38px 11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+  }
+  .pic-search input:focus{ outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--surface-soft); }
+  .pic-search-clear{
+    position:absolute;right:6px;top:50%;transform:translateY(-50%);
+    border:0;background:none;font-size:20px;line-height:1;color:var(--ink-faint);cursor:pointer;padding:4px 9px;
+  }
+  .pic-search-clear:hover{ color:var(--primary); }
+  .pic-search-count{ font-size:12px;color:var(--ink-soft);margin:0 0 6px; }
+  .pic-li-cat{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--primary);margin-bottom:2px;
+  }
+  mark.pic-hit{ background:#FFE8A3;color:inherit;border-radius:3px;padding:0 1px; }
   .pic-list li.pic-edit-li{ align-items:center;cursor:pointer;border-radius:8px;transition:background .15s ease; }
   .pic-list li.pic-edit-li:hover, .pic-list li.pic-edit-li:focus-visible{ background:var(--surface-soft);outline:none; }
   .pic-list li.pic-edit-li.disabled{ opacity:.45;cursor:not-allowed; }
@@ -1744,6 +1761,7 @@ function visibilityLabel(l){
 //   "edit-pick" (pilih 1 menu) | "edit" (form ubah)
 let picMode = "view";
 let picEditLink = null;
+let picSearch = "";           // kata kunci pencarian di popup Our Links
 let picCatOpen = null;       // kategori yang sedang dibuka di popup Our Links (null = daftar kategori)
 let picReorderList = [];   // salinan kerja urutan menu saat mode "reorder"
 let picReorderDirty = false;
@@ -1781,6 +1799,19 @@ function visSelectHtml(idx, link){
 // Kelompokkan link per kategori. Urutan kategori = kemunculan pertama di sheet; link tanpa
 // kategori ditaruh di grup terakhir ("Other"). Jika tidak ada satu pun kategori -> satu grup tanpa judul.
 // Setiap item membawa indeks aslinya (i) supaya mode Edit / Delete tetap menunjuk baris yang benar.
+// Tebalkan kata yang cocok dengan pencarian (aman untuk HTML: setiap potongan di-escape terpisah).
+function picHl(text, tokens){
+  const t = String(text == null ? "" : text);
+  if (!tokens || !tokens.length) return escapeHtml(t);
+  const re = new RegExp("(" + tokens.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "gi");
+  let out = "", last = 0, m;
+  while ((m = re.exec(t))){
+    out += escapeHtml(t.slice(last, m.index)) + '<mark class="pic-hit">' + escapeHtml(m[0]) + "</mark>";
+    last = m.index + m[0].length;
+  }
+  return out + escapeHtml(t.slice(last));
+}
+
 function picGroupLinks(links, keep){
   const map = new Map();
   links.forEach((l, i) => {
@@ -1906,24 +1937,37 @@ function renderPicModal(idx, note){
   const reorderingCat = picCanCreate && picMode === "reorder-cat";
   const catKey  = (g) => g.cat ? g.cat.toLowerCase() : "__other__";
   const catName = (g) => g.cat || "Other";
-  const itemLi = ({ l, i }) => picking ? `
-        <li class="pic-edit-li${!picOwnCreate || isOwnLink(l) ? "" : " disabled"}" ${!picOwnCreate || isOwnLink(l) ? `data-pic-edit-row="${i}" tabindex="0" role="button" aria-label="Edit ${escapeHtml(l.name)}"` : ""}>
+  const qTokens = picSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let showCat = false;   // tampilkan nama kategori di setiap hasil (saat mencari di semua kategori)
+  const itemLi = ({ l, i }) => {
+    const canEdit = picking && (!picOwnCreate || isOwnLink(l));
+    const catLine = showCat ? `<div class="pic-li-cat">${escapeHtml((l.category || "").trim() || "Other")}</div>` : "";
+    const sub = l.desc ? `<div class="pic-li-sub">${picHl(l.desc, qTokens)}</div>` : "";
+    const tag = picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : "";
+    if (picking) return `
+        <li class="pic-edit-li${canEdit ? "" : " disabled"}" ${canEdit ? `data-pic-edit-row="${i}" tabindex="0" role="button" aria-label="Edit ${escapeHtml(l.name)}"` : ""}>
           <div class="pic-li-body">
-            <div class="pic-li-main">${escapeHtml(l.name)}</div>
-            ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
-            ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
+            ${catLine}
+            <div class="pic-li-main">${picHl(l.name, qTokens)}</div>
+            ${sub}${tag}
           </div>
-          ${!picOwnCreate || isOwnLink(l) ? `<span class="pic-edit-pill">Edit</span>` : ""}
-        </li>` : `
+          ${canEdit ? `<span class="pic-edit-pill">Edit</span>` : ""}
+        </li>`;
+    return `
         <li>
           ${deleting && (!picOwnDelete || isOwnLink(l)) ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
           <div class="pic-li-body">
-            <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.name)} &rarr;</a></div>
-            ${l.desc ? `<div class="pic-li-sub">${escapeHtml(l.desc)}</div>` : ""}
-            ${picCanManage ? `<span class="pic-tag">${escapeHtml(visibilityLabel(l))}</span>` : ""}
+            ${catLine}
+            <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${picHl(l.name, qTokens)} &rarr;</a></div>
+            ${sub}${tag}
           </div>
         </li>`;
+  };
   const manageView = deleting || picking;   // mode kelola: semua link tampil penuh agar bisa dipilih
+  // Kotak pencarian: hanya di tampilan biasa dan Edit Menu (tidak di Delete / Reorder / Add / Edit form).
+  const searchable = (picMode === "view" || picMode === "edit-pick") &&
+    (picking ? links.length : links.filter(l => !l.pinned).length) > 0;
+  let searchScope = "";
   let listHtml;
   if (reorderingCat){
     const hasOther = (picVisible[idx] || []).some(l => !l.pinned && !(l.category || "").trim());
@@ -1963,13 +2007,26 @@ function renderPicModal(idx, note){
       opened = groups.find(g => catKey(g) === picCatOpen) || null;
       if (!opened) picCatOpen = null;
     }
-    if (opened){
-      // Tampilan isi satu kategori + navigasi direktori (breadcrumb) di bagian atas.
-      listHtml = `<nav class="pic-crumb" aria-label="Breadcrumb">
+    const crumbHtml = (g) => `<nav class="pic-crumb" aria-label="Breadcrumb">
           <button type="button" class="pic-crumb-link" data-pic-cat-root>&lsaquo; Our Links</button>
           <span class="pic-crumb-sep" aria-hidden="true">&rsaquo;</span>
-          <span class="pic-crumb-cur">${escapeHtml(catName(opened))}</span>
-        </nav><ul class="pic-list">${opened.items.map(itemLi).join("")}</ul>`;
+          <span class="pic-crumb-cur">${escapeHtml(catName(g))}</span>
+        </nav>`;
+    if (opened) searchScope = catName(opened);
+    if (searchable && qTokens.length){
+      // Hasil pencarian: nama + keterangan + kategori; di dalam kategori hanya mencari di kategori itu.
+      const pool = opened ? opened.items : groups.flatMap(g => g.items);
+      const hits = pool.filter(({ l }) => {
+        const hay = ((l.name || "") + " " + (l.desc || "") + " " + (l.category || "")).toLowerCase();
+        return qTokens.every(t => hay.includes(t));
+      });
+      showCat = !opened;
+      listHtml = (opened ? crumbHtml(opened) : "") + (hits.length
+        ? `<p class="pic-search-count">${hits.length} result${hits.length > 1 ? "s" : ""}${opened ? " in " + escapeHtml(catName(opened)) : ""}</p><ul class="pic-list">${hits.map(itemLi).join("")}</ul>`
+        : `<p class="pic-empty">No menus match &ldquo;${escapeHtml(picSearch.trim())}&rdquo;${opened ? " in this category" : ""}.</p>`);
+    } else if (opened){
+      // Tampilan isi satu kategori + navigasi direktori (breadcrumb) di bagian atas.
+      listHtml = crumbHtml(opened) + `<ul class="pic-list">${opened.items.map(itemLi).join("")}</ul>`;
     } else {
       listHtml = groups.map(g => {
         const ul = `<ul class="pic-list">${g.items.map(itemLi).join("")}</ul>`;
@@ -2036,8 +2093,12 @@ function renderPicModal(idx, note){
     }
   }
 
+  const searchHtml = searchable ? `<div class="pic-search">
+      <input type="text" id="pic-search-input" placeholder="${searchScope ? "Search in " + escapeHtml(searchScope) + "…" : "Search menus…"}" value="${escapeHtml(picSearch)}" autocomplete="off" aria-label="Search menus">
+      ${picSearch ? `<button type="button" class="pic-search-clear" id="pic-search-clear" aria-label="Clear search">&times;</button>` : ""}
+    </div>` : "";
   document.getElementById("pic-modal-content").innerHTML =
-    listHtml + controlsHtml + `<div class="pic-status" id="pic-status" style="margin-top:12px"></div>`;
+    searchHtml + listHtml + controlsHtml + `<div class="pic-status" id="pic-status" style="margin-top:12px"></div>`;
   if (note) setPicStatus(note.type, note.text);
   if (picMode === "add"){
     const nameEl = document.getElementById("pic-f-name");
@@ -2048,6 +2109,7 @@ function renderPicModal(idx, note){
 function setPicMode(mode){
   if (picBusy || picCurrentIdx === null) return;
   picMode = mode;
+  picSearch = "";
   if (mode !== "edit") picEditLink = null;
   if (mode === "reorder"){
     picReorderList = (picVisible[picCurrentIdx] || []).filter(l => !l.pinned);
@@ -2091,6 +2153,7 @@ function openPicMenu(idx){
   picMode = "view";
   picEditLink = null;
   picCatOpen = null;
+  picSearch = "";
   renderPicModal(idx);
   document.getElementById("pic-modal-overlay").classList.add("open");
 }
@@ -2438,6 +2501,13 @@ document.addEventListener("click", (e) => {
   }
   const modeBtn = e.target.closest("[data-pic-mode]");
   if (modeBtn){ setPicMode(modeBtn.dataset.picMode); return; }
+  if (e.target.closest("#pic-search-clear")){
+    picSearch = "";
+    renderPicModal(picCurrentIdx);
+    const el = document.getElementById("pic-search-input");
+    if (el) el.focus();
+    return;
+  }
   const editRow = e.target.closest("[data-pic-edit-row]");
   if (editRow){ startPicEdit(Number(editRow.dataset.picEditRow)); return; }
   if (e.target.closest("#pic-delete-confirm")){ deleteSelectedPicLinks(); return; }
@@ -2451,6 +2521,15 @@ document.addEventListener("change", (e) => {
   const t = e.target;
   if (!t || !t.matches) return;
   if (t.matches("[data-pic-check]")) updatePicDeleteButton();
+});
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (!t || t.id !== "pic-search-input" || picCurrentIdx === null) return;
+  const pos = t.selectionStart;
+  picSearch = t.value;
+  renderPicModal(picCurrentIdx);
+  const el = document.getElementById("pic-search-input");
+  if (el){ el.focus(); try { el.setSelectionRange(pos, pos); } catch (_) {} }
 });
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;

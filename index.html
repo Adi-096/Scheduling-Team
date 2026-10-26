@@ -554,6 +554,62 @@
     color:var(--ink-soft);background:var(--surface-soft);
     border-radius:10px;padding:2px 9px;
   }
+  .pic-img-badge{
+    display:inline-block;margin-left:8px;vertical-align:middle;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--primary);background:var(--surface-soft);border-radius:999px;padding:2px 9px;
+  }
+  .pic-img-box{ display:flex;flex-direction:column;gap:10px; }
+  .pic-img-box[hidden]{ display:none; }
+  .pic-img-list{ display:flex;flex-direction:column;gap:8px; }
+  .pic-img-row{
+    display:flex;align-items:center;gap:12px;padding:8px 10px;
+    border:1px solid var(--line);border-radius:10px;background:var(--surface);
+  }
+  .pic-img-thumb{
+    flex:none;width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--surface-soft);
+    display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-size:12px;
+  }
+  .pic-img-thumb img{ width:100%;height:100%;object-fit:cover;display:block; }
+  .pic-img-name{ flex:1 1 auto;min-width:0;font-size:13.5px;color:var(--ink); }
+  .pic-img-name small{ display:block;color:var(--ink-faint);font-size:11.5px; }
+  .pic-img-row .pic-move{ flex-direction:row; }
+  .gal-overlay{
+    position:fixed;inset:0;z-index:2000;display:none;flex-direction:column;
+    background:rgba(10,18,32,.94);color:#fff;
+  }
+  .gal-overlay.open{ display:flex; }
+  .gal-top{ display:flex;align-items:center;gap:14px;padding:14px 18px; }
+  .gal-title{ flex:1 1 auto;min-width:0;font-family:'Fraunces',serif;font-weight:600;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .gal-count{ flex:none;font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:.08em;opacity:.8; }
+  .gal-close{
+    flex:none;font-family:'IBM Plex Mono',monospace;font-size:13px;cursor:pointer;color:#fff;
+    background:none;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:6px 12px;
+  }
+  .gal-close:hover{ background:rgba(255,255,255,.12); }
+  .gal-stage{ position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 56px; }
+  .gal-frame{ position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden; }
+  .gal-frame.zoomed{ overflow:auto;align-items:flex-start;justify-content:flex-start; }
+  .gal-frame img{ max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;border-radius:4px;background:#fff; }
+  .gal-frame.zoomed img{ max-width:none;max-height:none;cursor:zoom-out; }
+  .gal-frame img[hidden]{ display:none; }
+  .gal-nav{
+    position:absolute;top:50%;transform:translateY(-50%);z-index:2;
+    width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.4);
+    background:rgba(0,0,0,.35);color:#fff;font-size:26px;line-height:1;cursor:pointer;
+  }
+  .gal-nav:hover{ background:rgba(255,255,255,.2); }
+  .gal-nav.prev{ left:6px; }
+  .gal-nav.next{ right:6px; }
+  .gal-nav[hidden]{ display:none; }
+  .gal-dots{ display:flex;justify-content:center;flex-wrap:wrap;gap:8px;padding:12px 18px 18px; }
+  .gal-dot{ width:9px;height:9px;border-radius:50%;border:0;padding:0;background:rgba(255,255,255,.35);cursor:pointer; }
+  .gal-dot.active{ background:#fff; }
+  .gal-msg{ position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:20px;font-size:14px; }
+  .gal-msg[hidden]{ display:none; }
+  .gal-spinner{ width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:galspin .8s linear infinite; }
+  @keyframes galspin{ to{ transform:rotate(360deg); } }
+  @media (max-width:600px){ .gal-stage{ padding:0 8px; } .gal-nav{ width:38px;height:38px;font-size:22px; } }
   .pic-search{ position:relative;margin:0 0 12px; }
   .pic-search input{
     width:100%;box-sizing:border-box;font:inherit;font-size:14px;color:var(--ink);
@@ -1015,6 +1071,24 @@
   </div>
 </div>
 
+<div class="gal-overlay" id="gal-overlay" role="dialog" aria-modal="true" aria-label="Image viewer">
+  <div class="gal-top">
+    <div class="gal-title" id="gal-title"></div>
+    <div class="gal-count" id="gal-count"></div>
+    <button type="button" class="gal-close" id="gal-close">Tutup ✕</button>
+  </div>
+  <div class="gal-stage" id="gal-stage">
+    <button type="button" class="gal-nav prev" id="gal-prev" aria-label="Previous image">&#8249;</button>
+    <div class="gal-frame" id="gal-frame">
+      <img id="gal-img" alt="" hidden>
+      <div class="gal-msg" id="gal-loading"><div class="gal-spinner"></div><div>Loading image...</div></div>
+      <div class="gal-msg" id="gal-error" hidden><div id="gal-error-text">Could not load this image.</div><button type="button" class="gal-close" id="gal-retry">Try again</button></div>
+    </div>
+    <button type="button" class="gal-nav next" id="gal-next" aria-label="Next image">&#8250;</button>
+  </div>
+  <div class="gal-dots" id="gal-dots"></div>
+</div>
+
 <div class="modal-overlay" id="tedit-modal-overlay">
   <div class="modal pic-modal">
     <button class="modal-close" id="tedit-modal-close" type="button">Tutup ✕</button>
@@ -1168,6 +1242,7 @@ async function fetchServerData(email, viewAs, simCareer, guestEmail, simSec, asP
     throw new Error("Web App URL belum diatur.");
   }
   const url = LOG_WEBAPP_URL + "?action=data&email=" + encodeURIComponent(email || "") + "&viewAs=" + encodeURIComponent(viewAs || "") + "&simCareer=" + encodeURIComponent(simCareer || "") + "&guest=" + encodeURIComponent(guestEmail || "") + "&simSec=" + encodeURIComponent(simSec || "") + "&asPic=" + encodeURIComponent(asPic || "") + "&baseRole=" + encodeURIComponent(getBaseRoleHint()) + "&_=" + Date.now();
+  try { window.__viewerQS = url.split("?action=data&")[1].replace(/&_=\d+$/, ""); } catch (e){}   // dipakai untuk memuat gambar menu
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
@@ -1586,6 +1661,13 @@ function getAsPic(){
   try { return String(localStorage.getItem(SIM_PIC_KEY) || ""); } catch (e){ return ""; }
 }
 
+// Menu bergambar: kolom link berisi  gallery://ID1,ID2,...  (gambar disimpan di Drive lewat Apps Script)
+function galleryIdsOf(u){
+  const m = /^gallery:\/\/([A-Za-z0-9_,-]+)$/.exec(String(u || "").trim());
+  return m ? m[1].split(",").filter(Boolean) : [];
+}
+function displayUrlFor(u){ return galleryIdsOf(u).length ? String(u).trim() : safeHttpUrl(u); }
+
 function safeHttpUrl(u){
   try {
     const url = new URL(String(u || "").trim());
@@ -1621,7 +1703,8 @@ function mapServerLinks(arr){
     owner: l.owner,
     name: l.name || l.rawUrl,
     rawName: l.rawName || "",      // persis seperti di sheet -- dipakai saat edit/hapus
-    url: safeHttpUrl(l.rawUrl),
+    url: displayUrlFor(l.rawUrl),
+    gallery: galleryIdsOf(l.rawUrl),   // menu bergambar -> tampil sebagai carousel
     rawUrl: l.rawUrl || "",
     desc: l.desc || "",
     visibleAll: !!l.visibleAll,
@@ -1714,7 +1797,7 @@ function renderPicSlot(idx){
   if (pinSlot){
     pinSlot.innerHTML = pinned.length
       ? `<span class="pinned-label">On Going</span><div class="pinned-list">${pinned.map(l =>
-          `<a class="pinned-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener"${l.desc ? ` title="${escapeHtml(l.desc)}"` : ""}>${escapeHtml(l.name)} &rarr;</a>`).join("")}</div>`
+          `<a class="pinned-link" ${l.gallery && l.gallery.length ? `href="#" data-gallery-ids="${escapeHtml(l.gallery.join(","))}" data-gallery-title="${escapeHtml(l.name)}"` : `href="${escapeHtml(l.url)}" target="_blank" rel="noopener"`}${l.desc ? ` title="${escapeHtml(l.desc)}"` : ""}>${escapeHtml(l.name)} &rarr;</a>`).join("")}</div>`
       : "";
   }
   picCreateMap[idx] = canCreate;
@@ -1903,12 +1986,259 @@ function picOwnFormHtml(formId, link, submitLabel){
     </form>`;
 }
 
+// ---------- Menu bergambar: pengelola gambar di form Add / Edit ----------
+const PIC_IMG_MAX = 12;
+let picImgState = [];   // [{ id?, blob?, thumb?, loading?, failed? }] urutan = urutan carousel
+
+function picImgReset(link){
+  picImgState.forEach(it => { if (it.blob && it.thumb) { try { URL.revokeObjectURL(it.thumb); } catch (e){} } });
+  picImgState = (link && link.gallery ? link.gallery : []).map(id => ({ id }));
+}
+
+function renderPicImgList(){
+  const box = document.getElementById("pic-img-list");
+  if (!box) return;
+  box.innerHTML = picImgState.map((it, i) => `
+    <div class="pic-img-row">
+      <div class="pic-img-thumb">${it.thumb ? `<img src="${it.thumb}" alt="">` : (it.failed ? "n/a" : "...")}</div>
+      <div class="pic-img-name">Image ${i + 1}<small>${it.blob ? Math.round(it.blob.size / 1024) + " KB, ready to upload" : "Saved"}</small></div>
+      <div class="pic-move">
+        <button type="button" data-img-up="${i}" aria-label="Move up" ${i === 0 ? "disabled" : ""}>&#9650;</button>
+        <button type="button" data-img-down="${i}" aria-label="Move down" ${i === picImgState.length - 1 ? "disabled" : ""}>&#9660;</button>
+        <button type="button" data-img-del="${i}" aria-label="Remove image">&#10005;</button>
+      </div>
+    </div>`).join("");
+  picImgState.forEach(it => {
+    if (it.id && !it.thumb && !it.loading && !it.failed){
+      it.loading = true;
+      fetchMenuImage(it.id)
+        .then(src => { it.thumb = src; it.loading = false; renderPicImgList(); })
+        .catch(() => { it.loading = false; it.failed = true; renderPicImgList(); });
+    }
+  });
+}
+
+function applyPicType(){
+  const t = document.getElementById("pic-f-type");
+  if (!t) return;
+  const img = t.value === "images";
+  const url = document.getElementById("pic-f-url");
+  const box = document.getElementById("pic-img-box");
+  if (box) box.hidden = !img;
+  if (url){
+    url.hidden = img; url.disabled = img; url.required = !img;
+    if (!img && /^gallery:\/\//.test(url.value)) url.value = "";
+  }
+  if (img) renderPicImgList();
+}
+
+function canvasToBlob(canvas, type, q){
+  return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error("toBlob failed")), type, q));
+}
+
+// Kecilkan gambar di browser: sisi terpanjang <= 1800 px, JPEG ~85% (biasanya 150-500 KB).
+async function compressImageFile(file){
+  let src, w, h;
+  if (window.createImageBitmap){
+    src = await createImageBitmap(file); w = src.width; h = src.height;
+  } else {
+    src = await new Promise((resolve, reject) => {
+      const im = new Image(); const u = URL.createObjectURL(file);
+      im.onload = () => { URL.revokeObjectURL(u); resolve(im); };
+      im.onerror = () => { URL.revokeObjectURL(u); reject(new Error("decode failed")); };
+      im.src = u;
+    });
+    w = src.naturalWidth; h = src.naturalHeight;
+  }
+  const scale = Math.min(1, 1800 / Math.max(w, h));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(w * scale)); canvas.height = Math.max(1, Math.round(h * scale));
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+  if (src.close) try { src.close(); } catch (e){}
+  let q = 0.85;
+  let blob = await canvasToBlob(canvas, "image/jpeg", q);
+  while (blob.size > 900 * 1024 && q > 0.5){ q -= 0.1; blob = await canvasToBlob(canvas, "image/jpeg", q); }
+  if (blob.size > 2.8 * 1024 * 1024) throw new Error("too large");
+  return blob;
+}
+
+async function addPicImageFiles(fileList){
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const room = PIC_IMG_MAX - picImgState.length;
+  if (room <= 0){ setPicStatus("err", "A menu can hold up to " + PIC_IMG_MAX + " images."); return; }
+  const batch = files.slice(0, room);
+  setPicStatus("", "");
+  const addBtn = document.getElementById("pic-img-add");
+  if (addBtn){ addBtn.disabled = true; addBtn.textContent = "Processing..."; }
+  const bad = [];
+  for (const f of batch){
+    try {
+      const blob = await compressImageFile(f);
+      picImgState.push({ blob, thumb: URL.createObjectURL(blob) });
+      renderPicImgList();
+    } catch (e){ bad.push(f.name); }
+  }
+  if (addBtn){ addBtn.disabled = false; addBtn.textContent = "+ Add images"; }
+  if (bad.length) setPicStatus("err", "Could not read: " + bad.join(", ") + ". Please use JPG, PNG or WebP images.");
+  else if (files.length > room) setPicStatus("err", "Only " + PIC_IMG_MAX + " images fit in one menu; the extra files were skipped.");
+}
+
+function blobToBase64(blob){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = () => reject(new Error("Could not read the image."));
+    r.readAsDataURL(blob);
+  });
+}
+
+// Unggah gambar baru satu per satu; mengembalikan daftar id sesuai urutan di carousel.
+async function uploadPicImages(meta){
+  const ids = [];
+  const total = picImgState.filter(it => !it.id).length;
+  let done = 0;
+  const btn = document.getElementById("pic-submit");
+  for (const it of picImgState){
+    if (it.id){ ids.push(it.id); continue; }
+    done++;
+    if (btn) btn.textContent = "Uploading " + done + "/" + total + "...";
+    const data = await picApi({
+      action: "uploadMenuImage", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
+      sheet: meta.sheetKey, mime: it.blob.type || "image/jpeg", data: await blobToBase64(it.blob)
+    });
+    if (!data || !data.ok){
+      const err = new Error((data && data.error) || "Image upload failed.");
+      err.fromServer = true;
+      throw err;
+    }
+    it.id = data.id;   // sudah tersimpan di Drive; tidak diunggah ulang kalau simpan menu gagal lalu dicoba lagi
+    ids.push(it.id);
+  }
+  return ids;
+}
+
+// ---------- Carousel gambar ----------
+const menuImgCache = new Map();
+function fetchMenuImage(id){
+  if (menuImgCache.has(id)) return menuImgCache.get(id);
+  const p = (async () => {
+    if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) throw new Error("Web App URL is not configured.");
+    let qs = window.__viewerQS;
+    if (!qs){
+      qs = "email=" + encodeURIComponent(getRealEmail() || "") + "&guest=" + encodeURIComponent(getGuestEmail() || "") + "&baseRole=" + encodeURIComponent(getBaseRoleHint());
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      const res = await fetch(LOG_WEBAPP_URL + "?action=menuImage&id=" + encodeURIComponent(id) + "&" + qs, { signal: ctrl.signal });
+      const d = await res.json();
+      if (!d || !d.ok) throw new Error((d && d.error) || "Image not available.");
+      return "data:" + (d.mime || "image/jpeg") + ";base64," + d.data;
+    } finally { clearTimeout(timer); }
+  })();
+  menuImgCache.set(id, p);
+  p.catch(() => menuImgCache.delete(id));   // gagal -> boleh dicoba lagi
+  return p;
+}
+
+const Gallery = (() => {
+  let ids = [], idx = 0, token = 0, zoomed = false, startX = null;
+  const $ = (id) => document.getElementById(id);
+  function setZoom(on){
+    zoomed = on;
+    $("gal-frame").classList.toggle("zoomed", on);
+  }
+  function renderDots(){
+    $("gal-dots").innerHTML = ids.length > 1 ? ids.map((_, i) => `<button type="button" class="gal-dot${i === idx ? " active" : ""}" data-gal-dot="${i}" aria-label="Image ${i + 1}"></button>`).join("") : "";
+  }
+  async function show(i){
+    idx = (i + ids.length) % ids.length;
+    const my = ++token;
+    setZoom(false);
+    $("gal-count").textContent = ids.length > 1 ? (idx + 1) + " / " + ids.length : "";
+    $("gal-prev").hidden = $("gal-next").hidden = ids.length < 2;
+    renderDots();
+    const img = $("gal-img");
+    img.hidden = true;
+    $("gal-error").hidden = true;
+    $("gal-loading").hidden = false;
+    try {
+      const src = await fetchMenuImage(ids[idx]);
+      if (my !== token) return;
+      img.src = src; img.alt = $("gal-title").textContent + " (" + (idx + 1) + ")";
+      img.hidden = false;
+      $("gal-loading").hidden = true;
+      if (ids.length > 1) fetchMenuImage(ids[(idx + 1) % ids.length]).catch(() => {});   // siapkan gambar berikutnya
+    } catch (err){
+      if (my !== token) return;
+      $("gal-loading").hidden = true;
+      $("gal-error").hidden = false;
+    }
+  }
+  function open(title, list, start){
+    ids = (list || []).slice();
+    if (!ids.length) return;
+    $("gal-title").textContent = title || "";
+    $("gal-overlay").classList.add("open");
+    document.documentElement.style.overflow = "hidden";
+    show(start || 0);
+  }
+  function close(){
+    token++;
+    $("gal-overlay").classList.remove("open");
+    $("gal-img").removeAttribute("src");
+    document.documentElement.style.overflow = "";
+  }
+  function isOpen(){ return $("gal-overlay").classList.contains("open"); }
+  document.addEventListener("click", (e) => {
+    if (!isOpen()) return;
+    if (e.target.closest("#gal-close")) { close(); return; }
+    if (e.target.closest("#gal-prev")) { show(idx - 1); return; }
+    if (e.target.closest("#gal-next")) { show(idx + 1); return; }
+    if (e.target.closest("#gal-retry")) { show(idx); return; }
+    const dot = e.target.closest("[data-gal-dot]");
+    if (dot) { show(Number(dot.dataset.galDot)); return; }
+    if (e.target.id === "gal-img") { setZoom(!zoomed); return; }
+    if (e.target.id === "gal-stage" || e.target.id === "gal-frame") { if (!zoomed) close(); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (!isOpen()) return;
+    if (e.key === "Escape") { close(); e.preventDefault(); }
+    else if (e.key === "ArrowLeft" && ids.length > 1) { show(idx - 1); e.preventDefault(); }
+    else if (e.key === "ArrowRight" && ids.length > 1) { show(idx + 1); e.preventDefault(); }
+  });
+  document.addEventListener("touchstart", (e) => {
+    if (!isOpen() || zoomed || !e.touches.length) { startX = null; return; }
+    startX = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener("touchend", (e) => {
+    if (startX === null || !isOpen() || !e.changedTouches.length) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    startX = null;
+    if (Math.abs(dx) > 50 && ids.length > 1) show(dx < 0 ? idx + 1 : idx - 1);
+  }, { passive: true });
+  return { open, close };
+})();
+
 function picFormHtml(idx, formId, link, submitLabel){
   if (picOwnCreate) return picOwnFormHtml(formId, link, submitLabel);
   return `
     <form id="${formId}" class="pic-form" autocomplete="off">
       <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
-      <input type="url" id="pic-f-url" placeholder="https://..." required value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
+      <select id="pic-f-type" aria-label="Menu type">
+        <option value="link"${link && link.gallery && link.gallery.length ? "" : " selected"}>Type: Link (opens in a new tab)</option>
+        <option value="images"${link && link.gallery && link.gallery.length ? " selected" : ""}>Type: Images (carousel inside the site)</option>
+      </select>
+      <input type="url" id="pic-f-url" placeholder="https://..." ${link && link.gallery && link.gallery.length ? "disabled hidden" : "required"} value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
+      <div class="pic-img-box" id="pic-img-box"${link && link.gallery && link.gallery.length ? "" : " hidden"}>
+        <div class="pic-img-list" id="pic-img-list"></div>
+        <input type="file" id="pic-img-input" accept="image/*" multiple hidden>
+        <button type="button" class="pic-btn" id="pic-img-add">+ Add images</button>
+        <p class="pic-hint">Up to ${PIC_IMG_MAX} images per menu. Photos are resized automatically in your browser. Users see them as a carousel without leaving the site.</p>
+      </div>
       <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
       ${categoryFieldHtml(idx, link)}
       ${visSelectHtml(idx, link)}
@@ -1948,7 +2278,7 @@ function renderPicModal(idx, note){
         <li class="pic-edit-li${canEdit ? "" : " disabled"}" ${canEdit ? `data-pic-edit-row="${i}" tabindex="0" role="button" aria-label="Edit ${escapeHtml(l.name)}"` : ""}>
           <div class="pic-li-body">
             ${catLine}
-            <div class="pic-li-main">${picHl(l.name, qTokens)}</div>
+            <div class="pic-li-main">${picHl(l.name, qTokens)}${l.gallery && l.gallery.length ? `<span class="pic-img-badge">${l.gallery.length} image${l.gallery.length > 1 ? "s" : ""}</span>` : ""}</div>
             ${sub}${tag}
           </div>
           ${canEdit ? `<span class="pic-edit-pill">Edit</span>` : ""}
@@ -1958,7 +2288,9 @@ function renderPicModal(idx, note){
           ${deleting && (!picOwnDelete || isOwnLink(l)) ? `<label class="pic-check"><input type="checkbox" data-pic-check="${i}" aria-label="Select ${escapeHtml(l.name)}"></label>` : ""}
           <div class="pic-li-body">
             ${catLine}
-            <div class="pic-li-main"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${picHl(l.name, qTokens)} &rarr;</a></div>
+            <div class="pic-li-main">${l.gallery && l.gallery.length
+              ? `<a href="#" data-gallery-ids="${escapeHtml(l.gallery.join(","))}" data-gallery-title="${escapeHtml(l.name)}">${picHl(l.name, qTokens)} &rarr;</a><span class="pic-img-badge">${l.gallery.length} image${l.gallery.length > 1 ? "s" : ""}</span>`
+              : `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${picHl(l.name, qTokens)} &rarr;</a>`}</div>
             ${sub}${tag}
           </div>
         </li>`;
@@ -2104,6 +2436,7 @@ function renderPicModal(idx, note){
     const nameEl = document.getElementById("pic-f-name");
     if (nameEl) nameEl.focus();
   }
+  if (document.getElementById("pic-f-type")) applyPicType();   // menu bergambar: tampilkan daftar gambar
 }
 
 function setPicMode(mode){
@@ -2111,6 +2444,7 @@ function setPicMode(mode){
   picMode = mode;
   picSearch = "";
   if (mode !== "edit") picEditLink = null;
+  if (mode === "add") picImgReset(null);
   if (mode === "reorder"){
     picReorderList = (picVisible[picCurrentIdx] || []).filter(l => !l.pinned);
     picReorderDirty = false;
@@ -2132,6 +2466,7 @@ function startPicEdit(i){
   if (!l || (picOwnCreate && !isOwnLink(l))) return;
   picEditLink = l;
   picMode = "edit";
+  picImgReset(l);
   renderPicModal(picCurrentIdx);
   const ov = document.getElementById("pic-modal-overlay");
   const md = ov && ov.querySelector(".modal");
@@ -2235,7 +2570,9 @@ function closePicModal(){
 // Baca & validasi isi form (dipakai Add dan Edit). Mengembalikan null kalau tidak valid.
 function readPicForm(){
   const name = document.getElementById("pic-f-name").value.trim();
-  const url  = document.getElementById("pic-f-url").value.trim();
+  const typeEl = document.getElementById("pic-f-type");
+  const isImg = !!typeEl && typeEl.value === "images";
+  const url  = isImg ? "" : document.getElementById("pic-f-url").value.trim();
   const desc = document.getElementById("pic-f-desc").value.trim();
   const visEl = document.getElementById("pic-f-vis");
   const vis  = visEl ? visEl.value : "";
@@ -2245,7 +2582,9 @@ function readPicForm(){
   const og = document.getElementById("pic-f-ogscope") ? document.getElementById("pic-f-ogscope").value : "None";
   const cat = document.getElementById("pic-f-cat") ? document.getElementById("pic-f-cat").value.replace(/\s+/g, " ").trim() : "";
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
-  if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
+  if (isImg){
+    if (!picImgState.length){ setPicStatus("err", "Please add at least one image."); return null; }
+  } else if (!/^https?:\/\//i.test(url) || !safeHttpUrl(url)){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
   }
@@ -2253,7 +2592,7 @@ function readPicForm(){
     const me = getCurrentUserEmail();
     return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None" };
   }
-  return { name, url, desc, vis, staff, cat, status, only, og };
+  return { name, url, desc, vis, staff, cat, status, only, og, images: isImg };
 }
 
 async function addPicLink(){
@@ -2267,6 +2606,7 @@ async function addPicLink(){
   picBusy = true; btn.disabled = true; btn.textContent = "Saving...";
   setPicStatus("", "");
   try {
+    if (f.images){ f.url = "gallery://" + (await uploadPicImages(meta)).join(","); }
     const data = await picApi({
       action: "addLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, onlyFor: f.only
@@ -2277,14 +2617,14 @@ async function addPicLink(){
       const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
-        url: safeHttpUrl(f.url), rawUrl: f.url, desc: f.desc,
+        url: displayUrlFor(f.url), gallery: galleryIdsOf(f.url), rawUrl: f.url, desc: f.desc,
         visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status, pinMode: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only", ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
     }
   } catch (err){
-    setPicStatus("err", "Could not reach the server: " + err.message);
+    setPicStatus("err", err && err.fromServer ? err.message : "Could not reach the server: " + err.message);
   } finally {
     picBusy = false;
     const b = document.getElementById("pic-submit");
@@ -2304,6 +2644,7 @@ async function editPicLink(){
   picBusy = true; btn.disabled = true; btn.textContent = "Saving...";
   setPicStatus("", "");
   try {
+    if (f.images){ f.url = "gallery://" + (await uploadPicImages(meta)).join(","); }
     const data = await picApi({
       action: "editLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
@@ -2313,7 +2654,7 @@ async function editPicLink(){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
     } else {
       link.name = f.name; link.rawName = f.name;
-      link.url = safeHttpUrl(f.url); link.rawUrl = f.url;
+      link.url = displayUrlFor(f.url); link.rawUrl = f.url; link.gallery = galleryIdsOf(f.url);
       link.desc = f.desc;
       link.staffVisible = f.staff === "Yes";
       link.category = f.cat;
@@ -2331,7 +2672,7 @@ async function editPicLink(){
       refreshPicLocal(idx, { type: "ok", text: "Menu updated and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
     }
   } catch (err){
-    setPicStatus("err", "Could not reach the server: " + err.message);
+    setPicStatus("err", err && err.fromServer ? err.message : "Could not reach the server: " + err.message);
   } finally {
     picBusy = false;
     const b = document.getElementById("pic-submit");
@@ -2521,6 +2862,35 @@ document.addEventListener("change", (e) => {
   const t = e.target;
   if (!t || !t.matches) return;
   if (t.matches("[data-pic-check]")) updatePicDeleteButton();
+  if (t.id === "pic-f-type") applyPicType();
+  if (t.id === "pic-img-input"){ addPicImageFiles(t.files).then(() => { t.value = ""; }); }
+});
+document.addEventListener("click", (e) => {
+  const g = e.target.closest && e.target.closest("[data-gallery-ids]");
+  if (g){
+    e.preventDefault();
+    Gallery.open(g.dataset.galleryTitle || "", String(g.dataset.galleryIds || "").split(",").filter(Boolean));
+    return;
+  }
+  if (e.target.closest("#pic-img-add")){ const f = document.getElementById("pic-img-input"); if (f) f.click(); return; }
+  const up = e.target.closest("[data-img-up]");
+  const down = e.target.closest("[data-img-down]");
+  const del = e.target.closest("[data-img-del]");
+  if (up || down){
+    const i = Number((up || down).dataset[up ? "imgUp" : "imgDown"]);
+    const j = up ? i - 1 : i + 1;
+    if (j < 0 || j >= picImgState.length) return;
+    const tmp = picImgState[i]; picImgState[i] = picImgState[j]; picImgState[j] = tmp;
+    renderPicImgList();
+    return;
+  }
+  if (del){
+    const i = Number(del.dataset.imgDel);
+    const it = picImgState[i];
+    if (it && it.blob && it.thumb){ try { URL.revokeObjectURL(it.thumb); } catch (e2){} }
+    picImgState.splice(i, 1);
+    renderPicImgList();
+  }
 });
 document.addEventListener("input", (e) => {
   const t = e.target;

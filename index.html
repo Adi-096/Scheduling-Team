@@ -421,6 +421,28 @@
     text-decoration:underline; text-underline-offset:2px;
   }
   .acct-bar .acct-out:hover{ color:#B3401F; }
+  .acct-bar .acct-link{
+    font:inherit; letter-spacing:inherit; color:var(--primary);
+    background:none; border:none; padding:0; cursor:pointer;
+    text-decoration:underline; text-underline-offset:2px;
+  }
+  .acct-bar .acct-link:hover{ color:var(--ink); }
+  #profile-modal-overlay .modal{ margin:auto; }
+  .profile-lbl{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);margin:2px 0 4px;
+  }
+  .profile-field{ width:100%;margin-top:12px;font-size:14px;color:var(--ink);word-break:break-word; }
+  .profile-field a{ color:var(--primary); }
+  .profile-sec{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--primary);background:var(--surface-soft);border-radius:999px;padding:3px 12px;margin-bottom:10px;
+  }
+  .profile-block{ width:100%; }
+  .profile-block .task, .profile-block .task-desc{ margin-bottom:10px; }
+  .profile-photo-actions{ display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px; }
+  .profile-hint{ font-size:12px;color:var(--ink-faint);line-height:1.5;margin-top:14px; }
+  #profile-status{ margin-top:12px;width:100%;box-sizing:border-box; }
   footer.page-footer{
     margin-top:48px;
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
@@ -1077,6 +1099,13 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="profile-modal-overlay">
+  <div class="modal member-modal">
+    <button class="modal-close" id="profile-modal-close" type="button">Tutup ✕</button>
+    <div class="member-card" id="profile-card-content"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="pic-modal-overlay">
   <div class="modal pic-modal">
     <button class="modal-close" id="pic-modal-close">Tutup ✕</button>
@@ -1419,6 +1448,56 @@ function initials(name){
   return (name||"?").trim().split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||"").join("");
 }
 
+// Display picture yang diunggah dari View Profile tersimpan sebagai  photo://ID  (file di Drive, dibaca lewat Apps Script).
+const memberPhotoCache = new Map();   // id -> dataURL ("" = tidak tersedia)
+function photoIdOf(u){
+  const m = /^photo:\/\/([A-Za-z0-9_-]{10,})$/.exec(String(u || "").trim());
+  return m ? m[1] : "";
+}
+
+// HTML foto (bulat) untuk satu anggota: URL biasa, foto unggahan (dimuat menyusul), atau inisial.
+function dpHtml(m){
+  const pid = photoIdOf(m.dp);
+  if (pid){
+    const cached = memberPhotoCache.get(pid);
+    if (cached) return `<img class="dp" src="${cached}" alt="${escapeHtml(m.pic)}">`;
+    return `<div class="dp fallback" data-photo-id="${pid}" data-photo-alt="${escapeHtml(m.pic)}">${initials(m.pic)}</div>`;
+  }
+  return m.dp
+    ? `<img class="dp" src="${escapeHtml(toDirectImageUrl(m.dp))}" alt="${escapeHtml(m.pic)}" onerror="this.outerHTML='<div class=&quot;dp fallback&quot;>${initials(m.pic)}</div>'">`
+    : `<div class="dp fallback">${initials(m.pic)}</div>`;
+}
+
+// Muat semua foto unggahan yang ada di dalam elemen root (satu panggilan per 20 foto), lalu ganti inisial dengan fotonya.
+async function hydrateMemberPhotos(root){
+  const scope = root || document;
+  const nodes = Array.from(scope.querySelectorAll("[data-photo-id]"));
+  if (!nodes.length) return;
+  const need = [...new Set(nodes.map(n => n.dataset.photoId).filter(id => !memberPhotoCache.has(id)))];
+  for (let i = 0; i < need.length; i += 20){
+    const batch = need.slice(i, i + 20);
+    try {
+      if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) break;
+      const qs = window.__viewerQS || ("email=" + encodeURIComponent(getRealEmail() || "") + "&guest=" + encodeURIComponent(getGuestEmail() || "") + "&baseRole=" + encodeURIComponent(getBaseRoleHint()));
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 45000);
+      let d;
+      try {
+        const res = await fetch(LOG_WEBAPP_URL + "?action=memberPhotos&ids=" + encodeURIComponent(batch.join(",")) + "&" + qs, { signal: ctrl.signal });
+        d = await res.json();
+      } finally { clearTimeout(timer); }
+      if (d && d.ok) batch.forEach(id => memberPhotoCache.set(id, (d.photos && d.photos[id]) || ""));
+    } catch (e){ /* jaringan gagal: tetap tampil inisial; dicoba lagi saat dibuka berikutnya */ }
+  }
+  nodes.forEach(n => {
+    const src = memberPhotoCache.get(n.dataset.photoId);
+    if (!src || !n.isConnected) return;
+    const img = document.createElement("img");
+    img.className = "dp"; img.src = src; img.alt = n.getAttribute("data-photo-alt") || "";
+    n.replaceWith(img);
+  });
+}
+
 function escapeHtml(str){
   return (str||"").replace(/[&<>"']/g, m => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -1489,9 +1568,7 @@ function memberCardHtml(m, canEdit){
   return `
     <div class="card">
       ${editBtn}
-      ${m.dp
-        ? `<img class="dp" src="${escapeHtml(toDirectImageUrl(m.dp))}" alt="${escapeHtml(m.pic)}" onerror="this.outerHTML='<div class=&quot;dp fallback&quot;>${initials(m.pic)}</div>'">`
-        : `<div class="dp fallback">${initials(m.pic)}</div>`}
+      ${dpHtml(m)}
       <hr>
       <div class="pic-name">${escapeHtml(m.pic || "-")}</div>
       <hr>
@@ -1534,15 +1611,12 @@ function openModal(header, sheetKey, members){
       </div>`);
 
   document.getElementById("modal-overlay").classList.add("open");
+  hydrateMemberPhotos(grid);
 }
 
 function openMemberModal(m){
   const waDigits = formatWaLink(m.whatsapp);
   const emailValid = isValidEmail(m.email);
-
-  const dpHtml = m.dp
-    ? `<img class="dp" src="${escapeHtml(toDirectImageUrl(m.dp))}" alt="${escapeHtml(m.pic)}" onerror="this.outerHTML='<div class=&quot;dp fallback&quot;>${initials(m.pic)}</div>'">`
-    : `<div class="dp fallback">${initials(m.pic)}</div>`;
 
   const emailBtn = emailValid
     ? `<a class="member-action-btn email" href="mailto:${encodeURIComponent(m.email.trim())}" title="Email: ${escapeHtml(m.email)}">${EMAIL_SVG}<span>Email</span></a>`
@@ -1555,7 +1629,7 @@ function openMemberModal(m){
     : `<div class="member-actions"><span class="no-contact">Kontak belum tersedia.</span></div>`;
 
   document.getElementById("member-card-content").innerHTML = `
-    ${dpHtml}
+    ${dpHtml(m)}
     <hr>
     <div class="pic-name">${escapeHtml(m.pic || "-")}</div>
     <hr>
@@ -1565,6 +1639,7 @@ function openMemberModal(m){
     ${actionsHtml}
   `;
   document.getElementById("member-modal-overlay").classList.add("open");
+  hydrateMemberPhotos(document.getElementById("member-card-content"));
 }
 
 // Tombol "Details" di kartu Our Team: tampilkan / sembunyikan Task Description.
@@ -3315,6 +3390,172 @@ function getViewAs(){
 // Isi Login Card (bar akun) mengikuti kolom "Login Card View" di Role Policy milik role yang sedang aktif
 // (role asli, atau role yang dipilih lewat Role Switch).
 // Item yang dipilih tapi tidak punya nilai (mis. Lecturer Code untuk Manager) tidak ditampilkan.
+// ---------- View Profile ----------
+let profileCtx = { email: "", own: false };
+let profileBusy = false;
+
+function profileRowsFor(email){
+  const e = String(email || "").trim().toLowerCase();
+  const out = [];
+  if (!e) return out;
+  sectionMembers.forEach((members, i) => (members || []).forEach(m => {
+    if (String(m.email || "").trim().toLowerCase() !== e) return;
+    const meta = sectionMeta[i] || {};
+    out.push({ m, label: String(meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ").trim() });
+  }));
+  return out;
+}
+
+function setProfileStatus(type, text){
+  const el = document.getElementById("profile-status");
+  if (!el) return;
+  el.className = "pic-status" + (text ? " show " + type : "");
+  el.textContent = text || "";
+}
+
+function renderProfile(){
+  const box = document.getElementById("profile-card-content");
+  if (!box) return;
+  const rows = profileRowsFor(profileCtx.email);
+  if (!rows.length){
+    box.innerHTML = `
+      <div class="dp fallback">${escapeHtml(initials(profileCtx.email.split("@")[0].replace(/[._-]+/g, " ")))}</div>
+      <hr>
+      <div class="pic-name">${escapeHtml(profileCtx.email)}</div>
+      <div class="task-desc" style="margin-top:10px">No team profile was found for this email in the sheets you can see.</div>`;
+    return;
+  }
+  const dpRow = rows.find(r => r.m.dp) || rows[0];
+  const name = (rows.find(r => r.m.pic) || rows[0]).m.pic || "-";
+  const waRow = rows.find(r => formatWaLink(r.m.whatsapp)) || rows[0];
+  const waDigits = formatWaLink(waRow.m.whatsapp);
+  const email = profileCtx.email;
+  const own = profileCtx.own;
+  box.innerHTML = `
+    ${dpHtml(Object.assign({}, dpRow.m, { pic: name }))}
+    ${own ? `<div class="profile-photo-actions">
+        <button type="button" class="pic-btn" id="profile-photo-btn">${dpRow.m.dp ? "Change photo" : "Upload photo"}</button>
+        ${dpRow.m.dp ? `<button type="button" class="pic-btn" id="profile-photo-remove">Remove photo</button>` : ""}
+        <input type="file" id="profile-photo-input" accept="image/*" hidden>
+      </div>` : ""}
+    <div class="pic-status" id="profile-status"></div>
+    <hr>
+    <div class="pic-name">${escapeHtml(name)}</div>
+    <div class="profile-field"><div class="profile-lbl">Email</div>${isValidEmail(email) ? `<a href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>` : escapeHtml(email)}</div>
+    <div class="profile-field"><div class="profile-lbl">WhatsApp</div>${waDigits ? `<a href="https://wa.me/${waDigits}" target="_blank" rel="noopener">${escapeHtml(waRow.m.whatsapp)}</a>` : "-"}</div>
+    ${rows.map(r => `
+      <hr>
+      <div class="profile-block">
+        ${r.label ? `<div class="profile-sec">${escapeHtml(r.label)}</div>` : ""}
+        <div class="profile-lbl">Task</div>
+        <div class="task">${escapeHtml(r.m.task || "-")}</div>
+        <div class="profile-lbl">Task Description</div>
+        <div class="task-desc">${escapeHtml(r.m.desc || "-")}</div>
+      </div>`).join("")}
+    ${own ? `<div class="profile-hint">You can change your display picture here. Name, task, description and WhatsApp are managed by your team leader (Our Team &rsaquo; Edit).</div>` : ""}`;
+  hydrateMemberPhotos(box);
+}
+
+function openProfile(){
+  renderProfile();
+  document.getElementById("profile-modal-overlay").classList.add("open");
+}
+function closeProfile(){
+  document.getElementById("profile-modal-overlay").classList.remove("open");
+}
+document.getElementById("profile-modal-close").addEventListener("click", closeProfile);
+document.getElementById("profile-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "profile-modal-overlay") closeProfile();
+});
+
+// Foto profil: potong persegi dari tengah, 360 x 360 px, JPEG (biasanya 20-50 KB).
+async function squarePhotoBlob(file){
+  let src, w, h;
+  if (window.createImageBitmap){
+    src = await createImageBitmap(file); w = src.width; h = src.height;
+  } else {
+    src = await new Promise((resolve, reject) => {
+      const im = new Image(); const u = URL.createObjectURL(file);
+      im.onload = () => { URL.revokeObjectURL(u); resolve(im); };
+      im.onerror = () => { URL.revokeObjectURL(u); reject(new Error("decode failed")); };
+      im.src = u;
+    });
+    w = src.naturalWidth; h = src.naturalHeight;
+  }
+  const side = Math.min(w, h);
+  const canvas = document.createElement("canvas");
+  canvas.width = 360; canvas.height = 360;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 360, 360);
+  ctx.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 360, 360);
+  if (src.close) try { src.close(); } catch (e){}
+  let q = 0.88;
+  let blob = await canvasToBlob(canvas, "image/jpeg", q);
+  while (blob.size > 200 * 1024 && q > 0.5){ q -= 0.1; blob = await canvasToBlob(canvas, "image/jpeg", q); }
+  return blob;
+}
+
+function applyProfilePhotoLocally(email, dp){
+  const e = String(email || "").trim().toLowerCase();
+  sectionMembers.forEach(members => (members || []).forEach(m => {
+    if (String(m.email || "").trim().toLowerCase() === e) m.dp = dp;
+  }));
+  lastDataSignature = null;   // pengecekan berkala berikutnya menyegarkan halaman dengan data sheet terbaru
+}
+
+async function uploadProfilePhoto(file){
+  if (profileBusy || !file) return;
+  profileBusy = true;
+  const btn = document.getElementById("profile-photo-btn");
+  if (btn){ btn.disabled = true; btn.textContent = "Uploading..."; }
+  setProfileStatus("", "");
+  try {
+    let blob;
+    try { blob = await squarePhotoBlob(file); }
+    catch (e){ setProfileStatus("err", "Could not read that image. Please use a JPG, PNG or WebP photo."); return; }
+    const b64 = await blobToBase64(blob);
+    const data = await picApi({ action: "uploadProfilePhoto", actor: getRealEmail(), mime: "image/jpeg", data: b64 });
+    if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to upload the photo."); return; }
+    memberPhotoCache.set(data.id, "data:image/jpeg;base64," + b64);
+    applyProfilePhotoLocally(profileCtx.email, "photo://" + data.id);
+    renderProfile();
+    setProfileStatus("ok", "Photo updated.");
+  } catch (err){
+    setProfileStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    profileBusy = false;
+    const b = document.getElementById("profile-photo-btn");
+    if (b){ b.disabled = false; }
+  }
+}
+
+async function removeProfilePhoto(){
+  if (profileBusy) return;
+  if (!confirm("Remove your display picture?")) return;
+  profileBusy = true;
+  setProfileStatus("", "");
+  try {
+    const data = await picApi({ action: "removeProfilePhoto", actor: getRealEmail() });
+    if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to remove the photo."); return; }
+    applyProfilePhotoLocally(profileCtx.email, "");
+    renderProfile();
+    setProfileStatus("ok", "Photo removed.");
+  } catch (err){
+    setProfileStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    profileBusy = false;
+  }
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest && e.target.closest("#profile-photo-btn")){ const f = document.getElementById("profile-photo-input"); if (f) f.click(); return; }
+  if (e.target.closest && e.target.closest("#profile-photo-remove")){ removeProfilePhoto(); }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t && t.id === "profile-photo-input"){ uploadProfilePhoto(t.files && t.files[0]).then(() => { t.value = ""; }); }
+});
+
 const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kalau server belum mengirim kolom ini
 
 // opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simSec, secOptions, asPic, picList, devUi, uiViewAs/uiCareer/uiSec, canSignOut }
@@ -3380,6 +3621,12 @@ function renderLoginInfo(opts){
       }
     }
   }
+  // View Profile: untuk akun berperan PIC / pimpinan (yang bisa terdaftar di sheet tim). Saat Developer memakai
+  // "As PIC", profil yang tampil adalah milik PIC itu (hanya lihat); foto hanya bisa diubah oleh pemiliknya sendiri.
+  profileCtx = { email: String(opts.asPic || saved.email || "").trim(), own: !opts.asPic };
+  if (["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole)){
+    parts.push(`<button type="button" class="acct-link" id="acct-profile">View Profile</button>`);
+  }
   // Tombol Sign out mengikuti kolom "Sign Out Button" di Role Policy.
   if (opts.canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
@@ -3430,6 +3677,9 @@ function renderLoginInfo(opts){
     loadAndRender(true).catch(() => {});
     window.scrollTo(0, 0);
   });
+
+  const profBtn = document.getElementById("acct-profile");
+  if (profBtn) profBtn.addEventListener("click", () => openProfile());
 
   const outBtn = document.getElementById("acct-signout");
   if (outBtn) outBtn.addEventListener("click", () => {
@@ -4177,7 +4427,7 @@ document.getElementById("tedit-form").addEventListener("submit", async (e) => {
     whatsapp: document.getElementById("tedit-wa").value.trim()
   };
   if (!f.pic){ setTeditStatus("err", "PIC name cannot be empty."); return; }
-  if (f.dp && (!/^https?:\/\//i.test(f.dp) || !safeHttpUrl(f.dp))){ setTeditStatus("err", "Photo URL must start with https://"); return; }
+  if (f.dp && !photoIdOf(f.dp) && (!/^https?:\/\//i.test(f.dp) || !safeHttpUrl(f.dp))){ setTeditStatus("err", "Photo URL must start with https://"); return; }
   if (!/^[0-9+\-\s()]{0,40}$/.test(f.whatsapp)){ setTeditStatus("err", "WhatsApp may only contain digits, +, -, spaces and parentheses."); return; }
 
   const btn = document.getElementById("tedit-save");

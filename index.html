@@ -1951,6 +1951,9 @@ function visibilityLabel(l){
   if (l.pinned){
     const who = { master: "everyone", pic: "PIC only", "public": "Public (staff incl. Contact Center)", staff: "Staff (excl. Contact Center)" }[l.pinMode] || "everyone";
     t += " | On Going: " + who + (l.onGoing === false ? " (not shown to you)" : "");
+    if (l.expiresOn) t += " | Shown through " + l.expiresOn;
+  } else if (l.ogExpired){
+    t += " | On Going ended " + l.expiresOn + " (now a normal link)";
   }
   if (l.onlyFor && l.onlyFor.length) t += " | Only shown to: " + l.onlyFor.join(", ");
   return t;
@@ -2083,6 +2086,43 @@ function ogScopeSelectHtml(link){
     </select>`;
 }
 
+// <select> Durasi On Going: supaya link On Going tidak lupa dinonaktifkan. Setelah lewat, link otomatis
+// kembali menjadi link biasa. Link lama tanpa batas waktu = "Never"; link yang sudah punya batas
+// waktu menawarkan "Keep current" agar tanggalnya tidak ter-reset saat diedit.
+function ogDaysSelectHtml(link){
+  const has = !!(link && link.pinned && link.expiresOn);
+  const cur = has ? "__keep__" : ((link && link.pinned) ? "never" : "7");
+  const opt = (v, label) => `<option value="${v}"${cur === v ? " selected" : ""}>${label}</option>`;
+  return `<select id="pic-f-ogdays" aria-label="On Going duration">
+      ${has ? opt("__keep__", "Keep current: shown through " + escapeHtml(link.expiresOn)) : ""}
+      ${opt("1", "On Going duration: 1 day (today only)")}
+      ${opt("3", "On Going duration: 3 days")}
+      ${opt("7", "On Going duration: 7 days")}
+      ${opt("15", "On Going duration: 15 days")}
+      ${opt("30", "On Going duration: 30 days")}
+      ${opt("never", "On Going duration: Never (stays until I turn it off)")}
+    </select>`;
+}
+// Tanggal terakhir tampil (yyyy-MM-dd) untuk tampilan lokal setelah Save; server menghitung versi resminya.
+function picExpiryFromDays(days, keepValue){
+  if (days === "__keep__") return keepValue || "";
+  const n = Number(days);
+  if (![1, 3, 7, 15, 30].includes(n)) return "";
+  const d = new Date(Date.now() + (n - 1) * 86400000);
+  const z = (x) => String(x).padStart(2, "0");
+  return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate());
+}
+// Pilihan On Going (cakupan + durasi) hanya tampil bila status BUKAN Normal.
+function applyPicOg(){
+  const st = document.getElementById("pic-f-status");
+  if (!st) return;
+  const on = st.value !== "";
+  ["pic-f-ogscope", "pic-f-ogdays"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !on;
+  });
+}
+
 // Form untuk hak "Own Only": hanya nama, URL, keterangan, dan status On Going (Normal / PIC Only).
 // Kategori, visibilitas, dan "Only Shown Menu as" dipaksa server (My Links, hanya untuk emailnya sendiri).
 function picOwnFormHtml(formId, link, submitLabel){
@@ -2096,6 +2136,7 @@ function picOwnFormHtml(formId, link, submitLabel){
         <option value=""${pic ? "" : " selected"}>Normal (listed in my Our Links)</option>
         <option value="PIC Only"${pic ? " selected" : ""}>On Going (shown on the page, only to me)</option>
       </select>
+      ${ogDaysSelectHtml(link)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
         <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
@@ -2521,6 +2562,7 @@ function picFormHtml(idx, formId, link, submitLabel){
       ${staffSelectHtml(link)}
       ${linkStatusSelectHtml(link)}
       ${ogScopeSelectHtml(link)}
+      ${ogDaysSelectHtml(link)}
       ${onlyShownSelectHtml(idx, link)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
@@ -2711,6 +2753,7 @@ function renderPicModal(idx, note){
     if (nameEl) nameEl.focus();
   }
   if (document.getElementById("pic-f-type")) applyPicType();   // menu bergambar: tampilkan daftar gambar
+  applyPicOg();                                                 // pilihan On Going tampil hanya bila status bukan Normal
 }
 
 function setPicMode(mode){
@@ -2854,7 +2897,9 @@ function readPicForm(){
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
   const status = document.getElementById("pic-f-status") ? document.getElementById("pic-f-status").value : "";
   const only = document.getElementById("pic-f-only") ? document.getElementById("pic-f-only").value : "";
-  const og = document.getElementById("pic-f-ogscope") ? document.getElementById("pic-f-ogscope").value : "None";
+  let og = document.getElementById("pic-f-ogscope") ? document.getElementById("pic-f-ogscope").value : "None";
+  let ogDays = document.getElementById("pic-f-ogdays") ? document.getElementById("pic-f-ogdays").value : "never";
+  if (!status){ og = "None"; ogDays = "never"; }   // Normal: pilihan On Going tidak berlaku
   const cat = document.getElementById("pic-f-cat") ? document.getElementById("pic-f-cat").value.replace(/\s+/g, " ").trim() : "";
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (isImg){
@@ -2869,9 +2914,9 @@ function readPicForm(){
   }
   if (picOwnCreate){   // link pribadi: server memaksa isian lain; tampilan lokal mengikuti
     const me = getCurrentUserEmail();
-    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None" };
+    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None", ogDays: status === "PIC Only" ? ogDays : "never" };
   }
-  return { name, url, desc, vis, staff, cat, status, only, og, images: isImg, notes: isNote };
+  return { name, url, desc, vis, staff, cat, status, only, og, ogDays, images: isImg, notes: isNote };
 }
 
 async function addPicLink(){
@@ -2889,7 +2934,7 @@ async function addPicLink(){
     else if (f.notes){ f.url = await resolveNoteUrl(meta); }
     const data = await picApi({
       action: "addLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
-      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, onlyFor: f.only
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, ogDays: f.ogDays, onlyFor: f.only
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
@@ -2898,7 +2943,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: displayUrlFor(f.url), gallery: galleryIdsOf(f.url), note: noteIdOf(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status, pinMode: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only", ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status, pinMode: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only", expiresOn: f.status ? picExpiryFromDays(f.ogDays, "") : "", ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -2929,7 +2974,7 @@ async function editPicLink(){
     const data = await picApi({
       action: "editLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
-      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, onlyFor: f.only
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, ogDays: f.ogDays, onlyFor: f.only
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
@@ -2944,6 +2989,8 @@ async function editPicLink(){
       link.picOnly = f.status === "PIC Only";
       link.ogScope = ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none";
       link.onGoing = true;
+      link.expiresOn = f.status ? picExpiryFromDays(f.ogDays, link.expiresOn) : "";
+      link.ogExpired = false;
       if (f.only !== "__keep__") link.onlyFor = f.only ? [f.only] : [];
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
@@ -3144,6 +3191,7 @@ document.addEventListener("change", (e) => {
   if (!t || !t.matches) return;
   if (t.matches("[data-pic-check]")) updatePicDeleteButton();
   if (t.id === "pic-f-type") applyPicType();
+  if (t.id === "pic-f-status") applyPicOg();
   if (t.id === "pic-img-input"){ addPicImageFiles(t.files).then(() => { t.value = ""; }); }
   if (t.id === "pic-note-file"){ handleNoteFile(t.files && t.files[0]).then(() => { t.value = ""; }); }
 });

@@ -465,6 +465,13 @@
   .profile-photo-actions{ display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px; }
   .profile-hint{ font-size:12px;color:var(--ink-faint);line-height:1.5;margin-top:14px; }
   #profile-status{ margin-top:12px;width:100%;box-sizing:border-box; }
+  .btn-spin{
+    display:inline-block;width:12px;height:12px;margin-right:7px;vertical-align:-2px;
+    border:2px solid currentColor;border-right-color:transparent;border-radius:50%;
+    animation:btnspin .7s linear infinite;
+  }
+  @keyframes btnspin{ to{ transform:rotate(360deg); } }
+  .pic-btn:disabled,.profile-mini:disabled{ cursor:progress;opacity:.8; }
   .profile-pencil{
     display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin-left:6px;vertical-align:middle;
     border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink-soft);cursor:pointer;padding:0;
@@ -483,7 +490,7 @@
   .profile-edit textarea{ resize:vertical;min-height:96px; }
   .profile-edit input:focus,.profile-edit textarea:focus{ border-color:var(--accent); }
   .profile-edit .profile-lbl{ margin:2px 0 0; }
-  .profile-edit-actions{ display:flex;gap:8px;flex-wrap:wrap;margin-top:4px; }
+  .profile-edit-actions{ display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px; }
   .profile-req{ font-size:12.5px;line-height:1.5;border-radius:8px;padding:8px 10px;margin:4px 0 6px;text-align:left;background:var(--surface-2,#f4f8fb);border:1px solid var(--line); }
   .profile-req b{ display:block;margin-bottom:2px; }
   .profile-req .txt{ white-space:pre-wrap;color:var(--ink-soft); }
@@ -3630,7 +3637,19 @@ async function loadProfileReqs(){
   } catch (e){ /* diam: status permintaan hanya tambahan informasi */ }
 }
 
-async function saveProfileContact(field){
+// Indikator "sedang berjalan": tombol berisi spinner + teks, semua tombol sebaris dinonaktifkan.
+// Mengembalikan fungsi untuk memulihkan tombol (dipanggil bila gagal; saat sukses tampilan digambar ulang).
+function btnLoading(btn, label){
+  if (!btn) return () => {};
+  const old = btn.innerHTML;
+  const sibs = Array.from(btn.parentElement ? btn.parentElement.querySelectorAll("button") : [btn]);
+  const prev = sibs.map(b => b.disabled);
+  btn.innerHTML = `<span class="btn-spin" aria-hidden="true"></span>${label}`;
+  sibs.forEach(b => { b.disabled = true; });
+  return () => { btn.innerHTML = old; sibs.forEach((b, i) => { b.disabled = prev[i]; }); };
+}
+
+async function saveProfileContact(field, btn){
   if (profileBusy) return;
   const rowsNow = profileRowsFor(profileCtx.email);
   const waNow = rowsNow.find(r => formatWaLink(r.m.whatsapp)) || rowsNow[0];
@@ -3645,6 +3664,7 @@ async function saveProfileContact(field){
   if (changed && !confirm("Change your email to " + email + "?\n\nYou will use the new email to sign in. Make sure it is correct.")) return;
   profileBusy = true;
   setProfileStatus("", "");
+  const restore = btnLoading(btn, "Saving...");
   try {
     const data = await picApi({ action: "updateProfileContact", actor: getRealEmail(), email, whatsapp: wa });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to save."); return; }
@@ -3671,10 +3691,11 @@ async function saveProfileContact(field){
     setProfileStatus("err", "Could not reach the server: " + err.message);
   } finally {
     profileBusy = false;
+    restore();
   }
 }
 
-async function sendDescRequest(key, sheetKey){
+async function sendDescRequest(key, sheetKey, btn){
   if (profileBusy) return;
   const ta = document.getElementById("profile-desc-ta");
   const text = ta ? ta.value.trim() : "";
@@ -3683,6 +3704,7 @@ async function sendDescRequest(key, sheetKey){
   if (row && text === String(row.m.desc || "").trim()){ setProfileStatus("err", "You have not changed the description yet."); return; }
   profileBusy = true;
   setProfileStatus("", "");
+  const restore = btnLoading(btn, "Sending...");
   try {
     const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, desc: text });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to send the request."); return; }
@@ -3696,13 +3718,15 @@ async function sendDescRequest(key, sheetKey){
     setProfileStatus("err", "Could not reach the server: " + err.message);
   } finally {
     profileBusy = false;
+    restore();
   }
 }
 
-async function profileReqCall(action, key, id, okText){
+async function profileReqCall(action, key, id, okText, btn, label){
   if (profileBusy || !id) return;
   profileBusy = true;
   setProfileStatus("", "");
+  const restore = btnLoading(btn, label || "Please wait...");
   try {
     const data = await picApi({ action, actor: getRealEmail(), id });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed."); return; }
@@ -3714,6 +3738,7 @@ async function profileReqCall(action, key, id, okText){
     setProfileStatus("err", "Could not reach the server: " + err.message);
   } finally {
     profileBusy = false;
+    restore();
   }
 }
 
@@ -3723,12 +3748,12 @@ document.addEventListener("click", (e) => {
   const act = b.dataset.profileAct;
   if (act === "contact-edit"){ profileEditField = b.dataset.field || "email"; profileDescEdit = ""; renderProfile(); const inp = document.getElementById(profileEditField === "wa" ? "profile-wa-in" : "profile-email-in"); if (inp) inp.focus(); }
   else if (act === "contact-cancel"){ profileEditField = ""; renderProfile(); }
-  else if (act === "contact-save") saveProfileContact(b.dataset.field || "email");
+  else if (act === "contact-save") saveProfileContact(b.dataset.field || "email", b);
   else if (act === "req-open"){ profileDescEdit = b.dataset.key; profileEditField = ""; renderProfile(); const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus(); }
   else if (act === "req-cancel"){ profileDescEdit = ""; renderProfile(); }
-  else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet);
-  else if (act === "req-cancel-pending"){ if (confirm("Cancel this request? The reviewers will no longer see it.")) profileReqCall("cancelDescRequest", b.dataset.key, b.dataset.id, "Request cancelled."); }
-  else if (act === "req-hide") profileReqCall("hideDescRequest", b.dataset.key, b.dataset.id, "History hidden.");
+  else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet, b);
+  else if (act === "req-cancel-pending"){ if (confirm("Cancel this request? The reviewers will no longer see it.")) profileReqCall("cancelDescRequest", b.dataset.key, b.dataset.id, "Request cancelled. The reviewers were notified by email.", b, "Cancelling..."); }
+  else if (act === "req-hide") profileReqCall("hideDescRequest", b.dataset.key, b.dataset.id, "History hidden.", b, "Hiding...");
 });
 
 function openProfile(){
@@ -3906,18 +3931,17 @@ function renderReviewModal(){
     ${items || `<div class="review-empty">No requests are waiting for your review.</div>`}`;
 }
 
-async function decideReview(id, decision){
+async function decideReview(id, decision, btn){
   if (reviewBusy) return;
   const item = document.querySelector('.review-item[data-review-id="' + id.replace(/"/g, "") + '"]');
   const note = item ? (item.querySelector("[data-review-note]").value || "").trim() : "";
   if (decision === "reject" && !confirm("Reject this request?")) return;
   reviewBusy = true;
-  if (item) item.querySelectorAll("button").forEach(b => { b.disabled = true; });
+  const restoreBtn = btnLoading(btn, decision === "approve" ? "Approving..." : "Rejecting...");
   try {
     const d = await picApi({ action: "decideDescRequest", actor: getRealEmail(), id, decision, note });
     if (!d || !d.ok){
       setReviewStatus("err", (d && (d.message || d.error)) || "Failed to save the decision.");
-      if (item) item.querySelectorAll("button").forEach(b => { b.disabled = false; });
       if (d && /already/i.test(d.message || "")) { reviewReqs = reviewReqs.filter(x => x.id !== id); reviewBusy = false; renderReviewModal(); setReviewStatus("err", d.message); reviewBadgeSync(); }
       return;
     }
@@ -3929,9 +3953,9 @@ async function decideReview(id, decision){
     reviewBadgeSync();
   } catch (err){
     setReviewStatus("err", "Could not reach the server: " + err.message);
-    if (item) item.querySelectorAll("button").forEach(b => { b.disabled = false; });
   } finally {
     reviewBusy = false;
+    restoreBtn();
   }
 }
 
@@ -3950,7 +3974,7 @@ document.getElementById("review-modal-overlay").addEventListener("click", (e) =>
 document.addEventListener("click", (e) => {
   if (e.target.closest && e.target.closest("#acct-review")){ openReviewModal(); return; }
   const b = e.target.closest && e.target.closest("[data-review-act]");
-  if (b) decideReview(b.dataset.id, b.dataset.reviewAct);
+  if (b) decideReview(b.dataset.id, b.dataset.reviewAct, b);
 });
 
 function renderLoginInfo(opts){

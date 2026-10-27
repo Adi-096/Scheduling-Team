@@ -465,6 +465,13 @@
   .profile-photo-actions{ display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px; }
   .profile-hint{ font-size:12px;color:var(--ink-faint);line-height:1.5;margin-top:14px; }
   #profile-status{ margin-top:12px;width:100%;box-sizing:border-box; }
+  .profile-pencil{
+    display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin-left:6px;vertical-align:middle;
+    border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink-soft);cursor:pointer;padding:0;
+  }
+  .profile-pencil:hover{ background:var(--primary);border-color:var(--primary);color:#fff; }
+  .profile-pencil svg{ width:12px;height:12px;display:block; }
+  .profile-req .profile-mini{ display:block;margin-top:4px; }
   .profile-mini{ font-family:'Work Sans',sans-serif;font-size:12px;color:var(--primary);background:none;border:0;padding:4px 2px;margin-top:6px;cursor:pointer;text-decoration:underline; }
   .profile-mini:hover{ color:var(--accent); }
   .profile-edit{ width:100%;display:flex;flex-direction:column;gap:8px;margin-top:12px;text-align:left; }
@@ -3508,7 +3515,7 @@ function setProfileStatus(type, text){
 }
 
 // Status edit di View Profile: kontak (email + WhatsApp) dan permintaan ubah Task Description.
-let profileEditContact = false;
+let profileEditField = "";   // "" | "email" | "wa" : kolom kontak yang sedang diedit
 let profileDescEdit = "";    // normSheetName section yang sedang ditulis permintaannya ("" = tidak ada)
 let profileReqs = {};        // normSheetName(section) -> permintaan terakhir {status, desc, note, by}
 const profileIsLeaderRow = (r) => LEADER_TITLES.includes(normJabatan(r.m.jabatan));
@@ -3530,14 +3537,18 @@ function profileDescBlockHtml(r, own){
       </div>`;
   }
   let note = "";
+  const hideBtn = (req && req.id) ? `<button type="button" class="profile-mini" data-profile-act="req-hide" data-key="${escapeHtml(key)}" data-id="${escapeHtml(req.id)}">Hide this history</button>` : "";
   if (pending){
     note = `<div class="profile-req"><b>Change requested &mdash; waiting for review</b><span class="txt">${escapeHtml(req.desc)}</span></div>`;
   } else if (req && req.status === "Rejected"){
-    note = `<div class="profile-req"><b>Your last request was rejected${req.by ? " by " + escapeHtml(req.by) : ""}</b>${req.note ? `<span class="txt">${escapeHtml(req.note)}</span>` : ""}</div>`;
+    note = `<div class="profile-req"><b>Your last request was rejected${req.by ? " by " + escapeHtml(req.by) : ""}</b>${req.note ? `<span class="txt">${escapeHtml(req.note)}</span>` : ""}${hideBtn}</div>`;
   } else if (req && req.status === "Approved"){
-    note = `<div class="profile-req"><b>Your last request was approved</b></div>`;
+    note = `<div class="profile-req"><b>Your last request was approved</b>${hideBtn}</div>`;
   }
-  const btn = own ? `<button type="button" class="profile-mini" data-profile-act="req-open" data-key="${escapeHtml(key)}">${pending ? "Edit pending request" : "Request to change"}</button>` : "";
+  const btn = own ? (pending
+    ? `<button type="button" class="profile-mini" data-profile-act="req-open" data-key="${escapeHtml(key)}">Edit pending request</button>
+       <button type="button" class="profile-mini" data-profile-act="req-cancel-pending" data-key="${escapeHtml(key)}" data-id="${escapeHtml(req.id || "")}">Cancel request</button>`
+    : `<button type="button" class="profile-mini" data-profile-act="req-open" data-key="${escapeHtml(key)}">Request to change</button>`) : "";
   return `<div class="profile-lbl">Task Description</div>
     <div class="task-desc">${escapeHtml(r.m.desc || "-")}</div>${note}${btn}`;
 }
@@ -3560,21 +3571,26 @@ function renderProfile(){
   const waDigits = formatWaLink(waRow.m.whatsapp);
   const email = profileCtx.email;
   const own = profileCtx.own;
-  const contactHtml = (own && profileEditContact)
-    ? `<div class="profile-edit">
-         <div class="profile-lbl">Email</div>
-         <input type="email" id="profile-email-in" maxlength="120" value="${escapeHtml(email)}" autocomplete="off">
-         <div class="profile-lbl">WhatsApp</div>
-         <input type="text" id="profile-wa-in" maxlength="40" placeholder="+62..." value="${escapeHtml(waRow.m.whatsapp || "")}" autocomplete="off">
-         <div class="profile-hint" style="margin:0">Applies to every section where you are listed. If you change your email, use the new one to sign in.</div>
-         <div class="profile-edit-actions">
-           <button type="button" class="pic-btn primary" data-profile-act="contact-save">Save</button>
-           <button type="button" class="pic-btn" data-profile-act="contact-cancel">Cancel</button>
-         </div>
-       </div>`
-    : `<div class="profile-field"><div class="profile-lbl">Email</div>${isValidEmail(email) ? `<a href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>` : escapeHtml(email)}</div>
-       <div class="profile-field"><div class="profile-lbl">WhatsApp</div>${waDigits ? `<a href="https://wa.me/${waDigits}" target="_blank" rel="noopener">${escapeHtml(waRow.m.whatsapp)}</a>` : "-"}</div>
-       ${own ? `<button type="button" class="profile-mini" data-profile-act="contact-edit">Edit email &amp; WhatsApp</button>` : ""}`;
+  const PENCIL_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+  const pencil = (field, label) => own ? `<button type="button" class="profile-pencil" data-profile-act="contact-edit" data-field="${field}" title="Edit ${label}" aria-label="Edit ${label}">${PENCIL_SVG}</button>` : "";
+  const editBox = (field, label, inputHtml, hint) => `<div class="profile-edit">
+      <div class="profile-lbl">${label}</div>
+      ${inputHtml}
+      ${hint ? `<div class="profile-hint" style="margin:0">${hint}</div>` : ""}
+      <div class="profile-edit-actions">
+        <button type="button" class="pic-btn primary" data-profile-act="contact-save" data-field="${field}">Save</button>
+        <button type="button" class="pic-btn" data-profile-act="contact-cancel">Cancel</button>
+      </div>
+    </div>`;
+  const emailHtml = (own && profileEditField === "email")
+    ? editBox("email", "Email", `<input type="email" id="profile-email-in" maxlength="120" value="${escapeHtml(email)}" autocomplete="off">`,
+        "Applies to every section where you are listed. If you change your email, use the new one to sign in.")
+    : `<div class="profile-field"><div class="profile-lbl">Email</div>${isValidEmail(email) ? `<a href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>` : escapeHtml(email)}${pencil("email", "email")}</div>`;
+  const waHtml = (own && profileEditField === "wa")
+    ? editBox("wa", "WhatsApp", `<input type="text" id="profile-wa-in" maxlength="40" placeholder="+62..." value="${escapeHtml(waRow.m.whatsapp || "")}" autocomplete="off">`,
+        "Applies to every section where you are listed.")
+    : `<div class="profile-field"><div class="profile-lbl">WhatsApp</div>${waDigits ? `<a href="https://wa.me/${waDigits}" target="_blank" rel="noopener">${escapeHtml(waRow.m.whatsapp)}</a>` : "-"}${pencil("wa", "WhatsApp")}</div>`;
+  const contactHtml = emailHtml + waHtml;
   const allLeader = rows.every(profileIsLeaderRow);
   box.innerHTML = `
     ${dpHtml(Object.assign({}, dpRow.m, { pic: name }))}
@@ -3595,7 +3611,7 @@ function renderProfile(){
         <div class="task">${escapeHtml(r.m.task || "-")}</div>
         ${profileDescBlockHtml(r, own)}`}
       </div>`).join("")}
-    ${own ? `<div class="profile-hint">You can change your photo, email and WhatsApp here. ${allLeader ? "Your name is managed in Our Team &rsaquo; Edit." : "Your name and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}`;
+    ${own ? `<div class="profile-hint">You can change your photo, email and WhatsApp here (pencil icons). ${allLeader ? "Your name is managed in Our Team &rsaquo; Edit." : "Your name and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}`;
   hydrateMemberPhotos(box);
 }
 
@@ -3610,14 +3626,18 @@ async function loadProfileReqs(){
     profileReqs = {};
     (d.requests || []).forEach(q => { profileReqs[normSheetName(q.sheet)] = q; });
     const open = document.getElementById("profile-modal-overlay").classList.contains("open");
-    if (open && !profileEditContact && !profileDescEdit && !profileBusy) renderProfile();
+    if (open && !profileEditField && !profileDescEdit && !profileBusy) renderProfile();
   } catch (e){ /* diam: status permintaan hanya tambahan informasi */ }
 }
 
-async function saveProfileContact(){
+async function saveProfileContact(field){
   if (profileBusy) return;
-  const email = (document.getElementById("profile-email-in").value || "").trim().toLowerCase();
-  const wa = (document.getElementById("profile-wa-in").value || "").trim();
+  const rowsNow = profileRowsFor(profileCtx.email);
+  const waNow = rowsNow.find(r => formatWaLink(r.m.whatsapp)) || rowsNow[0];
+  let email = profileCtx.email.trim().toLowerCase();
+  let wa = waNow ? String(waNow.m.whatsapp || "").trim() : "";
+  if (field === "email") email = (document.getElementById("profile-email-in").value || "").trim().toLowerCase();
+  else wa = (document.getElementById("profile-wa-in").value || "").trim();
   if (!isValidEmail(email)){ setProfileStatus("err", "Please enter a valid email address."); return; }
   if (!/^[0-9+\-\s()]{0,40}$/.test(wa)){ setProfileStatus("err", "WhatsApp may only contain digits, +, -, spaces and parentheses."); return; }
   const old = profileCtx.email.toLowerCase();
@@ -3634,7 +3654,7 @@ async function saveProfileContact(){
       if (changed) m.email = String(m.email).replace(/[^\s,;]+/g, t => t.toLowerCase() === old ? email : t);
     }));
     lastDataSignature = null;
-    profileEditContact = false;
+    profileEditField = "";
     if (changed){
       const st = readSavedLoginState();
       if (st){ st.email = email; try { localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(st)); } catch (e){} }
@@ -3645,7 +3665,7 @@ async function saveProfileContact(){
       setTimeout(() => location.reload(), 1200);
     } else {
       renderProfile();
-      setProfileStatus("ok", "WhatsApp updated.");
+      setProfileStatus("ok", field === "email" ? "Saved." : "WhatsApp updated.");
     }
   } catch (err){
     setProfileStatus("err", "Could not reach the server: " + err.message);
@@ -3666,7 +3686,7 @@ async function sendDescRequest(key, sheetKey){
   try {
     const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, desc: text });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to send the request."); return; }
-    profileReqs[key] = { status: "Pending", desc: text, sheet: sheetKey, note: "", by: "" };
+    profileReqs[key] = { id: data.id, status: "Pending", desc: text, sheet: sheetKey, note: "", by: "" };
     profileDescEdit = "";
     renderProfile();
     setProfileStatus(data.emailed ? "ok" : "err", data.emailed
@@ -3679,20 +3699,40 @@ async function sendDescRequest(key, sheetKey){
   }
 }
 
+async function profileReqCall(action, key, id, okText){
+  if (profileBusy || !id) return;
+  profileBusy = true;
+  setProfileStatus("", "");
+  try {
+    const data = await picApi({ action, actor: getRealEmail(), id });
+    if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed."); return; }
+    delete profileReqs[key];
+    if (profileDescEdit === key) profileDescEdit = "";
+    renderProfile();
+    setProfileStatus("ok", okText);
+  } catch (err){
+    setProfileStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    profileBusy = false;
+  }
+}
+
 document.addEventListener("click", (e) => {
   const b = e.target.closest && e.target.closest("[data-profile-act]");
   if (!b) return;
   const act = b.dataset.profileAct;
-  if (act === "contact-edit"){ profileEditContact = true; profileDescEdit = ""; renderProfile(); }
-  else if (act === "contact-cancel"){ profileEditContact = false; renderProfile(); }
-  else if (act === "contact-save") saveProfileContact();
-  else if (act === "req-open"){ profileDescEdit = b.dataset.key; profileEditContact = false; renderProfile(); const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus(); }
+  if (act === "contact-edit"){ profileEditField = b.dataset.field || "email"; profileDescEdit = ""; renderProfile(); const inp = document.getElementById(profileEditField === "wa" ? "profile-wa-in" : "profile-email-in"); if (inp) inp.focus(); }
+  else if (act === "contact-cancel"){ profileEditField = ""; renderProfile(); }
+  else if (act === "contact-save") saveProfileContact(b.dataset.field || "email");
+  else if (act === "req-open"){ profileDescEdit = b.dataset.key; profileEditField = ""; renderProfile(); const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus(); }
   else if (act === "req-cancel"){ profileDescEdit = ""; renderProfile(); }
   else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet);
+  else if (act === "req-cancel-pending"){ if (confirm("Cancel this request? The reviewers will no longer see it.")) profileReqCall("cancelDescRequest", b.dataset.key, b.dataset.id, "Request cancelled."); }
+  else if (act === "req-hide") profileReqCall("hideDescRequest", b.dataset.key, b.dataset.id, "History hidden.");
 });
 
 function openProfile(){
-  profileEditContact = false; profileDescEdit = "";
+  profileEditField = ""; profileDescEdit = "";
   renderProfile();
   document.getElementById("profile-modal-overlay").classList.add("open");
   loadProfileReqs();   // status permintaan Task Description (Pending / hasil terakhir)

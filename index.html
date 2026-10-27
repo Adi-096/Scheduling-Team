@@ -443,6 +443,21 @@
   .profile-photo-actions{ display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px; }
   .profile-hint{ font-size:12px;color:var(--ink-faint);line-height:1.5;margin-top:14px; }
   #profile-status{ margin-top:12px;width:100%;box-sizing:border-box; }
+  .profile-mini{ font-family:'Work Sans',sans-serif;font-size:12px;color:var(--primary);background:none;border:0;padding:4px 2px;margin-top:6px;cursor:pointer;text-decoration:underline; }
+  .profile-mini:hover{ color:var(--accent); }
+  .profile-edit{ width:100%;display:flex;flex-direction:column;gap:8px;margin-top:12px;text-align:left; }
+  .profile-edit input,.profile-edit textarea{
+    width:100%;box-sizing:border-box;font-family:'Work Sans',sans-serif;font-size:14px;
+    padding:10px 12px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink);outline:none;
+  }
+  .profile-edit textarea{ resize:vertical;min-height:96px; }
+  .profile-edit input:focus,.profile-edit textarea:focus{ border-color:var(--accent); }
+  .profile-edit .profile-lbl{ margin:2px 0 0; }
+  .profile-edit-actions{ display:flex;gap:8px;flex-wrap:wrap;margin-top:4px; }
+  .profile-req{ font-size:12.5px;line-height:1.5;border-radius:8px;padding:8px 10px;margin:4px 0 6px;text-align:left;background:var(--surface-2,#f4f8fb);border:1px solid var(--line); }
+  .profile-req b{ display:block;margin-bottom:2px; }
+  .profile-req .txt{ white-space:pre-wrap;color:var(--ink-soft); }
   footer.page-footer{
     margin-top:48px;
     font-family:'IBM Plex Mono',monospace;font-size:10.5px;
@@ -1151,6 +1166,8 @@
       <div class="tedit-ro" id="tedit-ro"></div>
       <label class="tedit-lbl" for="tedit-pic">PIC name</label>
       <input type="text" id="tedit-pic" maxlength="120" required>
+      <label class="tedit-lbl" for="tedit-email">Email</label>
+      <input type="text" id="tedit-email" maxlength="200" placeholder="name@binus.edu">
       <label class="tedit-lbl" for="tedit-task">Task</label>
       <input type="text" id="tedit-task" maxlength="300">
       <label class="tedit-lbl" for="tedit-desc">Description</label>
@@ -3447,9 +3464,9 @@ function profileRowsFor(email){
   const out = [];
   if (!e) return out;
   sectionMembers.forEach((members, i) => (members || []).forEach(m => {
-    if (String(m.email || "").trim().toLowerCase() !== e) return;
+    if (!splitEmails(m.email).includes(e)) return;
     const meta = sectionMeta[i] || {};
-    out.push({ m, label: String(meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ").trim() });
+    out.push({ m, sheetKey: meta.sheetKey || "", label: String(meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ").trim() });
   }));
   return out;
 }
@@ -3459,6 +3476,41 @@ function setProfileStatus(type, text){
   if (!el) return;
   el.className = "pic-status" + (text ? " show " + type : "");
   el.textContent = text || "";
+}
+
+// Status edit di View Profile: kontak (email + WhatsApp) dan permintaan ubah Task Description.
+let profileEditContact = false;
+let profileDescEdit = "";    // normSheetName section yang sedang ditulis permintaannya ("" = tidak ada)
+let profileReqs = {};        // normSheetName(section) -> permintaan terakhir {status, desc, note, by}
+const profileIsLeaderRow = (r) => LEADER_TITLES.includes(normJabatan(r.m.jabatan));
+
+function profileDescBlockHtml(r, own){
+  const key = normSheetName(r.sheetKey);
+  const req = profileReqs[key];
+  const pending = req && req.status === "Pending";
+  if (own && profileDescEdit === key){
+    const start = pending ? req.desc : (r.m.desc || "");
+    return `<div class="profile-lbl">Task Description</div>
+      <div class="profile-edit">
+        <textarea id="profile-desc-ta" maxlength="1000" rows="5" aria-label="New task description">${escapeHtml(start)}</textarea>
+        <div class="profile-hint" style="margin:0">Your Authorized PIC and Section Head will review this. The description changes only after one of them approves.</div>
+        <div class="profile-edit-actions">
+          <button type="button" class="pic-btn primary" data-profile-act="req-send" data-key="${escapeHtml(key)}" data-sheet="${escapeHtml(r.sheetKey)}">Send request</button>
+          <button type="button" class="pic-btn" data-profile-act="req-cancel">Cancel</button>
+        </div>
+      </div>`;
+  }
+  let note = "";
+  if (pending){
+    note = `<div class="profile-req"><b>Change requested &mdash; waiting for review</b><span class="txt">${escapeHtml(req.desc)}</span></div>`;
+  } else if (req && req.status === "Rejected"){
+    note = `<div class="profile-req"><b>Your last request was rejected${req.by ? " by " + escapeHtml(req.by) : ""}</b>${req.note ? `<span class="txt">${escapeHtml(req.note)}</span>` : ""}</div>`;
+  } else if (req && req.status === "Approved"){
+    note = `<div class="profile-req"><b>Your last request was approved</b></div>`;
+  }
+  const btn = own ? `<button type="button" class="profile-mini" data-profile-act="req-open" data-key="${escapeHtml(key)}">${pending ? "Edit pending request" : "Request to change"}</button>` : "";
+  return `<div class="profile-lbl">Task Description</div>
+    <div class="task-desc">${escapeHtml(r.m.desc || "-")}</div>${note}${btn}`;
 }
 
 function renderProfile(){
@@ -3479,6 +3531,22 @@ function renderProfile(){
   const waDigits = formatWaLink(waRow.m.whatsapp);
   const email = profileCtx.email;
   const own = profileCtx.own;
+  const contactHtml = (own && profileEditContact)
+    ? `<div class="profile-edit">
+         <div class="profile-lbl">Email</div>
+         <input type="email" id="profile-email-in" maxlength="120" value="${escapeHtml(email)}" autocomplete="off">
+         <div class="profile-lbl">WhatsApp</div>
+         <input type="text" id="profile-wa-in" maxlength="40" placeholder="+62..." value="${escapeHtml(waRow.m.whatsapp || "")}" autocomplete="off">
+         <div class="profile-hint" style="margin:0">Applies to every section where you are listed. If you change your email, use the new one to sign in.</div>
+         <div class="profile-edit-actions">
+           <button type="button" class="pic-btn primary" data-profile-act="contact-save">Save</button>
+           <button type="button" class="pic-btn" data-profile-act="contact-cancel">Cancel</button>
+         </div>
+       </div>`
+    : `<div class="profile-field"><div class="profile-lbl">Email</div>${isValidEmail(email) ? `<a href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>` : escapeHtml(email)}</div>
+       <div class="profile-field"><div class="profile-lbl">WhatsApp</div>${waDigits ? `<a href="https://wa.me/${waDigits}" target="_blank" rel="noopener">${escapeHtml(waRow.m.whatsapp)}</a>` : "-"}</div>
+       ${own ? `<button type="button" class="profile-mini" data-profile-act="contact-edit">Edit email &amp; WhatsApp</button>` : ""}`;
+  const allLeader = rows.every(profileIsLeaderRow);
   box.innerHTML = `
     ${dpHtml(Object.assign({}, dpRow.m, { pic: name }))}
     ${own ? `<div class="profile-photo-actions">
@@ -3489,24 +3557,116 @@ function renderProfile(){
     <div class="pic-status" id="profile-status"></div>
     <hr>
     <div class="pic-name">${escapeHtml(name)}</div>
-    <div class="profile-field"><div class="profile-lbl">Email</div>${isValidEmail(email) ? `<a href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>` : escapeHtml(email)}</div>
-    <div class="profile-field"><div class="profile-lbl">WhatsApp</div>${waDigits ? `<a href="https://wa.me/${waDigits}" target="_blank" rel="noopener">${escapeHtml(waRow.m.whatsapp)}</a>` : "-"}</div>
+    ${contactHtml}
     ${rows.map(r => `
       <hr>
       <div class="profile-block">
         ${r.label ? `<div class="profile-sec">${escapeHtml(r.label)}</div>` : ""}
-        <div class="profile-lbl">Task</div>
+        ${profileIsLeaderRow(r) ? "" : `<div class="profile-lbl">Task</div>
         <div class="task">${escapeHtml(r.m.task || "-")}</div>
-        <div class="profile-lbl">Task Description</div>
-        <div class="task-desc">${escapeHtml(r.m.desc || "-")}</div>
+        ${profileDescBlockHtml(r, own)}`}
       </div>`).join("")}
-    ${own ? `<div class="profile-hint">You can change your display picture here. Name, task, description and WhatsApp are managed by your team leader (Our Team &rsaquo; Edit).</div>` : ""}`;
+    ${own ? `<div class="profile-hint">You can change your photo, email and WhatsApp here. ${allLeader ? "Your name is managed in Our Team &rsaquo; Edit." : "Your name and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}`;
   hydrateMemberPhotos(box);
 }
 
+// Ambil status permintaan Task Description milik pengguna (Pending / hasil terakhir).
+async function loadProfileReqs(){
+  if (!profileCtx.own) return;
+  const rows = profileRowsFor(profileCtx.email);
+  if (!rows.length || rows.every(profileIsLeaderRow)) return;
+  try {
+    const d = await picApi({ action: "listDescRequests", actor: getRealEmail() });
+    if (!d || !d.ok) return;
+    profileReqs = {};
+    (d.requests || []).forEach(q => { profileReqs[normSheetName(q.sheet)] = q; });
+    const open = document.getElementById("profile-modal-overlay").classList.contains("open");
+    if (open && !profileEditContact && !profileDescEdit && !profileBusy) renderProfile();
+  } catch (e){ /* diam: status permintaan hanya tambahan informasi */ }
+}
+
+async function saveProfileContact(){
+  if (profileBusy) return;
+  const email = (document.getElementById("profile-email-in").value || "").trim().toLowerCase();
+  const wa = (document.getElementById("profile-wa-in").value || "").trim();
+  if (!isValidEmail(email)){ setProfileStatus("err", "Please enter a valid email address."); return; }
+  if (!/^[0-9+\-\s()]{0,40}$/.test(wa)){ setProfileStatus("err", "WhatsApp may only contain digits, +, -, spaces and parentheses."); return; }
+  const old = profileCtx.email.toLowerCase();
+  const changed = email !== old;
+  if (changed && !confirm("Change your email to " + email + "?\n\nYou will use the new email to sign in. Make sure it is correct.")) return;
+  profileBusy = true;
+  setProfileStatus("", "");
+  try {
+    const data = await picApi({ action: "updateProfileContact", actor: getRealEmail(), email, whatsapp: wa });
+    if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to save."); return; }
+    sectionMembers.forEach(members => (members || []).forEach(m => {
+      if (!splitEmails(m.email).includes(old)) return;
+      m.whatsapp = wa;
+      if (changed) m.email = String(m.email).replace(/[^\s,;]+/g, t => t.toLowerCase() === old ? email : t);
+    }));
+    lastDataSignature = null;
+    profileEditContact = false;
+    if (changed){
+      const st = readSavedLoginState();
+      if (st){ st.email = email; try { localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(st)); } catch (e){} }
+      try { localStorage.removeItem(DATA_CACHE_KEY); } catch (e){}
+      profileCtx.email = email;
+      renderProfile();
+      setProfileStatus("ok", "Email updated. Reloading with your new email...");
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      renderProfile();
+      setProfileStatus("ok", "WhatsApp updated.");
+    }
+  } catch (err){
+    setProfileStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    profileBusy = false;
+  }
+}
+
+async function sendDescRequest(key, sheetKey){
+  if (profileBusy) return;
+  const ta = document.getElementById("profile-desc-ta");
+  const text = ta ? ta.value.trim() : "";
+  const row = profileRowsFor(profileCtx.email).find(r => normSheetName(r.sheetKey) === key);
+  if (!text){ setProfileStatus("err", "The new description cannot be empty."); return; }
+  if (row && text === String(row.m.desc || "").trim()){ setProfileStatus("err", "You have not changed the description yet."); return; }
+  profileBusy = true;
+  setProfileStatus("", "");
+  try {
+    const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, desc: text });
+    if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to send the request."); return; }
+    profileReqs[key] = { status: "Pending", desc: text, sheet: sheetKey, note: "", by: "" };
+    profileDescEdit = "";
+    renderProfile();
+    setProfileStatus(data.emailed ? "ok" : "err", data.emailed
+      ? "Request sent to " + data.emailed + " reviewer" + (data.emailed > 1 ? "s" : "") + ". The description changes after one of them approves."
+      : "Your request was saved, but the email to the reviewers could not be sent. Please tell your Authorized PIC or Section Head.");
+  } catch (err){
+    setProfileStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    profileBusy = false;
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-profile-act]");
+  if (!b) return;
+  const act = b.dataset.profileAct;
+  if (act === "contact-edit"){ profileEditContact = true; profileDescEdit = ""; renderProfile(); }
+  else if (act === "contact-cancel"){ profileEditContact = false; renderProfile(); }
+  else if (act === "contact-save") saveProfileContact();
+  else if (act === "req-open"){ profileDescEdit = b.dataset.key; profileEditContact = false; renderProfile(); const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus(); }
+  else if (act === "req-cancel"){ profileDescEdit = ""; renderProfile(); }
+  else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet);
+});
+
 function openProfile(){
+  profileEditContact = false; profileDescEdit = "";
   renderProfile();
   document.getElementById("profile-modal-overlay").classList.add("open");
+  loadProfileReqs();   // status permintaan Task Description (Pending / hasil terakhir)
 }
 function closeProfile(){
   document.getElementById("profile-modal-overlay").classList.remove("open");
@@ -4415,8 +4575,8 @@ const Activity = (function(){
 
 /* =========================================================================
    EDIT KARTU "OUR TEAM" (hak: kolom Our Team > Edit di sheet Role Policy)
-   Bisa diubah: PIC (nama), Task, Description, DP (URL foto), WhatsApp.
-   Jabatan & Email tidak bisa diubah dari website.
+   Bisa diubah: PIC (nama), Email, Task, Description, DP (URL foto), WhatsApp.
+   Jabatan tidak bisa diubah dari website.
    ========================================================================= */
 function setTeditStatus(type, text){
   const el = document.getElementById("tedit-status");
@@ -4434,8 +4594,8 @@ function openTeamEdit(m, sheetKey){
   document.getElementById("tedit-sub").textContent = sheetKey;
   document.getElementById("tedit-ro").innerHTML =
     `<div>Jabatan: <strong>${escapeHtml(m.jabatan || "-")}</strong></div>` +
-    `<div>Email: <strong>${escapeHtml(m.email || "-")}</strong></div>` +
-    `<div>Jabatan &amp; Email hanya bisa diubah langsung di spreadsheet.</div>`;
+    `<div>Jabatan hanya bisa diubah langsung di spreadsheet. Email menentukan siapa yang masuk sebagai PIC ini &mdash; pastikan benar.</div>`;
+  document.getElementById("tedit-email").value = m.email || "";
   document.getElementById("tedit-pic").value = m.pic || "";
   document.getElementById("tedit-task").value = m.task || "";
   document.getElementById("tedit-desc").value = m.desc || "";
@@ -4469,12 +4629,15 @@ document.getElementById("tedit-form").addEventListener("submit", async (e) => {
   const t = teamEditTarget;
   const f = {
     pic: document.getElementById("tedit-pic").value.trim(),
+    email: document.getElementById("tedit-email").value.trim(),
     task: document.getElementById("tedit-task").value.trim(),
     desc: document.getElementById("tedit-desc").value.trim(),
     dp: document.getElementById("tedit-dp").value.trim(),
     whatsapp: document.getElementById("tedit-wa").value.trim()
   };
   if (!f.pic){ setTeditStatus("err", "PIC name cannot be empty."); return; }
+  const emailToks = f.email.split(/[\s,;]+/).filter(Boolean);
+  if (!emailToks.length || emailToks.some(x => !isValidEmail(x))){ setTeditStatus("err", "Please enter a valid email (several addresses can be separated by a comma)."); return; }
   if (f.dp && !photoIdOf(f.dp) && (!/^https?:\/\//i.test(f.dp) || !safeHttpUrl(f.dp))){ setTeditStatus("err", "Photo URL must start with https://"); return; }
   if (!/^[0-9+\-\s()]{0,40}$/.test(f.whatsapp)){ setTeditStatus("err", "WhatsApp may only contain digits, +, -, spaces and parentheses."); return; }
 
@@ -4486,7 +4649,7 @@ document.getElementById("tedit-form").addEventListener("submit", async (e) => {
     if (!data || !data.ok){
       setTeditStatus("err", (data && data.error) || "Failed to save changes.");
     } else {
-      Object.assign(t.m, { pic: f.pic, task: f.task, desc: f.desc, dp: f.dp, whatsapp: f.whatsapp });
+      Object.assign(t.m, { pic: f.pic, email: f.email, task: f.task, desc: f.desc, dp: f.dp, whatsapp: f.whatsapp });
       lastDataSignature = null;   // pengecekan berkala berikutnya menyegarkan daftar di halaman utama
       closeTeamEdit();
       if (lastTeamModal) openModal(lastTeamModal.header, lastTeamModal.sheetKey, lastTeamModal.members);

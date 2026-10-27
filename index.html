@@ -802,6 +802,18 @@
     transition:border-color .15s ease;
   }
   .pic-form textarea:focus{ border-color:var(--accent); }
+  .tedit-photo{ display:flex;align-items:center;gap:14px;flex-wrap:wrap; }
+  .tedit-photo-prev .dp{
+    width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;
+    background:var(--surface-soft);border:1px solid var(--line);
+  }
+  .tedit-photo-prev .dp.fallback{
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-size:22px;font-weight:600;color:var(--primary);background:var(--primary-soft);
+  }
+  .tedit-photo-btns{ display:flex;gap:8px;flex-wrap:wrap; }
+  .tedit-photo-btns .pic-btn{ flex:none; }
+  .tedit-photo-note{ font-size:12px;color:var(--ink-faint);margin-top:2px; }
   .tedit-lbl{ font-size:12px;color:var(--ink-soft);margin:2px 0 -4px; }
   .tedit-ro{
     font-size:12px;color:var(--ink-faint);line-height:1.55;
@@ -1215,8 +1227,16 @@
       <input type="text" id="tedit-task" maxlength="300">
       <label class="tedit-lbl" for="tedit-desc">Description</label>
       <textarea id="tedit-desc" maxlength="1000" rows="4"></textarea>
-      <label class="tedit-lbl" for="tedit-dp">Photo URL (DP)</label>
-      <input type="url" id="tedit-dp" placeholder="https://...">
+      <label class="tedit-lbl">Photo</label>
+      <div class="tedit-photo">
+        <div class="tedit-photo-prev" id="tedit-photo-prev"></div>
+        <div class="tedit-photo-btns">
+          <button type="button" class="pic-btn" id="tedit-photo-btn">Upload photo</button>
+          <button type="button" class="pic-btn" id="tedit-photo-remove">Remove photo</button>
+        </div>
+        <input type="file" id="tedit-photo-input" accept="image/*" hidden>
+      </div>
+      <div class="tedit-photo-note" id="tedit-photo-note"></div>
       <label class="tedit-lbl" for="tedit-wa">WhatsApp</label>
       <input type="text" id="tedit-wa" maxlength="40" placeholder="+62...">
       <div class="pic-actions">
@@ -4779,6 +4799,57 @@ function setTeditStatus(type, text){
   el.textContent = text || "";
 }
 
+// Foto di form Edit Team Member: dipilih lewat upload gambar (bukan URL). Baru disimpan saat "Save changes".
+//   mode: "keep" (tidak berubah) | "new" (b64 = JPEG persegi hasil squarePhotoBlob) | "remove"
+let teamEditPhoto = { mode: "keep", b64: "" };
+
+function renderTeamEditPhoto(){
+  const t = teamEditTarget;
+  if (!t) return;
+  const prev = document.getElementById("tedit-photo-prev");
+  const name = document.getElementById("tedit-pic").value.trim() || t.m.pic;
+  const hasExisting = !!t.m.dp;
+  let note = "";
+  if (teamEditPhoto.mode === "new"){
+    prev.innerHTML = `<img class="dp" alt="" src="data:image/jpeg;base64,${teamEditPhoto.b64}">`;
+    note = "New photo selected. It is saved when you click Save changes.";
+  } else if (teamEditPhoto.mode === "remove" || !hasExisting){
+    prev.innerHTML = `<div class="dp fallback">${escapeHtml(initials(name))}</div>`;
+    note = teamEditPhoto.mode === "remove" ? "The photo will be removed when you click Save changes." : "";
+  } else {
+    prev.innerHTML = dpHtml(Object.assign({}, t.m, { pic: name }));
+    hydrateMemberPhotos(prev);
+  }
+  const hasPhotoNow = teamEditPhoto.mode === "new" || (teamEditPhoto.mode === "keep" && hasExisting);
+  document.getElementById("tedit-photo-btn").textContent = hasPhotoNow ? "Change photo" : "Upload photo";
+  document.getElementById("tedit-photo-remove").hidden = !hasPhotoNow;
+  document.getElementById("tedit-photo-note").textContent = note;
+}
+
+document.getElementById("tedit-photo-btn").addEventListener("click", () => document.getElementById("tedit-photo-input").click());
+document.getElementById("tedit-photo-remove").addEventListener("click", () => {
+  teamEditPhoto = { mode: "remove", b64: "" };
+  renderTeamEditPhoto();
+});
+document.getElementById("tedit-photo-input").addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const btn = document.getElementById("tedit-photo-btn");
+  const old = btn.textContent;
+  btn.disabled = true; btn.innerHTML = `<span class="btn-spin" aria-hidden="true"></span>Reading...`;
+  setTeditStatus("", "");
+  try {
+    const blob = await squarePhotoBlob(file);
+    teamEditPhoto = { mode: "new", b64: await blobToBase64(blob) };
+  } catch (err){
+    setTeditStatus("err", "Could not read that image. Please use a JPG, PNG or WebP photo.");
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+    renderTeamEditPhoto();
+  }
+});
+
 function openTeamEdit(m, sheetKey){
   teamEditTarget = {
     m: m, sheetKey: sheetKey,
@@ -4793,8 +4864,9 @@ function openTeamEdit(m, sheetKey){
   document.getElementById("tedit-pic").value = m.pic || "";
   document.getElementById("tedit-task").value = m.task || "";
   document.getElementById("tedit-desc").value = m.desc || "";
-  document.getElementById("tedit-dp").value = m.dp || "";
   document.getElementById("tedit-wa").value = m.whatsapp || "";
+  teamEditPhoto = { mode: "keep", b64: "" };
+  renderTeamEditPhoto();
   setTeditStatus("", "");
   document.getElementById("tedit-modal-overlay").classList.add("open");
   document.getElementById("tedit-pic").focus();
@@ -4826,13 +4898,13 @@ document.getElementById("tedit-form").addEventListener("submit", async (e) => {
     email: document.getElementById("tedit-email").value.trim(),
     task: document.getElementById("tedit-task").value.trim(),
     desc: document.getElementById("tedit-desc").value.trim(),
-    dp: document.getElementById("tedit-dp").value.trim(),
-    whatsapp: document.getElementById("tedit-wa").value.trim()
+    whatsapp: document.getElementById("tedit-wa").value.trim(),
+    dpMode: teamEditPhoto.mode,                                   // keep / new / remove
+    dpData: teamEditPhoto.mode === "new" ? teamEditPhoto.b64 : ""  // JPEG base64 bila mode "new"
   };
   if (!f.pic){ setTeditStatus("err", "PIC name cannot be empty."); return; }
   const emailToks = f.email.split(/[\s,;]+/).filter(Boolean);
   if (!emailToks.length || emailToks.some(x => !isValidEmail(x))){ setTeditStatus("err", "Please enter a valid email (several addresses can be separated by a comma)."); return; }
-  if (f.dp && !photoIdOf(f.dp) && (!/^https?:\/\//i.test(f.dp) || !safeHttpUrl(f.dp))){ setTeditStatus("err", "Photo URL must start with https://"); return; }
   if (!/^[0-9+\-\s()]{0,40}$/.test(f.whatsapp)){ setTeditStatus("err", "WhatsApp may only contain digits, +, -, spaces and parentheses."); return; }
 
   const btn = document.getElementById("tedit-save");
@@ -4843,7 +4915,13 @@ document.getElementById("tedit-form").addEventListener("submit", async (e) => {
     if (!data || !data.ok){
       setTeditStatus("err", (data && data.error) || "Failed to save changes.");
     } else {
-      Object.assign(t.m, { pic: f.pic, email: f.email, task: f.task, desc: f.desc, dp: f.dp, whatsapp: f.whatsapp });
+      Object.assign(t.m, { pic: f.pic, email: f.email, task: f.task, desc: f.desc, whatsapp: f.whatsapp });
+      if (f.dpMode === "remove") t.m.dp = "";
+      else if (f.dpMode === "new" && data.dp){
+        const pid = photoIdOf(data.dp);
+        if (pid) memberPhotoCache.set(pid, "data:image/jpeg;base64," + f.dpData);
+        t.m.dp = data.dp;
+      }
       lastDataSignature = null;   // pengecekan berkala berikutnya menyegarkan daftar di halaman utama
       closeTeamEdit();
       if (lastTeamModal) openModal(lastTeamModal.header, lastTeamModal.sheetKey, lastTeamModal.members);

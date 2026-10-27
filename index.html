@@ -427,7 +427,29 @@
     text-decoration:underline; text-underline-offset:2px;
   }
   .acct-bar .acct-link:hover{ color:var(--ink); }
-  #profile-modal-overlay .modal{ margin:auto; }
+  #profile-modal-overlay .modal, #review-modal-overlay .modal{ margin:auto; }
+  .acct-bar .notif-badge{
+    display:inline-block;min-width:16px;height:16px;line-height:16px;padding:0 5px;margin-left:5px;
+    border-radius:999px;background:#B3401F;color:#fff;font-size:10px;font-weight:600;text-align:center;
+    letter-spacing:0;vertical-align:1px;
+  }
+  .review-list{ width:100%;text-align:left; }
+  .review-title{ font-family:'Fraunces',serif;font-size:20px;color:var(--ink);margin:0 0 4px;text-align:center; }
+  .review-item{ border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:14px; }
+  .review-item .who{ font-size:15px;font-weight:600;color:var(--ink);margin-top:6px; }
+  .review-item .who a{ font-weight:400;font-size:12.5px;color:var(--primary); }
+  .review-item .txt{ font-size:13.5px;line-height:1.55;color:var(--ink);white-space:pre-wrap;word-break:break-word;margin-bottom:8px; }
+  .review-item .txt.new{ background:var(--surface-soft);border-radius:8px;padding:8px 10px; }
+  .review-item input[type="text"]{
+    width:100%;box-sizing:border-box;font-family:'Work Sans',sans-serif;font-size:13.5px;
+    padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);outline:none;margin-top:4px;
+  }
+  .review-item input[type="text"]:focus{ border-color:var(--accent); }
+  .review-actions{ display:flex;gap:8px;flex-wrap:wrap;margin-top:10px; }
+  .review-actions .pic-btn{ flex:1 1 110px; }
+  .review-actions .reject{ color:#B3401F;border-color:#B3401F; }
+  .review-actions .reject:hover{ background:#B3401F;color:#fff; }
+  .review-empty{ text-align:center;color:var(--ink-faint);font-size:13.5px;margin:18px 0 6px; }
   .profile-lbl{
     font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
     color:var(--ink-faint);margin:2px 0 4px;
@@ -1111,6 +1133,13 @@
   <div class="modal member-modal">
     <button class="modal-close" id="member-modal-close">Tutup ✕</button>
     <div class="member-card" id="member-card-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="review-modal-overlay">
+  <div class="modal member-modal">
+    <button class="modal-close" id="review-modal-close" type="button">Tutup ✕</button>
+    <div class="review-list" id="review-modal-content"></div>
   </div>
 </div>
 
@@ -3767,6 +3796,123 @@ document.addEventListener("change", (e) => {
 const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kalau server belum mengirim kolom ini
 
 // opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simSec, secOptions, asPic, picList, devUi, uiViewAs/uiCareer/uiSec, canSignOut }
+// ---------- Notifikasi pengajuan Task Description untuk reviewer ----------
+let reviewReqs = [];          // usulan yang menunggu keputusan akun ini (dari server)
+let lastLoginOpts = null;     // opsi terakhir renderLoginInfo, untuk menggambar ulang login card
+let reviewBusy = false;
+let reviewTimer = null;
+const REVIEW_POLL_MS = 60000;
+
+function reviewBadgeSync(){
+  const el = document.getElementById("acct-review");
+  const n = reviewReqs.length;
+  const shown = !!el;
+  if ((n > 0) !== shown){ if (lastLoginOpts) renderLoginInfo(lastLoginOpts); return; }   // muncul / hilang -> gambar ulang
+  const b = document.getElementById("acct-review-n");
+  if (b) b.textContent = n > 99 ? "99+" : String(n);
+}
+
+async function refreshReviewRequests(){
+  const email = getRealEmail();
+  if (!email || (lastLoginOpts && lastLoginOpts.asPic)) return;
+  try {
+    const d = await picApi({ action: "listReviewRequests", actor: email });
+    if (!d || !d.ok) return;
+    const sig = (arr) => arr.map(x => x.id).join("|");
+    const changed = sig(d.requests || []) !== sig(reviewReqs);
+    reviewReqs = d.requests || [];
+    if (changed){
+      reviewBadgeSync();
+      if (document.getElementById("review-modal-overlay").classList.contains("open") && !reviewBusy) renderReviewModal();
+    }
+  } catch (e){ /* notifikasi hanya tambahan; abaikan bila gagal */ }
+}
+
+function startReviewPolling(){
+  if (reviewTimer) return;
+  refreshReviewRequests();
+  reviewTimer = setInterval(() => { if (!document.hidden) refreshReviewRequests(); }, REVIEW_POLL_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshReviewRequests(); });
+}
+
+function setReviewStatus(type, text){
+  const el = document.getElementById("review-status");
+  if (!el) return;
+  el.className = "pic-status" + (text ? " show " + type : "");
+  el.textContent = text || "";
+}
+
+function renderReviewModal(){
+  const box = document.getElementById("review-modal-content");
+  if (!box) return;
+  const items = reviewReqs.map(q => `
+    <div class="review-item" data-review-id="${escapeHtml(q.id)}">
+      <div class="profile-sec">${escapeHtml(q.sheet)}</div>
+      <div class="who">${escapeHtml(q.name || q.email)} <a href="mailto:${encodeURIComponent(q.email)}">${escapeHtml(q.email)}</a></div>
+      <div class="profile-lbl" style="margin-top:10px">Task</div>
+      <div class="txt">${escapeHtml(q.task || "-")}</div>
+      <div class="profile-lbl">Current description</div>
+      <div class="txt">${escapeHtml(q.cur || "-")}</div>
+      <div class="profile-lbl">Proposed description</div>
+      <div class="txt new">${escapeHtml(q.desc)}</div>
+      <input type="text" maxlength="300" placeholder="Note to the requester (optional)" data-review-note aria-label="Note to the requester">
+      <div class="review-actions">
+        <button type="button" class="pic-btn primary" data-review-act="approve" data-id="${escapeHtml(q.id)}">Approve</button>
+        <button type="button" class="pic-btn reject" data-review-act="reject" data-id="${escapeHtml(q.id)}">Reject</button>
+      </div>
+    </div>`).join("");
+  box.innerHTML = `<h3 class="review-title">Task Description requests</h3>
+    <div class="pic-status" id="review-status" style="margin-top:10px"></div>
+    ${items || `<div class="review-empty">No requests are waiting for your review.</div>`}`;
+}
+
+async function decideReview(id, decision){
+  if (reviewBusy) return;
+  const item = document.querySelector('.review-item[data-review-id="' + id.replace(/"/g, "") + '"]');
+  const note = item ? (item.querySelector("[data-review-note]").value || "").trim() : "";
+  if (decision === "reject" && !confirm("Reject this request?")) return;
+  reviewBusy = true;
+  if (item) item.querySelectorAll("button").forEach(b => { b.disabled = true; });
+  try {
+    const d = await picApi({ action: "decideDescRequest", actor: getRealEmail(), id, decision, note });
+    if (!d || !d.ok){
+      setReviewStatus("err", (d && (d.message || d.error)) || "Failed to save the decision.");
+      if (item) item.querySelectorAll("button").forEach(b => { b.disabled = false; });
+      if (d && /already/i.test(d.message || "")) { reviewReqs = reviewReqs.filter(x => x.id !== id); reviewBusy = false; renderReviewModal(); setReviewStatus("err", d.message); reviewBadgeSync(); }
+      return;
+    }
+    reviewReqs = reviewReqs.filter(x => x.id !== id);
+    if (decision === "approve") lastDataSignature = null;   // deskripsi baru tampil di halaman pada penyegaran berikutnya
+    reviewBusy = false;
+    renderReviewModal();
+    setReviewStatus("ok", d.message || "Saved.");
+    reviewBadgeSync();
+  } catch (err){
+    setReviewStatus("err", "Could not reach the server: " + err.message);
+    if (item) item.querySelectorAll("button").forEach(b => { b.disabled = false; });
+  } finally {
+    reviewBusy = false;
+  }
+}
+
+function openReviewModal(){
+  renderReviewModal();
+  document.getElementById("review-modal-overlay").classList.add("open");
+  refreshReviewRequests();
+}
+function closeReviewModal(){
+  document.getElementById("review-modal-overlay").classList.remove("open");
+}
+document.getElementById("review-modal-close").addEventListener("click", closeReviewModal);
+document.getElementById("review-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "review-modal-overlay") closeReviewModal();
+});
+document.addEventListener("click", (e) => {
+  if (e.target.closest && e.target.closest("#acct-review")){ openReviewModal(); return; }
+  const b = e.target.closest && e.target.closest("[data-review-act]");
+  if (b) decideReview(b.dataset.id, b.dataset.reviewAct);
+});
+
 function renderLoginInfo(opts){
   const box = document.getElementById("acct-bar");
   if (!box) return;
@@ -3835,11 +3981,16 @@ function renderLoginInfo(opts){
   if (["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole)){
     parts.push(`<button type="button" class="acct-link" id="acct-profile">View Profile</button>`);
   }
+  // Notifikasi pengajuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
+  lastLoginOpts = opts;
+  if (reviewReqs.length && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests<span class="notif-badge" id="acct-review-n">${reviewReqs.length > 99 ? "99+" : reviewReqs.length}</span></button>`);
   // Tombol Sign out mengikuti kolom "Sign Out Button" di Role Policy.
   if (opts.canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
   box.className = "acct-bar show";
   box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
+  // Polling notifikasi hanya untuk akun berperan PIC / pimpinan (pengunjung biasa tidak pernah jadi reviewer).
+  if (["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole)) startReviewPolling();
 
   const sw = document.getElementById("acct-switch");
   if (sw) sw.addEventListener("change", () => {
@@ -4522,6 +4673,7 @@ const Activity = (function(){
     if (id === "pic-modal-overlay") return "Our Links / " + s;
     if (id === "member-modal-overlay") return "Member Card / " + s;
     if (id === "tedit-modal-overlay") return "Team Edit / " + s;
+    if (id === "review-modal-overlay") return "Review Requests";
     return "Our Team / " + s;
   }
 

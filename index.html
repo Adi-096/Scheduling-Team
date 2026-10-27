@@ -3589,10 +3589,8 @@ function renderProfile(){
         <button type="button" class="pic-btn" data-profile-act="contact-cancel">Cancel</button>
       </div>
     </div>`;
-  const emailHtml = (own && profileEditField === "email")
-    ? editBox("email", "Email", `<input type="email" id="profile-email-in" maxlength="120" value="${escapeHtml(email)}" autocomplete="off">`,
-        "Applies to every section where you are listed. If you change your email, use the new one to sign in.")
-    : `<div class="profile-field"><div class="profile-lbl">Email</div>${isValidEmail(email) ? `<a href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>` : escapeHtml(email)}${pencil("email", "email")}</div>`;
+  // Email hanya dibaca: perubahan email dilakukan tim leader lewat Our Team > Edit.
+  const emailHtml = `<div class="profile-field"><div class="profile-lbl">Email</div>${isValidEmail(email) ? `<a href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>` : escapeHtml(email)}</div>`;
   const waHtml = (own && profileEditField === "wa")
     ? editBox("wa", "WhatsApp", `<input type="text" id="profile-wa-in" maxlength="40" placeholder="+62..." value="${escapeHtml(waRow.m.whatsapp || "")}" autocomplete="off">`,
         "Applies to every section where you are listed.")
@@ -3618,7 +3616,7 @@ function renderProfile(){
         <div class="task">${escapeHtml(r.m.task || "-")}</div>
         ${profileDescBlockHtml(r, own)}`}
       </div>`).join("")}
-    ${own ? `<div class="profile-hint">You can change your photo, email and WhatsApp here (pencil icons). ${allLeader ? "Your name is managed in Our Team &rsaquo; Edit." : "Your name and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}`;
+    ${own ? `<div class="profile-hint">You can change your photo and WhatsApp here. ${allLeader ? "Your name and email are managed in Our Team &rsaquo; Edit." : "Your name, email and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}`;
   hydrateMemberPhotos(box);
 }
 
@@ -3651,42 +3649,22 @@ function btnLoading(btn, label){
 
 async function saveProfileContact(field, btn){
   if (profileBusy) return;
-  const rowsNow = profileRowsFor(profileCtx.email);
-  const waNow = rowsNow.find(r => formatWaLink(r.m.whatsapp)) || rowsNow[0];
-  let email = profileCtx.email.trim().toLowerCase();
-  let wa = waNow ? String(waNow.m.whatsapp || "").trim() : "";
-  if (field === "email") email = (document.getElementById("profile-email-in").value || "").trim().toLowerCase();
-  else wa = (document.getElementById("profile-wa-in").value || "").trim();
-  if (!isValidEmail(email)){ setProfileStatus("err", "Please enter a valid email address."); return; }
+  const wa = (document.getElementById("profile-wa-in").value || "").trim();
   if (!/^[0-9+\-\s()]{0,40}$/.test(wa)){ setProfileStatus("err", "WhatsApp may only contain digits, +, -, spaces and parentheses."); return; }
-  const old = profileCtx.email.toLowerCase();
-  const changed = email !== old;
-  if (changed && !confirm("Change your email to " + email + "?\n\nYou will use the new email to sign in. Make sure it is correct.")) return;
+  const me = profileCtx.email.trim().toLowerCase();
   profileBusy = true;
   setProfileStatus("", "");
   const restore = btnLoading(btn, "Saving...");
   try {
-    const data = await picApi({ action: "updateProfileContact", actor: getRealEmail(), email, whatsapp: wa });
+    const data = await picApi({ action: "updateProfileContact", actor: getRealEmail(), whatsapp: wa });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to save."); return; }
     sectionMembers.forEach(members => (members || []).forEach(m => {
-      if (!splitEmails(m.email).includes(old)) return;
-      m.whatsapp = wa;
-      if (changed) m.email = String(m.email).replace(/[^\s,;]+/g, t => t.toLowerCase() === old ? email : t);
+      if (splitEmails(m.email).includes(me)) m.whatsapp = wa;
     }));
     lastDataSignature = null;
     profileEditField = "";
-    if (changed){
-      const st = readSavedLoginState();
-      if (st){ st.email = email; try { localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify(st)); } catch (e){} }
-      try { localStorage.removeItem(DATA_CACHE_KEY); } catch (e){}
-      profileCtx.email = email;
-      renderProfile();
-      setProfileStatus("ok", "Email updated. Reloading with your new email...");
-      setTimeout(() => location.reload(), 1200);
-    } else {
-      renderProfile();
-      setProfileStatus("ok", field === "email" ? "Saved." : "WhatsApp updated.");
-    }
+    renderProfile();
+    setProfileStatus("ok", "WhatsApp updated.");
   } catch (err){
     setProfileStatus("err", "Could not reach the server: " + err.message);
   } finally {
@@ -3746,9 +3724,9 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest && e.target.closest("[data-profile-act]");
   if (!b) return;
   const act = b.dataset.profileAct;
-  if (act === "contact-edit"){ profileEditField = b.dataset.field || "email"; profileDescEdit = ""; renderProfile(); const inp = document.getElementById(profileEditField === "wa" ? "profile-wa-in" : "profile-email-in"); if (inp) inp.focus(); }
+  if (act === "contact-edit"){ profileEditField = "wa"; profileDescEdit = ""; renderProfile(); const inp = document.getElementById("profile-wa-in"); if (inp) inp.focus(); }
   else if (act === "contact-cancel"){ profileEditField = ""; renderProfile(); }
-  else if (act === "contact-save") saveProfileContact(b.dataset.field || "email", b);
+  else if (act === "contact-save") saveProfileContact("wa", b);
   else if (act === "req-open"){ profileDescEdit = b.dataset.key; profileEditField = ""; renderProfile(); const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus(); }
   else if (act === "req-cancel"){ profileDescEdit = ""; renderProfile(); }
   else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet, b);

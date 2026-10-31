@@ -3633,7 +3633,8 @@ function profileRowsFor(email){
   sectionMembers.forEach((members, i) => (members || []).forEach(m => {
     if (!splitEmails(m.email).includes(e)) return;
     const meta = sectionMeta[i] || {};
-    out.push({ m, sheetKey: meta.sheetKey || "", label: String(meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ").trim() });
+    // backup = email profil ini bukan alamat PERTAMA di sel Email (task utamanya milik orang lain yang sedang kosong)
+    out.push({ m, sheetKey: meta.sheetKey || "", backup: primaryEmail(m.email).toLowerCase() !== e, label: String(meta.header || meta.sheetKey || "").replace(/\s*\n\s*/g, " ").trim() });
   }));
   return out;
 }
@@ -3736,7 +3737,7 @@ function renderProfile(){
       <hr>
       <div class="profile-block">
         ${r.label ? `<div class="profile-sec">${escapeHtml(r.label)}</div>` : ""}
-        ${profileIsLeaderRow(r) ? "" : `<div class="profile-lbl">Task</div>
+        ${profileIsLeaderRow(r) ? "" : `<div class="profile-lbl">${r.backup ? "Task Being Backed Up" : "Task"}</div>
         <div class="task">${escapeHtml(r.m.task || "-")}</div>
         ${profileDescBlockHtml(r, own)}`}
       </div>`).join("")}

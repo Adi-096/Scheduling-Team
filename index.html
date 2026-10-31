@@ -1235,6 +1235,7 @@
       <input type="text" id="tedit-pic" maxlength="120" required>
       <label class="tedit-lbl" for="tedit-email">Email</label>
       <input type="text" id="tedit-email" maxlength="200" placeholder="name@binus.edu">
+      <div class="tedit-photo-note">Several emails are allowed (separate with ; or ,). The first one is the contact shown on the website; the others (backup PICs) only get access.</div>
       <label class="tedit-lbl" for="tedit-task">Task</label>
       <input type="text" id="tedit-task" maxlength="300">
       <label class="tedit-lbl" for="tedit-desc">Description</label>
@@ -1521,6 +1522,12 @@ function isValidEmail(str){
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str || "").trim());
 }
 
+// Kolom Email boleh berisi beberapa alamat (dipisah ; atau ,). Alamat PERTAMA = kontak yang ditampilkan
+// di website; alamat berikutnya (PIC cadangan) hanya mendapat hak akses, tidak ditampilkan.
+function primaryEmail(raw){
+  return String(raw || "").split(/[\s,;]+/).find(isValidEmail) || "";
+}
+
 const EMAIL_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`;
 const WA_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
 
@@ -1610,8 +1617,9 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
   const taskLinks = regularIdx.map((i, displayPos) => {
     const m = members[i];
     const waDigits = formatWaLink(m.whatsapp);
-    const emailBtn = isValidEmail(m.email)
-      ? `<a class="icon-btn icon-email" href="mailto:${encodeURIComponent(m.email.trim())}" title="Email: ${escapeHtml(m.email)}" aria-label="Kirim email ke ${escapeHtml(m.email)}">${EMAIL_SVG}</a>`
+    const pEmail = primaryEmail(m.email);
+    const emailBtn = pEmail
+      ? `<a class="icon-btn icon-email" href="mailto:${encodeURIComponent(pEmail)}" title="Email: ${escapeHtml(pEmail)}" aria-label="Kirim email ke ${escapeHtml(pEmail)}">${EMAIL_SVG}</a>`
       : "";
     const waBtn = waDigits
       ? `<a class="icon-btn icon-wa" href="https://wa.me/${waDigits}" target="_blank" rel="noopener" title="WhatsApp: ${escapeHtml(m.whatsapp)}" aria-label="Chat WhatsApp ${escapeHtml(m.whatsapp)}">${WA_SVG}</a>`
@@ -1708,10 +1716,10 @@ function openModal(header, sheetKey, members){
 
 function openMemberModal(m){
   const waDigits = formatWaLink(m.whatsapp);
-  const emailValid = isValidEmail(m.email);
+  const pEmail = primaryEmail(m.email);
 
-  const emailBtn = emailValid
-    ? `<a class="member-action-btn email" href="mailto:${encodeURIComponent(m.email.trim())}" title="Email: ${escapeHtml(m.email)}">${EMAIL_SVG}<span>Email</span></a>`
+  const emailBtn = pEmail
+    ? `<a class="member-action-btn email" href="mailto:${encodeURIComponent(pEmail)}" title="Email: ${escapeHtml(pEmail)}">${EMAIL_SVG}<span>Email</span></a>`
     : "";
   const waBtn = waDigits
     ? `<a class="member-action-btn wa" href="https://wa.me/${waDigits}" target="_blank" rel="noopener" title="WhatsApp: ${escapeHtml(m.whatsapp)}">${WA_SVG}<span>WhatsApp</span></a>`

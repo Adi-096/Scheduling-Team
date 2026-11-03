@@ -266,6 +266,11 @@
     padding:40px 18px; overflow-y:auto; z-index:50;
   }
   .modal-overlay.open{display:flex;}
+  .qr-popup-overlay{align-items:center;padding:16px;overflow-y:auto;}
+  .modal.qr-popup-modal{width:min(94vw,540px);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;padding:24px 16px 20px;text-align:center;}
+  .modal.qr-popup-modal h3{margin:0 0 12px;padding-right:60px;}
+  .qr-popup-image{display:none;width:min(88vw,480px);max-height:min(65vh,560px);object-fit:contain;background:#fff;padding:4px;border:1px solid var(--line);border-radius:8px;margin:8px auto;image-rendering:pixelated;}
+  .qr-popup-description{margin:12px auto 0;max-width:56ch;white-space:pre-line;line-height:1.55;text-align:center;color:var(--ink-soft);}
   .modal{
     background:var(--surface);color:var(--ink);
     border-radius:var(--radius);
@@ -4219,7 +4224,7 @@ function menuLinkAttrs(l){
   const pdfId = l.pdfId || pdfIdOf(l.rawUrl || l.url);
   if (pdfId) return `href="#" data-pdf-id="${escapeHtml(pdfId)}" data-pdf-title="${escapeHtml(l.name)}"`;
   const qrId = l.qrId || qrIdOf(l.rawUrl || l.url);
-  if (qrId) return `href="#" data-qr-id="${escapeHtml(qrId)}" data-qr-title="${escapeHtml(l.name)}"`;
+  if (qrId) return `href="#" data-qr-id="${escapeHtml(qrId)}" data-qr-title="${escapeHtml(l.name)}" data-qr-desc="${escapeHtml(l.desc || "")}"`;
   return `href="${escapeHtml(l.url)}" target="_blank" rel="noopener"`;
 }
 function menuLinkBadge(l){
@@ -4866,7 +4871,7 @@ async function resolveQrUrl(meta){
   const qr = qrcode(0, "M");
   qr.addData(target, "Byte");
   qr.make();
-  const dataUrl = qr.createDataURL(6, 4);
+  const dataUrl = qr.createDataURL(10, 40);
   const blob = await (await fetch(dataUrl)).blob();
   if (blob.size > PIC_QR_MAX_BYTES) throw new Error("The generated QR image is too large.");
   if (btn) btn.textContent = "Saving QR Code...";
@@ -5058,26 +5063,29 @@ function fetchMenuQr(id){
   p.catch(() => menuQrCache.delete(id));
   return p;
 }
-function openMenuQr(id, title){
+function openMenuQr(id, title, description){
   const overlay = document.createElement("div");
-  overlay.className = "modal-overlay open";
+  overlay.className = "modal-overlay qr-popup-overlay open";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   const modal = document.createElement("div");
-  modal.className = "modal member-modal";
-  modal.style.maxWidth = "520px";
+  modal.className = "modal qr-popup-modal";
   const close = document.createElement("button");
   close.type = "button"; close.className = "modal-close"; close.textContent = "Close";
   const heading = document.createElement("h3"); heading.textContent = title || "QR Code";
   const msg = document.createElement("p"); msg.textContent = "Loading QR Code...";
   const img = document.createElement("img");
   img.alt = title || "QR Code";
-  img.style.cssText = "display:none;max-width:min(78vw,420px);max-height:65vh;object-fit:contain;background:#fff;padding:14px;border:1px solid var(--line);border-radius:8px;margin:20px auto;image-rendering:pixelated";
+  img.className = "qr-popup-image";
+  const desc = document.createElement("p");
+  desc.className = "qr-popup-description";
+  desc.textContent = description || "";
+  if (!description) desc.hidden = true;
   const closePopup = () => { document.removeEventListener("keydown", onKey); overlay.remove(); };
   const onKey = (ev) => { if (ev.key === "Escape") closePopup(); };
   close.addEventListener("click", closePopup);
   overlay.addEventListener("click", (ev) => { if (ev.target === overlay) closePopup(); });
-  modal.append(close, heading, msg, img); overlay.appendChild(modal); document.body.appendChild(overlay);
+  modal.append(close, heading, msg, img, desc); overlay.appendChild(modal); document.body.appendChild(overlay);
   document.addEventListener("keydown", onKey);
   fetchMenuQr(id).then(src => { img.src = src; img.style.display = "block"; msg.remove(); }).catch(err => { msg.textContent = "QR Code cannot be loaded: " + (err.message || "access denied or file unavailable."); });
 }
@@ -5983,7 +5991,7 @@ document.addEventListener("click", (e) => {
   const pdf = e.target.closest && e.target.closest("[data-pdf-id]");
   if (pdf){ e.preventDefault(); openMenuPdf(pdf.dataset.pdfId, pdf.dataset.pdfTitle || "PDF"); return; }
   const qr = e.target.closest && e.target.closest("[data-qr-id]");
-  if (qr){ e.preventDefault(); openMenuQr(qr.dataset.qrId, qr.dataset.qrTitle || "QR Code"); return; }
+  if (qr){ e.preventDefault(); openMenuQr(qr.dataset.qrId, qr.dataset.qrTitle || "QR Code", qr.dataset.qrDesc || ""); return; }
   if (e.target.closest("#pic-qr-upload")){ const f = document.getElementById("pic-qr-file"); if (f) f.click(); return; }
   if (e.target.closest("#pic-pdf-upload")){ const f = document.getElementById("pic-pdf-input"); if (f) f.click(); return; }
   if (e.target.closest("#pic-note-upload")){ const f = document.getElementById("pic-note-file"); if (f) f.click(); return; }

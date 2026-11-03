@@ -1047,9 +1047,9 @@
 
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
-<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-356579</mso:_dlc_DocId>
-<mso:_dlc_DocIdItemGuid msdt:dt="string">e3727b0c-a020-4c4b-80ce-716d0b029114</mso:_dlc_DocIdItemGuid>
-<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-356579, 3ZXFJ3NKVQQC-643343547-356579</mso:_dlc_DocIdUrl>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-355707</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">a1526c46-9ba7-4cab-907a-6dacda57fec5</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-355707, 3ZXFJ3NKVQQC-643343547-355707</mso:_dlc_DocIdUrl>
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
@@ -3146,7 +3146,8 @@ function readPicForm(){
   const typeEl = document.getElementById("pic-f-type");
   const isImg = !!typeEl && typeEl.value === "images";
   const isNote = !!typeEl && typeEl.value === "notes";
-  const url  = (isImg || isNote) ? "" : document.getElementById("pic-f-url").value.trim();
+  const isPdf = !!typeEl && typeEl.value === "pdf";
+  const url  = (isImg || isNote || isPdf) ? "" : document.getElementById("pic-f-url").value.trim();
   const desc = document.getElementById("pic-f-desc").value.trim();
   const visEl = document.getElementById("pic-f-vis");
   const vis  = visEl ? visEl.value : "";
@@ -3242,6 +3243,7 @@ async function editPicLink(){
   try {
     if (f.images){ f.url = "gallery://" + (await uploadPicImages(meta)).join(","); }
     else if (f.notes){ f.url = await resolveNoteUrl(meta); }
+    else if (f.pdf){ f.url = await resolvePdfUrl(meta); }
     const data = await picApi({
       action: "editLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
@@ -5730,4 +5732,3 @@ async function main(){
 </script>
 </body>
 </html>
-

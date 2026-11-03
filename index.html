@@ -1068,13 +1068,76 @@
     .section{ padding-top:16px; }
     .section-actions{ gap:10px; }
   }
+
+  /* ===== Popup intro Leader (Welcome Tour) ===== */
+  #intro-modal-overlay .modal{ margin:auto; max-width:540px; text-align:left; padding:30px 26px 24px; }
+  #intro-modal-overlay .intro-ico{ font-size:34px; line-height:1; margin-bottom:10px; }
+  #intro-modal-overlay h3{ margin-bottom:6px; }
+  #intro-modal-overlay .intro-lead{ margin:0 0 14px; font-size:15px; line-height:1.55; color:var(--ink); }
+  #intro-modal-overlay .intro-list{ margin:0 0 6px; padding-left:20px; font-size:14px; line-height:1.6; }
+  #intro-modal-overlay .intro-list li{ margin-bottom:6px; }
+  #intro-modal-overlay .intro-note{
+    margin-top:12px; padding:10px 12px; border-radius:8px; font-size:13px; line-height:1.5;
+    background:var(--surface-soft); border:1px solid var(--line);
+  }
+  #intro-modal-overlay .intro-sheet-btn{
+    display:inline-block; margin:6px 0 4px; padding:10px 16px; border-radius:8px;
+    background:var(--primary); color:#fff; text-decoration:none; font-weight:600; font-size:14px;
+  }
+  #intro-modal-overlay .intro-sheet-btn:hover{ opacity:.9; }
+  #intro-modal-overlay .intro-foot{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:22px;
+  }
+  #intro-modal-overlay .intro-dots{ display:flex; gap:6px; }
+  #intro-modal-overlay .intro-dot{ width:8px; height:8px; border-radius:50%; background:var(--line); }
+  #intro-modal-overlay .intro-dot.on{ background:var(--primary); }
+  #intro-modal-overlay .intro-btns{ display:flex; gap:8px; }
+  #intro-modal-overlay .intro-btn{
+    font:inherit; font-size:14px; padding:8px 16px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  }
+  #intro-modal-overlay .intro-btn.primary{ background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
+  #intro-modal-overlay .intro-btn[disabled]{ visibility:hidden; }
+
+  /* ===== Edit Intro (Developer) ===== */
+  #intro-admin-overlay .modal{ margin:auto; max-width:720px; }
+  #intro-admin-overlay .ia-check{ display:block; margin:10px 0; font-size:14px; line-height:1.5; }
+  #intro-admin-overlay .ia-field{ margin:12px 0; }
+  #intro-admin-overlay .ia-field label{ display:block; margin-bottom:5px; font-size:14px; }
+  #intro-admin-overlay select, #intro-admin-overlay textarea, #intro-admin-overlay input[type=text]{
+    width:100%; box-sizing:border-box; font:inherit; font-size:14px; padding:8px 10px;
+    border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink);
+  }
+  #intro-admin-overlay textarea{ resize:vertical; line-height:1.5; }
+  #intro-admin-overlay .ia-accs{ max-height:200px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin-bottom:8px; }
+  #intro-admin-overlay .ia-acc{ display:block; margin:0; padding:4px 0; font-size:13px; }
+  #intro-admin-overlay .ia-acc em{ color:var(--accent-warm-dark); font-style:normal; font-size:12px; margin-left:6px; }
+  #intro-admin-overlay .ia-hint{ font-size:12.5px; line-height:1.5; color:var(--ink); opacity:.75; margin:4px 0 8px; }
+  #intro-admin-overlay .ia-h{ margin:20px 0 4px; font-size:15px; }
+  #intro-admin-overlay .ia-step{ border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--surface-soft); }
+  #intro-admin-overlay .ia-step-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:14px; }
+  #intro-admin-overlay .ia-step-btns{ display:flex; gap:6px; }
+  #intro-admin-overlay .ia-step-btns .intro-btn{ padding:2px 10px; }
+  #intro-admin-overlay .ia-two{ display:grid; grid-template-columns:70px 1fr; gap:8px; margin-bottom:8px; }
+  #intro-admin-overlay .ia-row-btns{ display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 10px; }
+  #intro-admin-overlay .ia-foot{ justify-content:flex-end; margin-top:14px; }
+  #intro-admin-overlay .ia-status{ min-height:20px; font-size:13.5px; margin-top:10px; }
+  #intro-admin-overlay .ia-status.ok{ color:#1b7a3d; }
+  #intro-admin-overlay .ia-status.err{ color:#b3261e; }
+  #intro-admin-overlay .intro-btn{
+    font:inherit; font-size:14px; padding:8px 16px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  }
+  #intro-admin-overlay .intro-btn.primary{ background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
+  #intro-admin-overlay .intro-btn[disabled]{ opacity:.4; cursor:default; }
+  #intro-admin-overlay .intro-list, #intro-admin-overlay .intro-note{ font-size:14px; }
 </style>
 
 <!--[if gte mso 9]><xml>
 <mso:CustomDocumentProperties>
-<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-353436</mso:_dlc_DocId>
-<mso:_dlc_DocIdItemGuid msdt:dt="string">3ece743b-3ea5-4d79-aaec-fff5fbd302ca</mso:_dlc_DocIdItemGuid>
-<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-353436, 3ZXFJ3NKVQQC-643343547-353436</mso:_dlc_DocIdUrl>
+<mso:_dlc_DocId msdt:dt="string">3ZXFJ3NKVQQC-643343547-355707</mso:_dlc_DocId>
+<mso:_dlc_DocIdItemGuid msdt:dt="string">a1526c46-9ba7-4cab-907a-6dacda57fec5</mso:_dlc_DocIdItemGuid>
+<mso:_dlc_DocIdUrl msdt:dt="string">https://binusianorg.sharepoint.com/sites/StudentRegistrationSchedulingCenter/_layouts/15/DocIdRedir.aspx?ID=3ZXFJ3NKVQQC-643343547-355707, 3ZXFJ3NKVQQC-643343547-355707</mso:_dlc_DocIdUrl>
 </mso:CustomDocumentProperties>
 </xml><![endif]-->
 </head>
@@ -1210,6 +1273,27 @@
   <div class="modal member-modal">
     <button class="modal-close" id="profile-modal-close" type="button">Tutup ✕</button>
     <div class="member-card" id="profile-card-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="intro-admin-overlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <button class="modal-close" id="intro-admin-close" type="button">Close ✕</button>
+    <div id="intro-admin-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="intro-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+  <div class="modal">
+    <button class="modal-close" id="intro-modal-close" type="button">Close ✕</button>
+    <div id="intro-content"></div>
+    <div class="intro-foot">
+      <div class="intro-dots" id="intro-dots"></div>
+      <div class="intro-btns">
+        <button type="button" class="intro-btn" id="intro-back">Back</button>
+        <button type="button" class="intro-btn primary" id="intro-next">Next</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -4387,6 +4471,314 @@ document.addEventListener("click", (e) => {
   else if (act === "req-hide") profileReqCall("hideDescRequest", b.dataset.key, b.dataset.id, "History hidden.", b, "Hiding...");
 });
 
+/* =========================================================================
+   POPUP INTRO (Welcome Tour)
+   - Muncul OTOMATIS sekali untuk penerima yang dipilih Developer (bawaan: Leader) dan belum
+     melihat versi intro ini. Status "sudah dilihat" disimpan di SERVER (per email) dan di browser (cadangan).
+   - Tombol "Welcome Tour" di bar akun membuka ulang kapan saja.
+   - Developer: tombol "Edit Intro" -> aktif/nonaktif, penerima, link spreadsheet, dan isi tiap langkah.
+   Format isi langkah (teks biasa):
+     baris kosong = paragraf baru | "- teks" = poin | **tebal** | "NOTE: teks" = kotak catatan
+     {{SHEET_LINK}} (di baris sendiri) = tombol Open the Spreadsheet
+   ========================================================================= */
+const INTRO_SEEN_PREFIX = "srsc_intro_seen:";
+const INTRO_MAX_STEPS = 8;
+let introSheetUrl = "";
+let introCustom = [];          // isi dari server; kosong = pakai INTRO_DEFAULT_STEPS
+let introVersionNow = 1;
+let introPreviewSteps = null;  // dipakai tombol Preview di Edit Intro
+let introStep = 0;
+let introAutoShown = false;
+
+const INTRO_DEFAULT_STEPS = [
+  { ico: "👋", title: "Welcome to the Scheduling Team site",
+    body: "This site is the one place for our team's links, contacts and tools. As a **Leader**, you can see everything and manage it directly from the page.\n\n- **Our Links** – shortcuts and information for every section.\n- **Our Team** – contact cards of the team.\n- **View Profile** – your own photo and contact details.\n- **Spreadsheet** – the data behind the whole site.\n\nNOTE: This short tour takes about one minute. You can open it again anytime from **Welcome Tour** at the top of the page." },
+  { ico: "🔗", title: "Our Links",
+    body: "Open **Our Links** on a section to see its menus, grouped by category.\n\n- **Add, edit, delete** a menu, and **reorder** menus and categories.\n- A menu can be a **link**, a set of **images** (shown as a carousel), a written **note** (or a .txt file), or a **document**.\n- You choose who can see each menu, so each person only sees what is meant for them." },
+  { ico: "👥", title: "Our Team & Your Profile",
+    body: "**Our Team** shows the contact card of every PIC. Leaders appear in the **Person In Charge** block.\n\n- Use **Edit** on a card to update a team member (within the scope your role allows).\n- **View Profile** lets you change your own photo and WhatsApp number.\n- When a PIC asks to change a task description, it appears under **Requests** for you to approve or decline." },
+  { ico: "🔐", title: "Access & Role View",
+    body: "What each role can see and do is set in the **Role Policy** sheet.\n\n- Use the **role selector** at the top (if you have it) to **view the site as a lower role**, to check what they see.\n- Some sections use a password. Those passwords are in the Master sheet.\n- Every sign-in and page visit is recorded in the **Logs** sheet." },
+  { ico: "📊", title: "Spreadsheet for data adjustment",
+    body: "All site data lives in one Google Spreadsheet. Change it there, and the site follows shortly after.\n\n{{SHEET_LINK}}\n\n- **Master** – which sections and careers appear, their status, passwords and menu editors.\n- **Role Policy** – what every role may view, edit or delete.\n- **Team sheets** (one per section) – the PIC list and the Our Team cards.\n- **Logs** – sign-in and activity history.\n\nNOTE: **Please be careful:** keep the column headers and sheet names as they are, and change one thing at a time. If something looks wrong on the site after an edit, undo the edit." }
+];
+
+function introBodyHtml(text){
+  const inline = (t) => escapeHtml(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  let out = "", inList = false;
+  const closeList = () => { if (inList){ out += "</ul>"; inList = false; } };
+  String(text || "").replace(/\r/g, "").split("\n").forEach((raw) => {
+    const t = raw.trim();
+    if (!t){ closeList(); return; }
+    if (t === "{{SHEET_LINK}}"){
+      closeList();
+      if (introSheetUrl) out += `<a class="intro-sheet-btn" href="${escapeHtml(introSheetUrl)}" target="_blank" rel="noopener noreferrer">Open the Spreadsheet ↗</a>`;
+      return;
+    }
+    if (/^[-•]\s+/.test(t)){
+      if (!inList){ out += '<ul class="intro-list">'; inList = true; }
+      out += `<li>${inline(t.replace(/^[-•]\s+/, ""))}</li>`;
+      return;
+    }
+    closeList();
+    if (/^note:/i.test(t)){ out += `<div class="intro-note">${inline(t.replace(/^note:\s*/i, ""))}</div>`; return; }
+    out += `<p class="intro-lead">${inline(t)}</p>`;
+  });
+  closeList();
+  return out;
+}
+
+function introSeenLocal(email, version){
+  try {
+    const v = Number(localStorage.getItem(INTRO_SEEN_PREFIX + String(email || "").toLowerCase()));
+    return !isNaN(v) && v >= (version || 1);
+  } catch (e){ return false; }
+}
+
+function introSteps(){
+  const src = introPreviewSteps || (introCustom.length ? introCustom : INTRO_DEFAULT_STEPS);
+  return src.map(s => ({ ico: s.ico || "", title: s.title || "", html: introBodyHtml(s.body) }));
+}
+
+function renderLeaderIntro(){
+  const steps = introSteps();
+  if (introStep < 0) introStep = 0;
+  if (introStep > steps.length - 1) introStep = steps.length - 1;
+  const st = steps[introStep];
+  document.getElementById("intro-content").innerHTML =
+    `${st.ico ? `<div class="intro-ico">${escapeHtml(st.ico)}</div>` : ""}<h3 id="intro-title">${escapeHtml(st.title)}</h3><div class="modal-sub">Step ${introStep + 1} of ${steps.length}</div>${st.html}`;
+  document.getElementById("intro-dots").innerHTML = steps.map((_, i) => `<span class="intro-dot${i === introStep ? " on" : ""}"></span>`).join("");
+  document.getElementById("intro-back").disabled = introStep === 0;
+  document.getElementById("intro-next").textContent = introStep === steps.length - 1 ? "Got it" : "Next";
+}
+
+function openLeaderIntro(){
+  introStep = 0;
+  renderLeaderIntro();
+  document.getElementById("intro-modal-overlay").classList.add("open");
+}
+
+function markIntroSeen(){
+  const email = String(getRealEmail() || "").toLowerCase();
+  if (!email) return;
+  const already = introSeenLocal(email, introVersionNow);
+  try { localStorage.setItem(INTRO_SEEN_PREFIX + email, String(introVersionNow)); } catch (e){}
+  if (already || !LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return;
+  fetch(LOG_WEBAPP_URL, {
+    method: "POST", mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "markIntroSeen", email: email })
+  }).catch(() => {});
+}
+
+function closeLeaderIntro(){
+  document.getElementById("intro-modal-overlay").classList.remove("open");
+  if (introPreviewSteps){ introPreviewSteps = null; return; }   // Preview dari Edit Intro: tidak dicatat sebagai "sudah dilihat"
+  markIntroSeen();
+}
+
+function maybeAutoLeaderIntro(extra){
+  if (introAutoShown || !extra || !extra.introAuto) return;
+  const email = getRealEmail();
+  if (!email || introSeenLocal(email, extra.introVersion)) return;
+  introAutoShown = true;
+  setTimeout(openLeaderIntro, 500);
+}
+
+document.getElementById("intro-modal-close").addEventListener("click", closeLeaderIntro);
+document.getElementById("intro-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "intro-modal-overlay") closeLeaderIntro();
+});
+document.getElementById("intro-back").addEventListener("click", () => { introStep--; renderLeaderIntro(); });
+document.getElementById("intro-next").addEventListener("click", () => {
+  if (introStep >= introSteps().length - 1){ closeLeaderIntro(); return; }
+  introStep++; renderLeaderIntro();
+});
+
+/* ---------- Edit Intro (khusus Developer) ---------- */
+let introAdmin = { cfg: null, accounts: [] };
+
+const IA_AUDIENCES = [
+  ["leaders",  "Leaders only (Senior Manager, Manager, Section Head, Developer)"],
+  ["pics",     "All PICs and Leaders"],
+  ["selected", "Selected accounts only"]
+];
+
+function closeIntroAdmin(){
+  document.getElementById("intro-admin-overlay").classList.remove("open");
+}
+
+async function openIntroAdmin(){
+  document.getElementById("intro-admin-overlay").classList.add("open");
+  const box = document.getElementById("intro-admin-body");
+  box.innerHTML = `<p class="intro-lead">Loading&hellip;</p>`;
+  try {
+    const d = await picApi({ action: "introAdminGet", actor: getRealEmail() });
+    if (!d.ok) throw new Error(d.error || "Failed to load the intro settings.");
+    introAdmin.cfg = d.config;
+    introAdmin.accounts = d.accounts || [];
+    if (!Array.isArray(introAdmin.cfg.steps) || !introAdmin.cfg.steps.length){
+      introAdmin.cfg.steps = INTRO_DEFAULT_STEPS.map(x => Object.assign({}, x));
+    }
+    renderIntroAdmin();
+  } catch (err){
+    box.innerHTML = `<div class="intro-note">${escapeHtml(err.message || "Failed to load the intro settings.")}</div>`;
+  }
+}
+
+function renderIntroAdmin(){
+  const cfg = introAdmin.cfg;
+  const known = new Set(introAdmin.accounts.map(a => a.email));
+  const chosen = new Set(cfg.emails || []);
+  const others = (cfg.emails || []).filter(e => !known.has(e)).join("\n");
+  const accHtml = introAdmin.accounts.map(a =>
+    `<label class="ia-acc"><input type="checkbox" data-ia-email="${escapeHtml(a.email)}"${chosen.has(a.email) ? " checked" : ""}> <span>${escapeHtml(a.email)}</span>${a.job ? ` <em>${escapeHtml(a.job)}</em>` : ""}</label>`
+  ).join("") || `<p class="ia-hint">No accounts found in the team sheets.</p>`;
+  const stepsHtml = cfg.steps.map((st, i) => `
+    <div class="ia-step" data-i="${i}">
+      <div class="ia-step-head">
+        <b>Step ${i + 1}</b>
+        <span class="ia-step-btns">
+          <button type="button" class="intro-btn" data-ia-act="up" data-i="${i}"${i === 0 ? " disabled" : ""} aria-label="Move up">↑</button>
+          <button type="button" class="intro-btn" data-ia-act="down" data-i="${i}"${i === cfg.steps.length - 1 ? " disabled" : ""} aria-label="Move down">↓</button>
+          <button type="button" class="intro-btn" data-ia-act="del" data-i="${i}" aria-label="Delete step">✕</button>
+        </span>
+      </div>
+      <div class="ia-two">
+        <input class="ia-ico" type="text" maxlength="8" placeholder="Icon" value="${escapeHtml(st.ico || "")}" aria-label="Icon (emoji)">
+        <input class="ia-title" type="text" maxlength="80" placeholder="Title" value="${escapeHtml(st.title || "")}" aria-label="Title">
+      </div>
+      <textarea class="ia-body" rows="6" maxlength="3000" placeholder="Text of this step" aria-label="Text">${escapeHtml(st.body || "")}</textarea>
+    </div>`).join("");
+  document.getElementById("intro-admin-body").innerHTML = `
+    <h3>Edit Welcome Tour</h3>
+    <div class="modal-sub">Developer only</div>
+
+    <label class="ia-check"><input type="checkbox" id="ia-enabled"${cfg.enabled ? " checked" : ""}> <b>Turn on the popup</b> (shown automatically once to each recipient)</label>
+
+    <div class="ia-field">
+      <label for="ia-audience"><b>Who gets it?</b></label>
+      <select id="ia-audience">${IA_AUDIENCES.map(o => `<option value="${o[0]}"${cfg.audience === o[0] ? " selected" : ""}>${escapeHtml(o[1])}</option>`).join("")}</select>
+    </div>
+    <div class="ia-field" id="ia-selected-wrap"${cfg.audience === "selected" ? "" : " hidden"}>
+      <div class="ia-accs">${accHtml}</div>
+      <label for="ia-extra" class="ia-hint">Other emails (one per line). They must be listed as a PIC or Leader to receive it.</label>
+      <textarea id="ia-extra" rows="2">${escapeHtml(others)}</textarea>
+    </div>
+
+    <label class="ia-check"><input type="checkbox" id="ia-showlink"${cfg.showLink ? " checked" : ""}> Include the spreadsheet link for recipients (Developers always see it)</label>
+
+    <h4 class="ia-h">Steps (maximum ${INTRO_MAX_STEPS})</h4>
+    <p class="ia-hint">Blank line = new paragraph. <code>- text</code> = bullet. <code>**bold**</code> = bold. <code>NOTE: text</code> = note box. <code>{{SHEET_LINK}}</code> on its own line = spreadsheet button.</p>
+    <div id="ia-steps">${stepsHtml}</div>
+    <div class="ia-row-btns">
+      <button type="button" class="intro-btn" data-ia-act="add"${cfg.steps.length >= INTRO_MAX_STEPS ? " disabled" : ""}>+ Add step</button>
+      <button type="button" class="intro-btn" data-ia-act="reset">Reset text to default</button>
+    </div>
+
+    <label class="ia-check"><input type="checkbox" id="ia-reset"> Show it again to everyone, including people who already saw it</label>
+
+    <div class="ia-status" id="ia-status" role="status"></div>
+    <div class="intro-btns ia-foot">
+      <button type="button" class="intro-btn" data-ia-act="preview">Preview</button>
+      <button type="button" class="intro-btn primary" data-ia-act="save">Save</button>
+    </div>`;
+}
+
+function collectIntroAdmin(){
+  const q = (id) => document.getElementById(id);
+  const emails = new Set(Array.from(document.querySelectorAll("[data-ia-email]:checked")).map(x => x.getAttribute("data-ia-email")));
+  String(q("ia-extra") ? q("ia-extra").value : "").split(/[\s,;]+/).forEach(x => { x = x.trim().toLowerCase(); if (x) emails.add(x); });
+  const steps = Array.from(document.querySelectorAll("#ia-steps .ia-step")).map(el => ({
+    ico: el.querySelector(".ia-ico").value.trim(),
+    title: el.querySelector(".ia-title").value.trim(),
+    body: el.querySelector(".ia-body").value
+  }));
+  return {
+    enabled: q("ia-enabled").checked,
+    audience: q("ia-audience").value,
+    emails: Array.from(emails),
+    showLink: q("ia-showlink").checked,
+    steps: steps
+  };
+}
+
+function introAdminStatus(msg, ok){
+  const el = document.getElementById("ia-status");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.className = "ia-status" + (msg ? (ok ? " ok" : " err") : "");
+}
+
+async function saveIntroAdmin(){
+  const cfg = collectIntroAdmin();
+  if (!cfg.steps.length){ introAdminStatus("Add at least one step.", false); return; }
+  if (cfg.steps.some(s => !s.title)){ introAdminStatus("Every step needs a title.", false); return; }
+  if (cfg.enabled && cfg.audience === "selected" && !cfg.emails.length){ introAdminStatus("Choose at least one account, or pick another audience.", false); return; }
+  const resetSeen = document.getElementById("ia-reset").checked;
+  const btn = document.querySelector('[data-ia-act="save"]');
+  btn.disabled = true; introAdminStatus("Saving…", true);
+  try {
+    const d = await picApi({ action: "introAdminSave", actor: getRealEmail(), config: cfg, resetSeen: resetSeen });
+    if (!d.ok) throw new Error(d.error || "Failed to save.");
+    introAdmin.cfg = d.config;
+    introCustom = d.config.steps || [];
+    introVersionNow = d.config.version || 1;
+    try { localStorage.removeItem(DATA_CACHE_KEY); } catch (e){}
+    renderIntroAdmin();
+    introAdminStatus(resetSeen ? "Saved. Everyone will see the popup again." : "Saved.", true);
+  } catch (err){
+    introAdminStatus(err.message || "Failed to save.", false);
+    btn.disabled = false;
+  }
+}
+
+(function(){
+  const body = document.getElementById("intro-admin-body");
+  body.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ia-act]");
+    if (!b || b.disabled) return;
+    const act = b.getAttribute("data-ia-act");
+    const i = Number(b.getAttribute("data-i"));
+    if (act === "save"){ saveIntroAdmin(); return; }
+    if (act === "preview"){
+      const c = collectIntroAdmin();
+      const valid = c.steps.filter(s => s.title || s.body.trim());
+      if (!valid.length){ introAdminStatus("Add at least one step to preview.", false); return; }
+      introPreviewSteps = valid;
+      openLeaderIntro();
+      return;
+    }
+    // Aksi di bawah mengubah daftar langkah: simpan dulu isian saat ini, ubah, lalu tampilkan ulang.
+    const c = collectIntroAdmin();
+    introAdmin.cfg = Object.assign({}, introAdmin.cfg, c);
+    const steps = introAdmin.cfg.steps;
+    if (act === "up" && i > 0) steps.splice(i - 1, 0, steps.splice(i, 1)[0]);
+    else if (act === "down" && i < steps.length - 1) steps.splice(i + 1, 0, steps.splice(i, 1)[0]);
+    else if (act === "del"){ if (steps.length > 1) steps.splice(i, 1); }
+    else if (act === "add" && steps.length < INTRO_MAX_STEPS) steps.push({ ico: "", title: "", body: "" });
+    else if (act === "reset"){
+      if (!confirm("Replace all steps with the default text? Your current text will be lost.")) return;
+      introAdmin.cfg.steps = INTRO_DEFAULT_STEPS.map(x => Object.assign({}, x));
+    }
+    renderIntroAdmin();
+  });
+  body.addEventListener("change", (e) => {
+    if (e.target.id === "ia-audience"){
+      document.getElementById("ia-selected-wrap").hidden = e.target.value !== "selected";
+    }
+  });
+  document.getElementById("intro-admin-close").addEventListener("click", closeIntroAdmin);
+  document.getElementById("intro-admin-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "intro-admin-overlay") closeIntroAdmin();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (document.getElementById("intro-modal-overlay").classList.contains("open")) closeLeaderIntro();
+    else if (document.getElementById("intro-admin-overlay").classList.contains("open")) closeIntroAdmin();
+  });
+})();
+
 function openProfile(){
   profileEditField = ""; profileDescEdit = "";
   renderProfile();
@@ -4676,6 +5068,14 @@ function renderLoginInfo(opts){
   if (["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole)){
     parts.push(`<button type="button" class="acct-link" id="acct-profile">View Profile</button>`);
   }
+  // Welcome Tour: Leader (dan Developer) bisa membuka ulang popup intro kapan saja.
+  if (opts.introTour && !opts.asPic){
+    parts.push(`<button type="button" class="acct-link" id="acct-intro">Welcome Tour</button>`);
+  }
+  // Edit Intro: hanya Developer asli -- atur aktif/nonaktif, isi popup, dan siapa penerimanya.
+  if (opts.introAdmin){
+    parts.push(`<button type="button" class="acct-link" id="acct-intro-admin">Edit Intro</button>`);
+  }
   // Notifikasi pengajuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
   lastLoginOpts = opts;
   if (reviewReqs.length && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests<span class="notif-badge" id="acct-review-n">${reviewReqs.length > 99 ? "99+" : reviewReqs.length}</span></button>`);
@@ -4734,6 +5134,10 @@ function renderLoginInfo(opts){
 
   const profBtn = document.getElementById("acct-profile");
   if (profBtn) profBtn.addEventListener("click", () => openProfile());
+  const introBtn = document.getElementById("acct-intro");
+  if (introBtn) introBtn.addEventListener("click", () => openLeaderIntro());
+  const introAdminBtn = document.getElementById("acct-intro-admin");
+  if (introAdminBtn) introAdminBtn.addEventListener("click", () => openIntroAdmin());
 
   const outBtn = document.getElementById("acct-signout");
   if (outBtn) outBtn.addEventListener("click", () => {
@@ -4757,7 +5161,9 @@ function extraFromServer(d){
     leader: !!d.leader, developer: !!d.developer, title: d.title || "", job: d.jobTitle || "",
     role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", pinnedFrom: d.pinnedFrom || {}, asPic: d.asPic || "", picsBySheet: d.picsBySheet || {}, sheetPics: d.sheetPics || {}, simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
     createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], createOwnSheets: d.createOwnSheets || [], deleteOwnSheets: d.deleteOwnSheets || [], teamSheets: d.teamSheets || [],
-    policy: d.policy || {}
+    policy: d.policy || {},
+    introSheetUrl: d.introSheetUrl || "", introAuto: !!d.introAuto, introTour: !!d.introTour,
+    introSteps: Array.isArray(d.introSteps) ? d.introSteps : [], introVersion: Number(d.introVersion) || 1
   };
 }
 
@@ -4797,6 +5203,10 @@ async function loadAndRender(isInitial, fromCache){
     }
     // PIC simulasi yang disahkan server menentukan "email saya" untuk seluruh logika tampilan.
     effectiveAsPic = extra.asPic || "";
+    // Pengaturan popup intro dari server (isi, versi, link spreadsheet) -- dipakai Welcome Tour & Edit Intro.
+    introSheetUrl = extra.introSheetUrl || "";
+    introCustom = Array.isArray(extra.introSteps) ? extra.introSteps : [];
+    introVersionNow = extra.introVersion || 1;
     if (!effectiveAsPic && getAsPic()){ try { localStorage.removeItem(SIM_PIC_KEY); } catch (e){} }
     sigParts.push("extra:" + JSON.stringify(extra));
     sigParts.push("viewAs:" + getViewAs() + "|" + effectiveSimCareer() + "|" + resolveSimSec() + "|" + getAsPic());
@@ -5060,7 +5470,8 @@ async function loadAndRender(isInitial, fromCache){
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
   renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", job: extra.job || "",
-                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picList: uiPicList, devUi: !!extra.developer && (asPicMode || (realRole === "developer" && canSwitch)), uiViewAs: uiViewAs, uiCareer: uiCareer, uiSec: uiSec, canSignOut: !!(extra.perms && extra.perms.signOut) });
+                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picList: uiPicList, devUi: !!extra.developer && (asPicMode || (realRole === "developer" && canSwitch)), uiViewAs: uiViewAs, uiCareer: uiCareer, uiSec: uiSec, canSignOut: !!(extra.perms && extra.perms.signOut), introTour: !!extra.introTour, introAdmin: !!extra.developer && !extra.asPic });
+  maybeAutoLeaderIntro(extra);   // Leader yang baru pertama kali login -> popup intro otomatis
 
   const tabsWrap = document.getElementById("tabs-wrap");
   if (careerTabs.length > 0){

@@ -1131,6 +1131,33 @@
   #intro-admin-overlay .intro-btn.primary{ background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
   #intro-admin-overlay .intro-btn[disabled]{ opacity:.4; cursor:default; }
   #intro-admin-overlay .intro-list, #intro-admin-overlay .intro-note{ font-size:14px; }
+
+  /* ===== Sign out di View Profile ===== */
+  .profile-signout-wrap{ display:flex; justify-content:center; margin-top:4px; }
+  .profile-signout{ color:#B3401F; border-color:#E9C6BA; }
+  .profile-signout:hover{ background:#FBEFEA; }
+
+  /* ===== Edit Intro: audiens per langkah, urutan, panduan ===== */
+  #intro-admin-overlay .ia-roles{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:2px 0 10px; font-size:13px; }
+  #intro-admin-overlay .ia-roles-lbl{ font-weight:600; }
+  #intro-admin-overlay .ia-chip{ display:inline-flex; align-items:center; gap:5px; margin:0; padding:3px 9px; border:1px solid var(--line); border-radius:999px; background:var(--surface); font-size:12.5px; cursor:pointer; }
+  #intro-admin-overlay .ia-chip input{ margin:0; }
+  #intro-admin-overlay .ia-grip{ cursor:grab; user-select:none; font-size:18px; line-height:1; padding:0 8px 0 0; color:var(--ink); opacity:.55; }
+  #intro-admin-overlay .ia-step.dragging{ opacity:.45; }
+  #intro-admin-overlay .ia-step.drop{ outline:2px dashed var(--primary); outline-offset:2px; }
+  #intro-admin-overlay .ia-step-title{ display:flex; align-items:center; }
+  #intro-admin-overlay .ia-guide{ border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin:12px 0; background:var(--surface-soft); font-size:13.5px; line-height:1.55; }
+  #intro-admin-overlay .ia-guide summary{ cursor:pointer; font-weight:600; font-size:14px; }
+  #intro-admin-overlay .ia-guide h5{ margin:14px 0 6px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; }
+  #intro-admin-overlay .ia-guide table{ width:100%; border-collapse:collapse; }
+  #intro-admin-overlay .ia-guide td{ padding:5px 6px; border-top:1px solid var(--line); vertical-align:middle; }
+  #intro-admin-overlay .ia-guide code{ background:var(--surface); border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:12.5px; }
+  #intro-admin-overlay .ia-ins{ font:inherit; font-size:12px; padding:3px 10px; border-radius:6px; border:1px solid var(--line); background:var(--surface); color:var(--ink); cursor:pointer; white-space:nowrap; }
+  #intro-admin-overlay .ia-ins:hover{ border-color:var(--primary); }
+  #intro-admin-overlay .ia-vars{ display:flex; flex-wrap:wrap; gap:6px; }
+  #intro-admin-overlay .ia-prev{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  #intro-admin-overlay .ia-prev select{ width:auto; }
+  #intro-modal-overlay .intro-lead a, #intro-modal-overlay .intro-list a{ color:var(--primary); text-decoration:underline; }
 </style>
 
 <!--[if gte mso 9]><xml>
@@ -4235,7 +4262,7 @@ function getViewAs(){
 // (role asli, atau role yang dipilih lewat Role Switch).
 // Item yang dipilih tapi tidak punya nilai (mis. Lecturer Code untuk Manager) tidak ditampilkan.
 // ---------- View Profile ----------
-let profileCtx = { email: "", own: false };
+let profileCtx = { email: "", own: false, canSignOut: false, signOutEmail: "" };
 let profileBusy = false;
 
 function profileRowsFor(email){
@@ -4267,13 +4294,14 @@ const profileIsLeaderRow = (r) => LEADER_TITLES.includes(normJabatan(r.m.jabatan
 function profileDescBlockHtml(r, own){
   const key = normSheetName(r.sheetKey);
   const req = profileReqs[key];
-  const pending = req && req.status === "Pending";
+  const awaitingFinal = req && req.status === "Awaiting Final";
+  const pending = req && (req.status === "Pending" || awaitingFinal);
   if (own && profileDescEdit === key){
     const start = pending ? req.desc : (r.m.desc || "");
     return `<div class="profile-lbl">Task Description</div>
       <div class="profile-edit">
         <textarea id="profile-desc-ta" maxlength="1000" rows="5" aria-label="New task description">${escapeHtml(start)}</textarea>
-        <div class="profile-hint" style="margin:0">Your Authorized PIC and Section Head will review this. The description changes only after one of them approves.</div>
+        <div class="profile-hint" style="margin:0">Your Section Head reviews this first, then your Manager gives the final approval. The description changes only after both approve.</div>
         <div class="profile-edit-actions">
           <button type="button" class="pic-btn primary" data-profile-act="req-send" data-key="${escapeHtml(key)}" data-sheet="${escapeHtml(r.sheetKey)}">Send request</button>
           <button type="button" class="pic-btn" data-profile-act="req-cancel">Cancel</button>
@@ -4283,7 +4311,9 @@ function profileDescBlockHtml(r, own){
   let note = "";
   const hideBtn = (req && req.id) ? `<button type="button" class="profile-mini" data-profile-act="req-hide" data-key="${escapeHtml(key)}" data-id="${escapeHtml(req.id)}">Hide this history</button>` : "";
   if (pending){
-    note = `<div class="profile-req"><b>Change requested &mdash; waiting for review</b><span class="txt">${escapeHtml(req.desc)}</span></div>`;
+    note = awaitingFinal
+      ? `<div class="profile-req"><b>Approved by Section Head${req.shBy ? " (" + escapeHtml(req.shBy) + ")" : ""} &mdash; waiting for final approval by the Manager</b>${req.shNote ? `<span class="txt">Section Head note: ${escapeHtml(req.shNote)}</span>` : ""}<span class="txt">${escapeHtml(req.desc)}</span></div>`
+      : `<div class="profile-req"><b>Change requested &mdash; waiting for Section Head review</b><span class="txt">${escapeHtml(req.desc)}</span></div>`;
   } else if (req && req.status === "Rejected"){
     note = `<div class="profile-req"><b>Your last request was rejected${req.by ? " by " + escapeHtml(req.by) : ""}</b>${req.note ? `<span class="txt">${escapeHtml(req.note)}</span>` : ""}${hideBtn}</div>`;
   } else if (req && req.status === "Approved"){
@@ -4297,6 +4327,13 @@ function profileDescBlockHtml(r, own){
     <div class="task-desc">${escapeHtml(r.m.desc || "-")}</div>${note}${btn}`;
 }
 
+// Tombol Sign out di bagian paling bawah View Profile (hanya bila Role Policy mengizinkan Sign Out Button).
+function profileSignOutHtml(){
+  return profileCtx.canSignOut
+    ? `<hr><div class="profile-signout-wrap"><button type="button" class="pic-btn profile-signout" id="profile-signout">Sign out</button></div>`
+    : "";
+}
+
 function renderProfile(){
   const box = document.getElementById("profile-card-content");
   if (!box) return;
@@ -4306,7 +4343,7 @@ function renderProfile(){
       <div class="dp fallback">${escapeHtml(initials(profileCtx.email.split("@")[0].replace(/[._-]+/g, " ")))}</div>
       <hr>
       <div class="pic-name">${escapeHtml(profileCtx.email)}</div>
-      <div class="task-desc" style="margin-top:10px">No team profile was found for this email in the sheets you can see.</div>`;
+      <div class="task-desc" style="margin-top:10px">No team profile was found for this email in the sheets you can see.</div>${profileSignOutHtml()}`;
     return;
   }
   const dpRow = rows.find(r => r.m.dp) || rows[0];
@@ -4353,7 +4390,8 @@ function renderProfile(){
         <div class="task">${escapeHtml(r.m.task || "-")}</div>
         ${profileDescBlockHtml(r, own)}`}
       </div>`).join("")}
-    ${own ? `<div class="profile-hint">You can change your photo and WhatsApp here. ${allLeader ? "Your name and email are managed in Our Team &rsaquo; Edit." : "Your name, email and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}`;
+    ${own ? `<div class="profile-hint">You can change your photo and WhatsApp here. ${allLeader ? "Your name and email are managed in Our Team &rsaquo; Edit." : "Your name, email and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}
+    ${profileSignOutHtml()}`;
   hydrateMemberPhotos(box);
 }
 
@@ -4423,12 +4461,12 @@ async function sendDescRequest(key, sheetKey, btn){
   try {
     const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, desc: text });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to send the request."); return; }
-    profileReqs[key] = { id: data.id, status: "Pending", desc: text, sheet: sheetKey, note: "", by: "" };
+    profileReqs[key] = { id: data.id, status: data.stage === 2 ? "Awaiting Final" : "Pending", desc: text, sheet: sheetKey, note: "", by: "" };
     profileDescEdit = "";
     renderProfile();
     setProfileStatus(data.emailed ? "ok" : "err", data.emailed
-      ? "Request sent to " + data.emailed + " reviewer" + (data.emailed > 1 ? "s" : "") + ". The description changes after one of them approves."
-      : "Your request was saved, but the email to the reviewers could not be sent. Please tell your Authorized PIC or Section Head.");
+      ? "Request sent to " + data.emailed + (data.stage === 2 ? " Manager" : " Section Head") + (data.emailed > 1 ? "s" : "") + ". " + (data.stage === 2 ? "There is no Section Head in this section, so the Manager gives the final approval." : "After the Section Head approves, it goes to the Manager for the final approval.") + " The description changes only after the final approval."
+      : "Your request was saved, but the email to the reviewers could not be sent. Please tell your Section Head.");
   } catch (err){
     setProfileStatus("err", "Could not reach the server: " + err.message);
   } finally {
@@ -4479,7 +4517,10 @@ document.addEventListener("click", (e) => {
    - Administrator: tombol "Edit Intro" -> aktif/nonaktif, penerima, link spreadsheet, dan isi tiap langkah.
    Format isi langkah (teks biasa):
      baris kosong = paragraf baru | "- teks" = poin | **tebal** | "NOTE: teks" = kotak catatan
-     {{SHEET_LINK}} (di baris sendiri) = tombol Open the Spreadsheet
+     [label](https://alamat) = link | {{SHEET_LINK}} (di baris sendiri) = tombol Open the Spreadsheet
+   Variabel (diisi otomatis sesuai penonton, boleh di judul maupun isi):
+     {{name}} {{email}} {{role}} {{job}} {{date}} {{sheet_url}} {{site_url}}
+   Setiap langkah punya "roles" (siapa yang melihatnya; kosong = semua penerima). Urutan array = urutan tampil.
    ========================================================================= */
 const INTRO_SEEN_PREFIX = "srsc_intro_seen:";
 const INTRO_MAX_STEPS = 8;
@@ -4489,30 +4530,59 @@ let introVersionNow = 1;
 let introPreviewSteps = null;  // dipakai tombol Preview di Edit Intro
 let introStep = 0;
 let introAutoShown = false;
+let introViewer = {};          // data penonton (akun asli): email, name, role, roleKey, job -- diisi renderLoginInfo
+let introPreviewRole = "";     // Preview di Edit Intro: "" = semua langkah, selain itu = tampilkan seperti role itu
 
 const INTRO_DEFAULT_STEPS = [
   { ico: "👋", title: "Welcome to the Scheduling Team site",
-    body: "This site is the one place for our team's links, contacts and tools. As a **Leader**, you can see everything and manage it directly from the page.\n\n- **Our Links** – shortcuts and information for every section.\n- **Our Team** – contact cards of the team.\n- **View Profile** – your own photo and contact details.\n- **Spreadsheet** – the data behind the whole site.\n\nNOTE: This short tour takes about one minute. You can open it again anytime from **Welcome Tour** at the top of the page." },
+    body: "Hello **{{name}}**! This site is the one place for our team's links, contacts and tools. As **{{role}}**, you can use it directly from the page.\n\n- **Our Links** – shortcuts and information for every section.\n- **Our Team** – contact cards of the team.\n- **View Profile** – your own photo and contact details.\n- **Spreadsheet** – the data behind the whole site.\n\nNOTE: This short tour takes about one minute. You can open it again anytime from **Welcome Tour** at the top of the page." },
   { ico: "🔗", title: "Our Links",
     body: "Open **Our Links** on a section to see its menus, grouped by category.\n\n- **Add, edit, delete** a menu, and **reorder** menus and categories.\n- A menu can be a **link**, a set of **images** (shown as a carousel), a written **note** (or a .txt file), or a **document**.\n- You choose who can see each menu, so each person only sees what is meant for them." },
   { ico: "👥", title: "Our Team & Your Profile",
-    body: "**Our Team** shows the contact card of every PIC. Leaders appear in the **Person In Charge** block.\n\n- Use **Edit** on a card to update a team member (within the scope your role allows).\n- **View Profile** lets you change your own photo and WhatsApp number.\n- When a PIC asks to change a task description, it appears under **Requests** for you to approve or decline." },
+    body: "**Our Team** shows the contact card of every PIC. Leaders appear in the **Person In Charge** block.\n\n- Use **Edit** on a card to update a team member (within the scope your role allows).\n- **View Profile** lets you change your own photo and WhatsApp number.\n- When a PIC asks to change a task description, it needs **two approvals**: the **Section Head** reviews first, then the **Manager** gives the final approval (with the Section Head's note). It appears under **Requests** when it is your turn." },
   { ico: "🧭", title: "Roles at a glance",
-    body: "Every account has a **role**. The role decides what you can see and change. The exact rights are in the **Role Policy** sheet, so they can differ from this summary if the sheet was changed.\n\n- **Administrator** – builds and maintains the site. Full access, including this tour.\n- **Senior Manager** – top leadership of the team. Sees everything, can add and edit menus anywhere, and can edit all Our Team cards.\n- **Manager** – leads the team. Sees everything and can add menus anywhere; edits Our Team cards and deletes menus within their own career.\n- **Section Head** – leads one career. Sees everything; adds, deletes and edits within their own career.\n- **Authorized PIC** – a PIC who is set as Editor Menu of a section. Manages the menus of that section.\n- **Registered PIC** – a PIC listed in a team sheet. Can add, edit and delete only their own links.\n- **Binus Support (BSP), Contact Center (CC) and Staff / Other Unit** – view only. They see the information meant for them.\n- **Dosen / Lecturer** – lecturers signing in with an @binus.ac.id email and Lecturer code. View only.\n\nNOTE: The names and emails of the people in each role are on the **Our Team** cards and in the team sheets." },
+    body: "Every account has a **role**. The role decides what you can see and change. The exact rights are in the **Role Policy** sheet, so they can differ from this summary if the sheet was changed.\n\n- **Administrator** – builds and maintains the site. Full access, including this tour.\n- **Senior Manager** – top leadership of the team. Sees everything, can add and edit menus anywhere, and can edit all Our Team cards.\n- **Manager** – leads the team. Sees everything and can add menus anywhere; edits Our Team cards and deletes menus within their own career. Gives the **final approval** of task description changes.\n- **Section Head** – leads one career. Sees everything; adds, deletes and edits within their own career. Gives the **first approval** of task description changes.\n- **Authorized PIC** – a PIC who is set as Editor Menu of a section. Manages the menus of that section. Is **notified by email** about task description requests, but does not approve them.\n- **Registered PIC** – a PIC listed in a team sheet. Can add, edit and delete only their own links.\n- **Binus Support (BSP), Contact Center (CC) and Staff / Other Unit** – view only. They see the information meant for them.\n- **Dosen / Lecturer** – lecturers signing in with an @binus.ac.id email and Lecturer code. View only.\n\nNOTE: The names and emails of the people in each role are on the **Our Team** cards and in the team sheets." },
   { ico: "🔐", title: "Access & Role View",
     body: "What each role can see and do is set in the **Role Policy** sheet.\n\n- Use the **role selector** at the top (if you have it) to **view the site as a lower role**, to check what they see.\n- Some sections use a password. Those passwords are in the Master sheet.\n- Every sign-in and page visit is recorded in the **Logs** sheet." },
   { ico: "📊", title: "Spreadsheet for data adjustment",
     body: "All site data lives in one Google Spreadsheet. Change it there, and the site follows shortly after.\n\n{{SHEET_LINK}}\n\n- **Master** – which sections and careers appear, their status, passwords and menu editors.\n- **Role Policy** – what every role may view, edit or delete.\n- **Team sheets** (one per section) – the PIC list and the Our Team cards.\n- **Logs** – sign-in and activity history.\n\nNOTE: **Please be careful:** keep the column headers and sheet names as they are, and change one thing at a time. If something looks wrong on the site after an edit, undo the edit." }
 ];
 
+// Variabel yang bisa dipakai di judul dan isi langkah. Nilainya milik penonton (akun asli).
+function introVars(){
+  const v = introViewer || {};
+  const email = v.email || "";
+  const fallbackName = email ? email.split("@")[0].replace(/[._-]+/g, " ") : "";
+  return {
+    name: v.name || fallbackName,
+    email: email,
+    role: v.role || "",
+    job: v.job || "",
+    date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+    sheet_url: introSheetUrl || "",
+    site_url: location.origin + location.pathname
+  };
+}
+// Ganti {{variabel}}; variabel yang tidak dikenal dibiarkan apa adanya supaya salah ketik terlihat saat Preview.
+function introSub(text){
+  const vars = introVars();
+  return String(text == null ? "" : text).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (m, k) => {
+    k = k.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(vars, k) ? vars[k] : m;
+  });
+}
+
 function introBodyHtml(text){
-  const inline = (t) => escapeHtml(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  // Link [label](https://...) hanya untuk http/https. Teks sudah di-escape lebih dulu, jadi aman.
+  const inline = (t) => escapeHtml(t)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   let out = "", inList = false;
   const closeList = () => { if (inList){ out += "</ul>"; inList = false; } };
-  String(text || "").replace(/\r/g, "").split("\n").forEach((raw) => {
+  introSub(text).replace(/\r/g, "").split("\n").forEach((raw) => {
     const t = raw.trim();
     if (!t){ closeList(); return; }
-    if (t === "{{SHEET_LINK}}"){
+    if (t.toLowerCase() === "{{sheet_link}}"){
       closeList();
       if (introSheetUrl) out += `<a class="intro-sheet-btn" href="${escapeHtml(introSheetUrl)}" target="_blank" rel="noopener noreferrer">Open the Spreadsheet ↗</a>`;
       return;
@@ -4537,9 +4607,18 @@ function introSeenLocal(email, version){
   } catch (e){ return false; }
 }
 
+// Langkah yang tampil untuk penonton: urutan sesuai pengaturan, difilter menurut "Show this step to".
+// Saat Preview: "" = semua langkah, atau tampilkan seperti role yang dipilih.
+function introStepVisible(st, roleKey){
+  const roles = Array.isArray(st.roles) ? st.roles : [];
+  return !roles.length || (!!roleKey && roles.includes(roleKey));
+}
 function introSteps(){
   const src = introPreviewSteps || (introCustom.length ? introCustom : INTRO_DEFAULT_STEPS);
-  return src.map(s => ({ ico: s.ico || "", title: s.title || "", html: introBodyHtml(s.body) }));
+  const filterAll = !!introPreviewSteps && !introPreviewRole;
+  const role = introPreviewSteps ? introPreviewRole : (introViewer && introViewer.roleKey);
+  return src.filter(st => filterAll || introStepVisible(st, role))
+            .map(st => ({ ico: st.ico || "", title: introSub(st.title || ""), html: introBodyHtml(st.body) }));
 }
 
 function renderLeaderIntro(){
@@ -4555,6 +4634,7 @@ function renderLeaderIntro(){
 }
 
 function openLeaderIntro(){
+  if (!introSteps().length){ alert("There are no intro steps for this role yet."); return; }
   introStep = 0;
   renderLeaderIntro();
   document.getElementById("intro-modal-overlay").classList.add("open");
@@ -4575,7 +4655,7 @@ function markIntroSeen(){
 
 function closeLeaderIntro(){
   document.getElementById("intro-modal-overlay").classList.remove("open");
-  if (introPreviewSteps){ introPreviewSteps = null; return; }   // Preview dari Edit Intro: tidak dicatat sebagai "sudah dilihat"
+  if (introPreviewSteps){ introPreviewSteps = null; introPreviewRole = ""; return; }   // Preview dari Edit Intro: tidak dicatat sebagai "sudah dilihat"
   markIntroSeen();
 }
 
@@ -4583,6 +4663,7 @@ function maybeAutoLeaderIntro(extra){
   if (introAutoShown || !extra || !extra.introAuto) return;
   const email = getRealEmail();
   if (!email || introSeenLocal(email, extra.introVersion)) return;
+  if (!introSteps().length) return;   // tidak ada langkah untuk role ini
   introAutoShown = true;
   setTimeout(openLeaderIntro, 500);
 }
@@ -4629,18 +4710,59 @@ async function openIntroAdmin(){
   }
 }
 
+const IA_ROLES = [
+  ["developer", "Administrator"], ["seniormanager", "Senior Manager"], ["manager", "Manager"],
+  ["sectionhead", "Section Head"], ["authorizedpic", "Authorized PIC"], ["registeredpic", "Registered PIC"]
+];
+const IA_VARS = [
+  ["name", "Name of the person viewing"], ["email", "Their email"], ["role", "Their role"], ["job", "Their job title"],
+  ["date", "Today's date"], ["sheet_url", "Spreadsheet link, as text"], ["site_url", "Link to this site"]
+];
+const IA_FORMATS = [
+  ["New paragraph", "Leave a blank line", "\n\n"],
+  ["Bullet point", "- your point", "\n- "],
+  ["Bold text", "**important**", "**bold**"],
+  ["Note box", "NOTE: your note", "\nNOTE: "],
+  ["Link", "[label](https://...)", "[label](https://...)"],
+  ["Spreadsheet button", "{{SHEET_LINK}} on its own line", "\n{{SHEET_LINK}}\n"]
+];
+let iaLastTa = null;    // kolom teks langkah yang terakhir diklik (tujuan tombol Insert)
+let iaDragFrom = -1;
+
 function renderIntroAdmin(){
   const cfg = introAdmin.cfg;
+  iaLastTa = null;
   const known = new Set(introAdmin.accounts.map(a => a.email));
   const chosen = new Set(cfg.emails || []);
   const others = (cfg.emails || []).filter(e => !known.has(e)).join("\n");
   const accHtml = introAdmin.accounts.map(a =>
     `<label class="ia-acc"><input type="checkbox" data-ia-email="${escapeHtml(a.email)}"${chosen.has(a.email) ? " checked" : ""}> <span>${escapeHtml(a.email)}</span>${a.job ? ` <em>${escapeHtml(a.job)}</em>` : ""}</label>`
   ).join("") || `<p class="ia-hint">No accounts found in the team sheets.</p>`;
+  const vv = introVars();
+  const varChips = IA_VARS.map(v => `<button type="button" class="ia-ins" data-ia-ins="{{${v[0]}}}" title="${escapeHtml(v[1])}${vv[v[0]] ? " — for you: " + escapeHtml(String(vv[v[0]])) : ""}">{{${v[0]}}}</button>`).join("");
+  const varRows = IA_VARS.map(v => `<tr><td><code>{{${v[0]}}}</code></td><td>${escapeHtml(v[1])}</td><td>${vv[v[0]] ? escapeHtml(String(vv[v[0]])) : "<i>(empty for you)</i>"}</td></tr>`).join("");
+  const fmtRows = IA_FORMATS.map(f => `<tr><td>${escapeHtml(f[0])}</td><td><code>${escapeHtml(f[1])}</code></td><td><button type="button" class="ia-ins" data-ia-ins="${escapeHtml(f[2])}">Insert</button></td></tr>`).join("");
+  const guideHtml = `
+    <details class="ia-guide" open>
+      <summary>Writing guide: formatting and variables</summary>
+      <h5>Formatting</h5>
+      <table>${fmtRows}</table>
+      <h5>Variables (filled in automatically for each person)</h5>
+      <p class="ia-hint">Type a variable in a title or text, or click one to insert it where your cursor is. Example: <code>Hello **{{name}}**, you are signed in as {{role}}.</code></p>
+      <div class="ia-vars">${varChips}</div>
+      <table style="margin-top:8px"><tr><td><b>Variable</b></td><td><b>Meaning</b></td><td><b>Your value</b></td></tr>${varRows}</table>
+      <h5>Good to know</h5>
+      <ul class="intro-list" style="margin:0">
+        <li>Click inside a step's text first, then press an Insert button.</li>
+        <li>A variable that is misspelled stays visible as typed. Use <b>Preview</b> to check.</li>
+        <li>Drag a step by the &#8942;&#8942; handle, or use the arrow buttons, to change the order.</li>
+        <li>"Show this step to" only hides the step for other roles. Do not put secrets in a step.</li>
+      </ul>
+    </details>`;
   const stepsHtml = cfg.steps.map((st, i) => `
     <div class="ia-step" data-i="${i}">
       <div class="ia-step-head">
-        <b>Step ${i + 1}</b>
+        <span class="ia-step-title"><span class="ia-grip" draggable="true" title="Drag to reorder" aria-label="Drag to reorder">&#8942;&#8942;</span><b>Step ${i + 1}</b></span>
         <span class="ia-step-btns">
           <button type="button" class="intro-btn" data-ia-act="up" data-i="${i}"${i === 0 ? " disabled" : ""} aria-label="Move up">↑</button>
           <button type="button" class="intro-btn" data-ia-act="down" data-i="${i}"${i === cfg.steps.length - 1 ? " disabled" : ""} aria-label="Move down">↓</button>
@@ -4651,6 +4773,10 @@ function renderIntroAdmin(){
         <input class="ia-ico" type="text" maxlength="8" placeholder="Icon" value="${escapeHtml(st.ico || "")}" aria-label="Icon (emoji)">
         <input class="ia-title" type="text" maxlength="80" placeholder="Title" value="${escapeHtml(st.title || "")}" aria-label="Title">
       </div>
+      <div class="ia-roles"><span class="ia-roles-lbl">Show this step to:</span>
+        ${IA_ROLES.map(r => `<label class="ia-chip"><input type="checkbox" data-ia-role="${r[0]}"${(st.roles || []).includes(r[0]) ? " checked" : ""}> ${escapeHtml(r[1])}</label>`).join("")}
+        <span class="ia-hint" style="margin:0">None checked = everyone who gets the intro</span>
+      </div>
       <textarea class="ia-body" rows="6" maxlength="3000" placeholder="Text of this step" aria-label="Text">${escapeHtml(st.body || "")}</textarea>
     </div>`).join("");
   document.getElementById("intro-admin-body").innerHTML = `
@@ -4660,7 +4786,7 @@ function renderIntroAdmin(){
     <label class="ia-check"><input type="checkbox" id="ia-enabled"${cfg.enabled ? " checked" : ""}> <b>Turn on the popup</b> (shown automatically once to each recipient)</label>
 
     <div class="ia-field">
-      <label for="ia-audience"><b>Who gets it?</b></label>
+      <label for="ia-audience"><b>Who gets the intro?</b></label>
       <select id="ia-audience">${IA_AUDIENCES.map(o => `<option value="${o[0]}"${cfg.audience === o[0] ? " selected" : ""}>${escapeHtml(o[1])}</option>`).join("")}</select>
     </div>
     <div class="ia-field" id="ia-selected-wrap"${cfg.audience === "selected" ? "" : " hidden"}>
@@ -4671,8 +4797,9 @@ function renderIntroAdmin(){
 
     <label class="ia-check"><input type="checkbox" id="ia-showlink"${cfg.showLink ? " checked" : ""}> Include the spreadsheet link for recipients (Administrators always see it)</label>
 
+    ${guideHtml}
+
     <h4 class="ia-h">Steps (maximum ${INTRO_MAX_STEPS})</h4>
-    <p class="ia-hint">Blank line = new paragraph. <code>- text</code> = bullet. <code>**bold**</code> = bold. <code>NOTE: text</code> = note box. <code>{{SHEET_LINK}}</code> on its own line = spreadsheet button.</p>
     <div id="ia-steps">${stepsHtml}</div>
     <div class="ia-row-btns">
       <button type="button" class="intro-btn" data-ia-act="add"${cfg.steps.length >= INTRO_MAX_STEPS ? " disabled" : ""}>+ Add step</button>
@@ -4682,7 +4809,9 @@ function renderIntroAdmin(){
     <label class="ia-check"><input type="checkbox" id="ia-reset"> Show it again to everyone, including people who already saw it</label>
 
     <div class="ia-status" id="ia-status" role="status"></div>
-    <div class="intro-btns ia-foot">
+    <div class="ia-prev ia-foot">
+      <label for="ia-prole" class="ia-hint" style="margin:0">Preview as</label>
+      <select id="ia-prole"><option value="">All steps</option>${IA_ROLES.map(r => `<option value="${r[0]}">${escapeHtml(r[1])}</option>`).join("")}</select>
       <button type="button" class="intro-btn" data-ia-act="preview">Preview</button>
       <button type="button" class="intro-btn primary" data-ia-act="save">Save</button>
     </div>`;
@@ -4695,7 +4824,8 @@ function collectIntroAdmin(){
   const steps = Array.from(document.querySelectorAll("#ia-steps .ia-step")).map(el => ({
     ico: el.querySelector(".ia-ico").value.trim(),
     title: el.querySelector(".ia-title").value.trim(),
-    body: el.querySelector(".ia-body").value
+    body: el.querySelector(".ia-body").value,
+    roles: Array.from(el.querySelectorAll("[data-ia-role]:checked")).map(x => x.getAttribute("data-ia-role"))
   }));
   return {
     enabled: q("ia-enabled").checked,
@@ -4711,6 +4841,17 @@ function introAdminStatus(msg, ok){
   if (!el) return;
   el.textContent = msg || "";
   el.className = "ia-status" + (msg ? (ok ? " ok" : " err") : "");
+}
+
+// Sisipkan teks di posisi kursor pada kolom teks langkah yang terakhir diklik.
+function iaInsert(text){
+  const ta = (iaLastTa && document.body.contains(iaLastTa)) ? iaLastTa : null;
+  if (!ta){ introAdminStatus("Click inside a step's text first, then press the button.", false); return; }
+  const a = ta.selectionStart, b = ta.selectionEnd;
+  ta.value = ta.value.slice(0, a) + text + ta.value.slice(b);
+  const p = a + text.length;
+  ta.focus(); ta.setSelectionRange(p, p);
+  introAdminStatus("", true);
 }
 
 async function saveIntroAdmin(){
@@ -4738,7 +4879,18 @@ async function saveIntroAdmin(){
 
 (function(){
   const body = document.getElementById("intro-admin-body");
+  const moveStep = (from, to) => {
+    const c = collectIntroAdmin();
+    introAdmin.cfg = Object.assign({}, introAdmin.cfg, c);
+    const steps = introAdmin.cfg.steps;
+    if (from < 0 || to < 0 || from >= steps.length || to >= steps.length || from === to) return false;
+    steps.splice(to, 0, steps.splice(from, 1)[0]);
+    return true;
+  };
+  body.addEventListener("focusin", (e) => { if (e.target.classList && e.target.classList.contains("ia-body")) iaLastTa = e.target; });
   body.addEventListener("click", (e) => {
+    const ins = e.target.closest("[data-ia-ins]");
+    if (ins){ iaInsert(ins.getAttribute("data-ia-ins")); return; }
     const b = e.target.closest("[data-ia-act]");
     if (!b || b.disabled) return;
     const act = b.getAttribute("data-ia-act");
@@ -4749,17 +4901,19 @@ async function saveIntroAdmin(){
       const valid = c.steps.filter(s => s.title || s.body.trim());
       if (!valid.length){ introAdminStatus("Add at least one step to preview.", false); return; }
       introPreviewSteps = valid;
+      introPreviewRole = (document.getElementById("ia-prole") || {}).value || "";
+      if (!introSteps().length){ introPreviewSteps = null; introPreviewRole = ""; introAdminStatus("No step is shown to that role.", false); return; }
       openLeaderIntro();
       return;
     }
     // Aksi di bawah mengubah daftar langkah: simpan dulu isian saat ini, ubah, lalu tampilkan ulang.
+    if (act === "up"){ if (moveStep(i, i - 1)) renderIntroAdmin(); return; }
+    if (act === "down"){ if (moveStep(i, i + 1)) renderIntroAdmin(); return; }
     const c = collectIntroAdmin();
     introAdmin.cfg = Object.assign({}, introAdmin.cfg, c);
     const steps = introAdmin.cfg.steps;
-    if (act === "up" && i > 0) steps.splice(i - 1, 0, steps.splice(i, 1)[0]);
-    else if (act === "down" && i < steps.length - 1) steps.splice(i + 1, 0, steps.splice(i, 1)[0]);
-    else if (act === "del"){ if (steps.length > 1) steps.splice(i, 1); }
-    else if (act === "add" && steps.length < INTRO_MAX_STEPS) steps.push({ ico: "", title: "", body: "" });
+    if (act === "del"){ if (steps.length > 1) steps.splice(i, 1); }
+    else if (act === "add" && steps.length < INTRO_MAX_STEPS) steps.push({ ico: "", title: "", body: "", roles: [] });
     else if (act === "reset"){
       if (!confirm("Replace all steps with the default text? Your current text will be lost.")) return;
       introAdmin.cfg.steps = INTRO_DEFAULT_STEPS.map(x => Object.assign({}, x));
@@ -4770,6 +4924,36 @@ async function saveIntroAdmin(){
     if (e.target.id === "ia-audience"){
       document.getElementById("ia-selected-wrap").hidden = e.target.value !== "selected";
     }
+  });
+  // Seret-dan-lepas untuk mengatur urutan langkah (tombol panah tetap tersedia, mis. di layar sentuh).
+  body.addEventListener("dragstart", (e) => {
+    const grip = e.target.closest && e.target.closest(".ia-grip");
+    if (!grip) return;
+    const card = grip.closest(".ia-step");
+    iaDragFrom = Number(card.getAttribute("data-i"));
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", String(iaDragFrom)); e.dataTransfer.setDragImage(card, 20, 20); } catch (err){}
+    card.classList.add("dragging");
+  });
+  body.addEventListener("dragover", (e) => {
+    const card = e.target.closest && e.target.closest(".ia-step");
+    if (!card || iaDragFrom < 0) return;
+    e.preventDefault();
+    body.querySelectorAll(".ia-step.drop").forEach(x => { if (x !== card) x.classList.remove("drop"); });
+    card.classList.add("drop");
+  });
+  body.addEventListener("drop", (e) => {
+    const card = e.target.closest && e.target.closest(".ia-step");
+    if (!card || iaDragFrom < 0) return;
+    e.preventDefault();
+    const to = Number(card.getAttribute("data-i"));
+    const from = iaDragFrom;
+    iaDragFrom = -1;
+    if (moveStep(from, to)) renderIntroAdmin();
+  });
+  body.addEventListener("dragend", () => {
+    iaDragFrom = -1;
+    body.querySelectorAll(".ia-step.dragging, .ia-step.drop").forEach(x => x.classList.remove("dragging", "drop"));
   });
   document.getElementById("intro-admin-close").addEventListener("click", closeIntroAdmin);
   document.getElementById("intro-admin-overlay").addEventListener("click", (e) => {
@@ -4909,7 +5093,7 @@ async function refreshReviewRequests(){
   try {
     const d = await picApi({ action: "listReviewRequests", actor: email });
     if (!d || !d.ok) return;
-    const sig = (arr) => arr.map(x => x.id).join("|");
+    const sig = (arr) => arr.map(x => x.id + ":" + (x.stage || 1)).join("|");
     const changed = sig(d.requests || []) !== sig(reviewReqs);
     reviewReqs = d.requests || [];
     if (changed){
@@ -4938,7 +5122,7 @@ function renderReviewModal(){
   if (!box) return;
   const items = reviewReqs.map(q => `
     <div class="review-item" data-review-id="${escapeHtml(q.id)}">
-      <div class="profile-sec">${escapeHtml(q.sheet)}</div>
+      <div class="profile-sec">${escapeHtml(q.sheet)} &middot; ${q.stage === 2 ? "Step 2 of 2: final approval" : "Step 1 of 2: Section Head review"}</div>
       <div class="who">${escapeHtml(q.name || q.email)} <a href="mailto:${encodeURIComponent(q.email)}">${escapeHtml(q.email)}</a></div>
       <div class="profile-lbl" style="margin-top:10px">Task</div>
       <div class="txt">${escapeHtml(q.task || "-")}</div>
@@ -4946,9 +5130,11 @@ function renderReviewModal(){
       <div class="txt">${escapeHtml(q.cur || "-")}</div>
       <div class="profile-lbl">Proposed description</div>
       <div class="txt new">${escapeHtml(q.desc)}</div>
-      <input type="text" maxlength="300" placeholder="Note to the requester (optional)" data-review-note aria-label="Note to the requester">
+      ${q.stage === 2 ? `<div class="profile-lbl">Approved by Section Head${q.shBy ? ": " + escapeHtml(q.shBy) : ""}</div>
+      <div class="txt">${escapeHtml(q.shNote || "(no note)")}</div>` : ""}
+      <input type="text" maxlength="300" placeholder="${q.stage === 2 ? "Note to the requester (optional)" : "Your note (shown to the Manager and the requester)"}" data-review-note aria-label="Note">
       <div class="review-actions">
-        <button type="button" class="pic-btn primary" data-review-act="approve" data-id="${escapeHtml(q.id)}">Approve</button>
+        <button type="button" class="pic-btn primary" data-review-act="approve" data-id="${escapeHtml(q.id)}">${q.stage === 2 ? "Final approve" : "Approve and send to Manager"}</button>
         <button type="button" class="pic-btn reject" data-review-act="reject" data-id="${escapeHtml(q.id)}">Reject</button>
       </div>
     </div>`).join("");
@@ -5065,13 +5251,20 @@ function renderLoginInfo(opts){
       }
     }
   }
+  // Urutan tombol di login card: ... Welcome Tour > Edit Intro > Requests > View Profile (paling akhir).
+  // Tombol Sign out dipindahkan ke dalam View Profile.
+  const hasProfile = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole);
   // View Profile: untuk akun berperan PIC / pimpinan (yang bisa terdaftar di sheet tim). Saat Administrator memakai
   // "As PIC", profil yang tampil adalah milik PIC itu (hanya lihat); foto hanya bisa diubah oleh pemiliknya sendiri.
-  profileCtx = { email: String(opts.asPic || saved.email || "").trim(), own: !opts.asPic };
-  if (["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole)){
-    parts.push(`<button type="button" class="acct-link" id="acct-profile">View Profile</button>`);
-  }
-  // Welcome Tour: Leader (dan Administrator) bisa membuka ulang popup intro kapan saja.
+  profileCtx = { email: String(opts.asPic || saved.email || "").trim(), own: !opts.asPic, canSignOut: !!opts.canSignOut && hasProfile, signOutEmail: saved.email };
+
+  // Data penonton untuk variabel di teks intro ({{name}}, {{role}}, dst.): selalu akun asli, bukan simulasi.
+  let vName = "";
+  try { const rr = profileRowsFor(saved.email); const f = rr.find(r => r.m && r.m.pic); vName = f ? String(f.m.pic).trim() : ""; } catch (e){}
+  const realRoleText = (opts.realRole && ["seniormanager", "manager", "sectionhead"].includes(opts.realRole) && opts.title) ? opts.title : (ROLE_LABELS[ownRole] || "");
+  introViewer = { email: String(saved.email || ""), name: vName, role: realRoleText, roleKey: ownRole, job: opts.job || "" };
+
+  // Welcome Tour: penerima intro (dan Administrator) bisa membuka ulang popup intro kapan saja.
   if (opts.introTour && !opts.asPic){
     parts.push(`<button type="button" class="acct-link" id="acct-intro">Welcome Tour</button>`);
   }
@@ -5079,11 +5272,14 @@ function renderLoginInfo(opts){
   if (opts.introAdmin){
     parts.push(`<button type="button" class="acct-link" id="acct-intro-admin">Edit Intro</button>`);
   }
-  // Notifikasi pengajuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
+  // Notifikasi persetujuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
   lastLoginOpts = opts;
   if (reviewReqs.length && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests<span class="notif-badge" id="acct-review-n">${reviewReqs.length > 99 ? "99+" : reviewReqs.length}</span></button>`);
-  // Tombol Sign out mengikuti kolom "Sign Out Button" di Role Policy.
-  if (opts.canSignOut) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
+  if (hasProfile){
+    parts.push(`<button type="button" class="acct-link" id="acct-profile">View Profile</button>`);
+  }
+  // Role tanpa View Profile tetapi Role Policy mengizinkan Sign Out: tombolnya tetap di bar (tidak hilang).
+  if (opts.canSignOut && !hasProfile) parts.push(`<button type="button" class="acct-out" id="acct-signout">Sign out</button>`);
 
   box.className = "acct-bar show";
   box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
@@ -5143,19 +5339,25 @@ function renderLoginInfo(opts){
   if (introAdminBtn) introAdminBtn.addEventListener("click", () => openIntroAdmin());
 
   const outBtn = document.getElementById("acct-signout");
-  if (outBtn) outBtn.addEventListener("click", () => {
-    if (!confirm("Sign out from " + saved.email + "?")) return;
-    try {
-      localStorage.removeItem(LOGIN_STORAGE_KEY);
-      localStorage.removeItem(DATA_CACHE_KEY);
-      localStorage.removeItem(VIEW_AS_KEY);
-      localStorage.removeItem(SIM_CAREER_KEY);
-      localStorage.removeItem(SIM_SEC_KEY);
-      localStorage.removeItem(SIM_PIC_KEY);
-    } catch (e){}
-    location.reload();
-  });
+  if (outBtn) outBtn.addEventListener("click", () => signOutNow(saved.email));
 }
+
+// Sign out (dipakai tombol di View Profile, dan tombol di bar untuk role tanpa View Profile).
+function signOutNow(email){
+  if (!confirm("Sign out from " + email + "?")) return;
+  try {
+    localStorage.removeItem(LOGIN_STORAGE_KEY);
+    localStorage.removeItem(DATA_CACHE_KEY);
+    localStorage.removeItem(VIEW_AS_KEY);
+    localStorage.removeItem(SIM_CAREER_KEY);
+    localStorage.removeItem(SIM_SEC_KEY);
+    localStorage.removeItem(SIM_PIC_KEY);
+  } catch (e){}
+  location.reload();
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest && e.target.closest("#profile-signout")) signOutNow(profileCtx.signOutEmail || "");
+});
 
 // Bentuk data pendamping dari server (link, Role Policy, hak per sheet).
 function extraFromServer(d){

@@ -5989,9 +5989,72 @@ function getDeviceId(){
   } catch (e){ return ""; }
 }
 
+/* =========================================================================
+   LOKASI PENGAKSES (untuk sheet Logs kolom Location dan IP Address)
+   Browser menanyakan PERKIRAAN lokasi (kota, wilayah, negara) dan IP ke layanan geolokasi IP publik,
+   lalu mengirimnya bersama log sign in / aktivitas. Ini BUKAN GPS dan tidak meminta izin lokasi.
+   - Hasil disimpan di browser 6 jam (gagal: dicoba lagi setelah 10 menit), jadi layanan tidak dipanggil terus-menerus.
+   - Beberapa layanan dicoba bergantian; jika semuanya gagal (mis. diblokir jaringan), kolom dibiarkan kosong.
+   - LOG_LOCATION_ENABLED = false mematikan fitur ini sepenuhnya di sisi website.
+   ========================================================================= */
+const LOG_LOCATION_ENABLED = true;
+const Geo = (function(){
+  const KEY = "srsc_geo_v1", TTL_OK = 6 * 60 * 60 * 1000, TTL_FAIL = 10 * 60 * 1000;
+  let mem = null, pending = null;
+  const clean = (v) => String(v == null ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 120);
+  const join = (a) => a.map(clean).filter(Boolean).join(", ");
+  const SOURCES = [
+    { url: "https://ipwho.is/",
+      parse: (d) => (d && d.success !== false && d.ip) ? { ip: d.ip, loc: join([d.city, d.region, d.country]) } : null },
+    { url: "https://ipapi.co/json/",
+      parse: (d) => (d && d.ip && !d.error) ? { ip: d.ip, loc: join([d.city, d.region, d.country_name]) } : null },
+    { url: "https://get.geojs.io/v1/ip/geo.json",
+      parse: (d) => (d && d.ip) ? { ip: d.ip, loc: join([d.city, d.region, d.country]) } : null }
+  ];
+  function read(){
+    if (mem && mem.exp > Date.now()) return mem;
+    try {
+      const o = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (o && o.exp > Date.now()){ mem = o; return mem; }
+    } catch (e){}
+    return null;
+  }
+  function save(o){ mem = o; try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e){} }
+  async function fetchOne(src){
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const r = await fetch(src.url, { signal: ctrl.signal, cache: "no-store" });
+      if (!r.ok) return null;
+      return src.parse(await r.json());
+    } catch (e){ return null; }
+    finally { clearTimeout(timer); }
+  }
+  function ensure(){
+    if (!LOG_LOCATION_ENABLED) return Promise.resolve(null);
+    const c = read();
+    if (c) return Promise.resolve(c.ok ? c : null);
+    if (pending) return pending;
+    pending = (async () => {
+      for (const src of SOURCES){
+        const g = await fetchOne(src);
+        if (g && g.ip){
+          const o = { ok: true, ip: clean(g.ip), loc: g.loc || "Unknown", exp: Date.now() + TTL_OK };
+          save(o);
+          return o;
+        }
+      }
+      save({ ok: false, exp: Date.now() + TTL_FAIL });
+      return null;
+    })().finally(() => { pending = null; });
+    return pending;
+  }
+  return { ensure: ensure, cached: () => { const c = read(); return (c && c.ok) ? c : null; } };
+})();
+
 function logSignIn(email, status, extra, keterangan){
   if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")) return;
-  fetch(LOG_WEBAPP_URL, {
+  const send = (g) => fetch(LOG_WEBAPP_URL, {
     method: "POST",
     mode: "no-cors", // Apps Script Web App tidak mengizinkan fetch biasa
                       // dibaca balik hasilnya dari domain lain (CORS). Mode
@@ -6002,8 +6065,12 @@ function logSignIn(email, status, extra, keterangan){
     // "status" sengaja dibuat SINGKAT ("Berhasil"/"Auto-login"/"Ditolak")
     // supaya Kolom C di sheet rapi -- penjelasan detailnya (kalau ada)
     // dikirim terpisah lewat "keterangan", ditulis ke Kolom E.
-    body: JSON.stringify({ email: email, status: status || "Berhasil", extra: extra || "", keterangan: keterangan || "", device: getDeviceId() })
+    // loc / ip -> Kolom L (Location) dan M (IP Address); kosong bila lokasi tidak tersedia.
+    body: JSON.stringify({ email: email, status: status || "Berhasil", extra: extra || "", keterangan: keterangan || "", device: getDeviceId(),
+                           loc: g ? g.loc : "", ip: g ? g.ip : "" })
   }).catch(() => { /* diamkan saja kalau gagal, jangan ganggu proses login */ });
+  // Tunggu lokasi paling lama 3 detik; lewat itu log tetap dikirim tanpa lokasi (proses login tidak pernah ikut menunggu).
+  Promise.race([Geo.ensure(), new Promise(r => setTimeout(() => r(null), 3000))]).then(send, () => send(null));
 }
 
 
@@ -6068,12 +6135,14 @@ const Activity = (function(){
     if (!queue.length) return;
     if (!LOG_WEBAPP_URL || LOG_WEBAPP_URL.includes("PASTE_URL")){ queue.length = 0; return; }
     const email = emailNow();
+    const geo = Geo.cached();   // lokasi perkiraan (sudah dicari sejak halaman dibuka); kosong bila belum / gagal
     while (queue.length){
       const batch = queue.splice(0, 50);
       fetch(LOG_WEBAPP_URL, {
         method: "POST", mode: "no-cors", keepalive: true,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "activity", email: email, device: getDeviceId(), session: sid, events: batch })
+        body: JSON.stringify({ action: "activity", email: email, device: getDeviceId(), session: sid, events: batch,
+                               loc: geo ? geo.loc : "", ip: geo ? geo.ip : "" })
       }).catch(() => {});
     }
   }
@@ -6123,6 +6192,7 @@ const Activity = (function(){
     if (started) return;
     started = true;
     emailNow();   // catat email akun ini sekarang, sebelum ada kemungkinan Sign out menghapus data login
+    Geo.ensure();   // cari perkiraan lokasi lebih awal supaya siap saat log pertama dikirim
     stack.push({ page: "", acc: 0, since: isVisible() ? Date.now() : null });
     totalSince = isVisible() ? Date.now() : null;
 

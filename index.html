@@ -1158,6 +1158,26 @@
   #intro-admin-overlay .ia-prev{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
   #intro-admin-overlay .ia-prev select{ width:auto; }
   #intro-modal-overlay .intro-lead a, #intro-modal-overlay .intro-list a{ color:var(--primary); text-decoration:underline; }
+
+  /* ===== Task Partners ===== */
+  #partner-modal-overlay .modal{ margin:auto; max-width:620px; text-align:left; }
+  #partner-modal-overlay .pt-sub{ font-size:13.5px; line-height:1.55; margin:0 0 14px; }
+  #partner-modal-overlay .pt-list{ max-height:260px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; margin:6px 0 16px; }
+  #partner-modal-overlay .pt-row{ padding:9px 12px; border-top:1px solid var(--line); font-size:13.5px; line-height:1.45; }
+  #partner-modal-overlay .pt-row:first-child{ border-top:0; }
+  #partner-modal-overlay .pt-name{ font-weight:600; }
+  #partner-modal-overlay .pt-meta{ font-size:12.5px; opacity:.8; word-break:break-all; }
+  #partner-modal-overlay .pt-empty{ padding:14px; font-size:13.5px; opacity:.8; }
+  #partner-modal-overlay h4{ margin:4px 0 8px; font-size:15px; }
+  #partner-modal-overlay .pt-form{ display:grid; gap:8px; }
+  #partner-modal-overlay .pt-form input{ width:100%; box-sizing:border-box; font:inherit; font-size:14px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
+  #partner-modal-overlay .pt-actions{ display:flex; justify-content:flex-end; margin-top:4px; }
+  #partner-modal-overlay .pt-btn{ font:inherit; font-size:14px; padding:9px 18px; border-radius:8px; cursor:pointer; border:1px solid var(--primary); background:var(--primary); color:#fff; font-weight:600; }
+  #partner-modal-overlay .pt-btn[disabled]{ opacity:.5; cursor:default; }
+  #partner-modal-overlay .pt-status{ min-height:20px; font-size:13.5px; margin-top:8px; }
+  #partner-modal-overlay .pt-status.ok{ color:#1b7a3d; }
+  #partner-modal-overlay .pt-status.err{ color:#b3261e; }
+  #partner-modal-overlay .pt-note{ margin-top:14px; padding:10px 12px; border-radius:8px; font-size:13px; line-height:1.5; background:var(--surface-soft); border:1px solid var(--line); }
 </style>
 
 <!--[if gte mso 9]><xml>
@@ -1300,6 +1320,13 @@
   <div class="modal member-modal">
     <button class="modal-close" id="profile-modal-close" type="button">Tutup ✕</button>
     <div class="member-card" id="profile-card-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="partner-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="partner-title">
+  <div class="modal">
+    <button class="modal-close" id="partner-modal-close" type="button">Close ✕</button>
+    <div id="partner-body"></div>
   </div>
 </div>
 
@@ -2119,7 +2146,8 @@ function mapServerLinks(arr){
     ogScope: l.ogScope || "legacy",             // kolom "On-Going Other PIC Visibility Status": none / only / section / career / legacy
     onGoing: l.onGoing !== false,               // false = link On Going yang tidak ditujukan untuk pengguna ini (hanya untuk pengelola)
     ownerSheet: l.owner || "",                  // sheet pemilik (beda dengan section ini = link dari sheet lain)
-    onlyFor: Array.isArray(l.onlyFor) ? l.onlyFor : []   // kolom "Only Shown Menu as" (email PIC)
+    onlyFor: Array.isArray(l.onlyFor) ? l.onlyFor : [],  // kolom "Only Shown Menu as" (email PIC)
+    partnerShare: !!l.partnerShare                       // kolom "Share with Partner" = Yes (tampil juga untuk Task Partner PIC)
   })).filter(l => l.url);
 }
 
@@ -2244,6 +2272,7 @@ function visibilityLabel(l){
     t += " | On Going ended " + fmtStamp(l.expiresOn, true) + " (now a normal link)";
   }
   if (l.onlyFor && l.onlyFor.length) t += " | Only shown to: " + l.onlyFor.join(", ");
+  if (l.partnerShare) t += " | Also shown to Task Partner(s)";
   return t;
 }
 
@@ -2347,6 +2376,16 @@ function onlyShownSelectHtml(idx, link){
       <option value=""${!multi && !sel ? " selected" : ""}>Shown to everyone who can see this menu</option>
       ${multi ? `<option value="__keep__" selected>Keep current (${cur.length} PICs)</option>` : ""}
       ${pics.map(e => `<option value="${escapeHtml(e)}"${sel === e ? " selected" : ""}>Only shown to: ${escapeHtml(e)}</option>`).join("")}
+    </select>`;
+}
+
+// Pilihan "Share with Task Partner": Yes = menu juga tampil untuk Task Partner PIC yang dituju
+// (PIC di "Only shown to"; kalau kosong = Task Partner semua PIC di section ini). Berlaku untuk menu Normal maupun On Going.
+function partnerShareSelectHtml(link, own){
+  const on = !!(link && link.partnerShare);
+  return `<select id="pic-f-share" aria-label="Share with Task Partner">
+      <option value=""${on ? "" : " selected"}>Task Partner: not shared</option>
+      <option value="Yes"${on ? " selected" : ""}>${own ? "Task Partner: also show to my Task Partner(s)" : "Task Partner: also show to the Task Partner(s) of the PIC (the one in \"Only shown to\", or every PIC of this section)"}</option>
     </select>`;
 }
 
@@ -2484,6 +2523,7 @@ function picOwnFormHtml(formId, link, submitLabel){
         <option value="PIC Only"${pic ? " selected" : ""}>On Going (shown on the page, only to me)</option>
       </select>
       ${ogScheduleHtml(link)}
+      ${partnerShareSelectHtml(link, true)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
         <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
@@ -3349,6 +3389,7 @@ function picFormHtml(idx, formId, link, submitLabel){
       ${ogScopeSelectHtml(link)}
       ${ogScheduleHtml(link)}
       ${onlyShownSelectHtml(idx, link)}
+      ${partnerShareSelectHtml(link, false)}
       <div class="pic-actions">
         <button type="button" class="pic-btn" data-pic-mode="view">Cancel</button>
         <button type="submit" class="pic-btn primary" id="pic-submit">${submitLabel}</button>
@@ -3684,6 +3725,7 @@ function readPicForm(){
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
   const status = document.getElementById("pic-f-status") ? document.getElementById("pic-f-status").value : "";
   const only = document.getElementById("pic-f-only") ? document.getElementById("pic-f-only").value : "";
+  const share = document.getElementById("pic-f-share") ? document.getElementById("pic-f-share").value : "";
   let og = document.getElementById("pic-f-ogscope") ? document.getElementById("pic-f-ogscope").value : "None";
   // Jadwal On Going: ogStart "" = sekarang | "yyyy-MM-dd HH:mm" | "__keep__"; ogDur "never" | 1..60 | "__keep__" + ogUnit
   let ogStart = "__keep__", ogDur = "never", ogUnit = "day";
@@ -3715,9 +3757,9 @@ function readPicForm(){
   if (isQr && url.length > 300){ setPicStatus("err", "The link is too long for a QR code (max 300 characters)."); return null; }
   if (picOwnCreate){   // link pribadi: server memaksa isian lain; tampilan lokal mengikuti
     const me = getCurrentUserEmail();
-    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None", ogStart: status === "PIC Only" ? ogStart : "", ogDur: status === "PIC Only" ? ogDur : "never", ogUnit };
+    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None", ogStart: status === "PIC Only" ? ogStart : "", ogDur: status === "PIC Only" ? ogDur : "never", ogUnit, share };
   }
-  return { name, url: isQr ? "qr://" + url : url, desc, vis, staff, cat, status, only, og, ogStart, ogDur, ogUnit, images: isImg, notes: isNote, doc: isDoc, qr: isQr };
+  return { name, url: isQr ? "qr://" + url : url, desc, vis, staff, cat, status, only, share, og, ogStart, ogDur, ogUnit, images: isImg, notes: isNote, doc: isDoc, qr: isQr };
 }
 
 async function addPicLink(){
@@ -3736,7 +3778,7 @@ async function addPicLink(){
     else if (f.doc){ f.url = await resolveDocUrl(meta); }
     const data = await picApi({
       action: "addLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
-      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, ogStart: f.ogStart, ogDur: f.ogDur, ogUnit: f.ogUnit, onlyFor: f.only
+      sheet: meta.sheetKey, name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, ogStart: f.ogStart, ogDur: f.ogDur, ogUnit: f.ogUnit, onlyFor: f.only, sharePartner: f.share
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to add menu.");
@@ -3746,7 +3788,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: displayUrlFor(f.url), gallery: galleryIdsOf(f.url), note: noteIdOf(f.url), doc: docPartsOf(f.url), qr: qrUrlOf(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status && !addSc.scheduled, pinMode: addSc.scheduled ? "" : (({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || ""), pinModeStored: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only" && !addSc.scheduled, expiresOn: addSc.end, startsOn: addSc.start, ogScheduled: addSc.scheduled, ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : []
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status && !addSc.scheduled, pinMode: addSc.scheduled ? "" : (({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || ""), pinModeStored: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only" && !addSc.scheduled, expiresOn: addSc.end, startsOn: addSc.start, ogScheduled: addSc.scheduled, ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : [], partnerShare: f.share === "Yes"
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -3778,7 +3820,7 @@ async function editPicLink(){
     const data = await picApi({
       action: "editLink", actor: getRealEmail(), asPic: viewPerms.asPic || "", viewAs: viewPerms.viewAs || "", simCareer: viewPerms.simCareer || "", simSec: viewPerms.simSec || "",
       sheet: meta.sheetKey, oldName: link.rawName, oldUrl: link.rawUrl,
-      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, ogStart: f.ogStart, ogDur: f.ogDur, ogUnit: f.ogUnit, onlyFor: f.only
+      name: f.name, url: f.url, desc: f.desc, visible: f.vis, staff: f.staff, category: f.cat, linkStatus: f.status, ogScope: f.og, ogStart: f.ogStart, ogDur: f.ogDur, ogUnit: f.ogUnit, onlyFor: f.only, sharePartner: f.share
     });
     if (!data || !data.ok){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
@@ -3796,6 +3838,7 @@ async function editPicLink(){
       link.picOnly = newMode === "pic" && !editSc.scheduled;
       link.ogScope = ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none";
       link.onGoing = true;
+      link.partnerShare = f.share === "Yes";
       link.expiresOn = editSc.end;
       link.startsOn = editSc.start;
       link.ogScheduled = editSc.scheduled;
@@ -4173,7 +4216,7 @@ function resolveViewerVisibility(ctx){
 // (email · peran · unit/ID · Sign out). Sengaja dibuat tidak mencolok.
 const ROLE_LABELS = {
   developer: "Administrator", seniormanager: "Senior Manager", manager: "Manager", sectionhead: "Section Head",
-  authorizedpic: "Authorized PIC", registeredpic: "Registered PIC",
+  authorizedpic: "Authorized PIC", registeredpic: "Registered PIC", taskpartner: "Task Partner",
   bsp: "Staff", cc: "Staff", staff: "Staff", dosen: "Lecturer"
 };
 const VIEW_AS_KEY = "srsc_view_as";   // "" | kunci role di ROLE_ORDER  (Role Switch)
@@ -4182,7 +4225,7 @@ const SIM_CAREER_KEY = "srsc_sim_career";   // KHUSUS Administrator: career yang
 
 // Urutan role dari yang tertinggi ke terendah. Role Switch menawarkan role DI BAWAH role sendiri:
 // Administrator -> Senior Manager ... Lecturer; Manager -> Section Head ... Lecturer; dst.
-const ROLE_ORDER = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic", "bsp", "cc", "staff", "dosen"];
+const ROLE_ORDER = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic", "taskpartner", "bsp", "cc", "staff", "dosen"];
 const SWITCH_LABELS = Object.assign({}, ROLE_LABELS, { bsp: "Binus Support", cc: "Contact Center" });   // di daftar pilihan, BSP disebut jelas
 function rolesBelow(role){
   const i = ROLE_ORDER.indexOf(role);
@@ -4223,7 +4266,8 @@ const SIM_CAP = {
   manager:       { career: true, section: false, pic: false },
   sectionhead:   { career: true, section: true,  pic: false },
   authorizedpic: { career: true, section: true,  pic: false },
-  registeredpic: { career: true, section: true,  pic: true  }
+  registeredpic: { career: true, section: true,  pic: true  },
+  taskpartner:   { career: true, section: true,  pic: true  }   // "As PIC" menampilkan daftar email Task Partner juga
 };
 const SIM_CAP_NONE = { career: false, section: false, pic: false };
 function simCapFor(viewAs){ return SIM_CAP[viewAs || ""] || SIM_CAP_NONE; }
@@ -4537,11 +4581,11 @@ const INTRO_DEFAULT_STEPS = [
   { ico: "👋", title: "Welcome to the Scheduling Team site",
     body: "Hello **{{name}}**! This site is the one place for our team's links, contacts and tools. As **{{role}}**, you can use it directly from the page.\n\n- **Our Links** – shortcuts and information for every section.\n- **Our Team** – contact cards of the team.\n- **View Profile** – your own photo and contact details.\n- **Spreadsheet** – the data behind the whole site.\n\nNOTE: This short tour takes about one minute. You can open it again anytime from **Welcome Tour** at the top of the page." },
   { ico: "🔗", title: "Our Links",
-    body: "Open **Our Links** on a section to see its menus, grouped by category.\n\n- **Add, edit, delete** a menu, and **reorder** menus and categories.\n- A menu can be a **link**, a set of **images** (shown as a carousel), a written **note** (or a .txt file), or a **document**.\n- You choose who can see each menu, so each person only sees what is meant for them." },
+    body: "Open **Our Links** on a section to see its menus, grouped by category.\n\n- **Add, edit, delete** a menu, and **reorder** menus and categories.\n- A menu can be a **link**, a set of **images** (shown as a carousel), a written **note** (or a .txt file), or a **document**.\n- You choose who can see each menu, so each person only sees what is meant for them.\n- **Share with Task Partner** lets the Task Partner(s) of a PIC see a menu too, whether it is a normal or an On Going menu." },
   { ico: "👥", title: "Our Team & Your Profile",
     body: "**Our Team** shows the contact card of every PIC. Leaders appear in the **Person In Charge** block.\n\n- Use **Edit** on a card to update a team member (within the scope your role allows).\n- **View Profile** lets you change your own photo and WhatsApp number.\n- When a PIC asks to change a task description, it needs **two approvals**: the **Section Head** reviews first, then the **Manager** gives the final approval (with the Section Head's note). It appears under **Requests** when it is your turn." },
   { ico: "🧭", title: "Roles at a glance",
-    body: "Every account has a **role**. The role decides what you can see and change. The exact rights are in the **Role Policy** sheet, so they can differ from this summary if the sheet was changed.\n\n- **Administrator** – builds and maintains the site. Full access, including this tour.\n- **Senior Manager** – top leadership of the team. Sees everything, can add and edit menus anywhere, and can edit all Our Team cards.\n- **Manager** – leads the team. Sees everything and can add menus anywhere; edits Our Team cards and deletes menus within their own career. Gives the **final approval** of task description changes.\n- **Section Head** – leads one career. Sees everything; adds, deletes and edits within their own career. Gives the **first approval** of task description changes.\n- **Authorized PIC** – a PIC who is set as Editor Menu of a section. Manages the menus of that section. Is **notified by email** about task description requests, but does not approve them.\n- **Registered PIC** – a PIC listed in a team sheet. Can add, edit and delete only their own links.\n- **Binus Support (BSP), Contact Center (CC) and Staff / Other Unit** – view only. They see the information meant for them.\n- **Dosen / Lecturer** – lecturers signing in with an @binus.ac.id email and Lecturer code. View only.\n\nNOTE: The names and emails of the people in each role are on the **Our Team** cards and in the team sheets." },
+    body: "Every account has a **role**. The role decides what you can see and change. The exact rights are in the **Role Policy** sheet, so they can differ from this summary if the sheet was changed.\n\n- **Administrator** – builds and maintains the site. Full access, including this tour.\n- **Senior Manager** – top leadership of the team. Sees everything, can add and edit menus anywhere, and can edit all Our Team cards.\n- **Manager** – leads the team. Sees everything and can add menus anywhere; edits Our Team cards and deletes menus within their own career. Gives the **final approval** of task description changes.\n- **Section Head** – leads one career. Sees everything; adds, deletes and edits within their own career. Gives the **first approval** of task description changes.\n- **Authorized PIC** – a PIC who is set as Editor Menu of a section. Manages the menus of that section. Is **notified by email** about task description requests, but does not approve them.\n- **Registered PIC** – a PIC listed in a team sheet. Can add, edit and delete only their own links.\n- **Task Partner** – supports a PIC with their main task. Sees the menus that PIC shares with partners. Authorized PICs and Leaders add Task Partners from **Task Partners** at the top of the page.\n- **Binus Support (BSP), Contact Center (CC) and Staff / Other Unit** – view only. They see the information meant for them.\n- **Dosen / Lecturer** – lecturers signing in with an @binus.ac.id email and Lecturer code. View only.\n\nNOTE: The names and emails of the people in each role are on the **Our Team** cards and in the team sheets." },
   { ico: "🔐", title: "Access & Role View",
     body: "What each role can see and do is set in the **Role Policy** sheet.\n\n- Use the **role selector** at the top (if you have it) to **view the site as a lower role**, to check what they see.\n- Some sections use a password. Those passwords are in the Master sheet.\n- Every sign-in and page visit is recorded in the **Logs** sheet." },
   { ico: "📊", title: "Spreadsheet for data adjustment",
@@ -4712,7 +4756,7 @@ async function openIntroAdmin(){
 
 const IA_ROLES = [
   ["developer", "Administrator"], ["seniormanager", "Senior Manager"], ["manager", "Manager"],
-  ["sectionhead", "Section Head"], ["authorizedpic", "Authorized PIC"], ["registeredpic", "Registered PIC"]
+  ["sectionhead", "Section Head"], ["authorizedpic", "Authorized PIC"], ["registeredpic", "Registered PIC"], ["taskpartner", "Task Partner"]
 ];
 const IA_VARS = [
   ["name", "Name of the person viewing"], ["email", "Their email"], ["role", "Their role"], ["job", "Their job title"],
@@ -4965,6 +5009,85 @@ async function saveIntroAdmin(){
     else if (document.getElementById("intro-admin-overlay").classList.contains("open")) closeIntroAdmin();
   });
 })();
+
+/* =========================================================================
+   TASK PARTNERS (Authorized PIC ke atas)
+   Menambah Task Partner ke sheet "Data Partner" (Jabatan / Posisi, Partner Name, Email).
+   Cara memasangkan partner ke PIC: pilih emailnya di kolom "Task Partner" pada baris PIC itu di sheet tim.
+   ========================================================================= */
+let partnerState = { list: [], busy: false };
+
+function closePartners(){
+  document.getElementById("partner-modal-overlay").classList.remove("open");
+}
+
+async function openPartners(){
+  document.getElementById("partner-modal-overlay").classList.add("open");
+  const box = document.getElementById("partner-body");
+  box.innerHTML = `<h3 id="partner-title">Task Partners</h3><p class="pt-sub">Loading&hellip;</p>`;
+  try {
+    const d = await picApi({ action: "partnerList", actor: getRealEmail() });
+    if (!d.ok) throw new Error(d.error || "Failed to load Task Partners.");
+    partnerState.list = d.partners || [];
+    renderPartners();
+  } catch (err){
+    box.innerHTML = `<h3 id="partner-title">Task Partners</h3><div class="pt-note">${escapeHtml(err.message || "Failed to load Task Partners.")}</div>`;
+  }
+}
+
+function renderPartners(note, ok){
+  const rows = partnerState.list.map(p => `
+    <div class="pt-row">
+      <div class="pt-name">${escapeHtml(p.name || p.email)}${p.jabatan ? ` <span class="pt-meta">&middot; ${escapeHtml(p.jabatan)}</span>` : ""}</div>
+      <div class="pt-meta">${escapeHtml(p.email)}</div>
+      <div class="pt-meta">${p.sheets && p.sheets.length ? "Task Partner in: " + escapeHtml(p.sheets.join(", ")) : "Not assigned to a PIC yet"}</div>
+    </div>`).join("");
+  document.getElementById("partner-body").innerHTML = `
+    <h3 id="partner-title">Task Partners</h3>
+    <p class="pt-sub">A Task Partner helps a PIC with their main task. Partners see the menus their PIC shares with them.</p>
+    <div class="pt-list">${rows || `<div class="pt-empty">No Task Partner has been added yet.</div>`}</div>
+    <h4>Add a Task Partner</h4>
+    <form class="pt-form" id="partner-form" autocomplete="off">
+      <input type="text" id="pt-jabatan" placeholder="Jabatan / Posisi" maxlength="80" required>
+      <input type="text" id="pt-name" placeholder="Partner Name" maxlength="80" required>
+      <input type="email" id="pt-email" placeholder="Email" maxlength="120" required>
+      <div class="pt-actions"><button type="submit" class="pt-btn" id="pt-submit">Add Task Partner</button></div>
+    </form>
+    <div class="pt-status${note ? (ok ? " ok" : " err") : ""}" id="pt-status" role="status">${note ? escapeHtml(note) : ""}</div>
+    <div class="pt-note"><b>Next step:</b> the new person is saved in the <b>Data Partner</b> sheet. To make them the partner of a PIC, choose their email in the <b>Task Partner</b> column on that PIC's row in the team sheet. Then, when adding or editing a menu, choose <b>Share with Task Partner</b>.</div>`;
+}
+
+document.getElementById("partner-body").addEventListener("submit", async (e) => {
+  if (e.target.id !== "partner-form") return;
+  e.preventDefault();
+  if (partnerState.busy) return;
+  const val = (id) => document.getElementById(id).value.trim();
+  const jabatan = val("pt-jabatan"), name = val("pt-name"), email = val("pt-email").toLowerCase();
+  const st = document.getElementById("pt-status");
+  const setSt = (t, ok) => { st.textContent = t; st.className = "pt-status" + (t ? (ok ? " ok" : " err") : ""); };
+  if (!jabatan || !name || !email){ setSt("Please fill in Jabatan / Posisi, Partner Name and Email.", false); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ setSt("Please enter a valid email address.", false); return; }
+  const btn = document.getElementById("pt-submit");
+  partnerState.busy = true; btn.disabled = true; setSt("Saving…", true);
+  try {
+    const d = await picApi({ action: "partnerAdd", actor: getRealEmail(), jabatan: jabatan, name: name, email: email });
+    if (!d.ok) throw new Error(d.error || "Failed to add Task Partner.");
+    partnerState.list = d.partners || [];
+    renderPartners(name + " was added to Data Partner.", true);
+  } catch (err){
+    setSt(err.message || "Failed to add Task Partner.", false);
+    btn.disabled = false;
+  } finally {
+    partnerState.busy = false;
+  }
+});
+document.getElementById("partner-modal-close").addEventListener("click", closePartners);
+document.getElementById("partner-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "partner-modal-overlay") closePartners();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.getElementById("partner-modal-overlay").classList.contains("open")) closePartners();
+});
 
 function openProfile(){
   profileEditField = ""; profileDescEdit = "";
@@ -5262,7 +5385,7 @@ function renderLoginInfo(opts){
   let vName = "";
   try { const rr = profileRowsFor(saved.email); const f = rr.find(r => r.m && r.m.pic); vName = f ? String(f.m.pic).trim() : ""; } catch (e){}
   const realRoleText = (opts.realRole && ["seniormanager", "manager", "sectionhead"].includes(opts.realRole) && opts.title) ? opts.title : (ROLE_LABELS[ownRole] || "");
-  introViewer = { email: String(saved.email || ""), name: vName, role: realRoleText, roleKey: ownRole, job: opts.job || "" };
+  introViewer = { email: String(saved.email || ""), name: vName || String(opts.selfName || ""), role: realRoleText, roleKey: ownRole, job: opts.job || "" };
 
   // Welcome Tour: penerima intro (dan Administrator) bisa membuka ulang popup intro kapan saja.
   if (opts.introTour && !opts.asPic){
@@ -5271,6 +5394,10 @@ function renderLoginInfo(opts){
   // Edit Intro: hanya Administrator asli -- atur aktif/nonaktif, isi popup, dan siapa penerimanya.
   if (opts.introAdmin){
     parts.push(`<button type="button" class="acct-link" id="acct-intro-admin">Edit Intro</button>`);
+  }
+  // Task Partners: Authorized PIC ke atas -- tambah Task Partner ke sheet "Data Partner".
+  if (opts.canAddPartner){
+    parts.push(`<button type="button" class="acct-link" id="acct-partners">Task Partners</button>`);
   }
   // Notifikasi persetujuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
   lastLoginOpts = opts;
@@ -5335,6 +5462,8 @@ function renderLoginInfo(opts){
   if (profBtn) profBtn.addEventListener("click", () => openProfile());
   const introBtn = document.getElementById("acct-intro");
   if (introBtn) introBtn.addEventListener("click", () => openLeaderIntro());
+  const partnersBtn = document.getElementById("acct-partners");
+  if (partnersBtn) partnersBtn.addEventListener("click", () => openPartners());
   const introAdminBtn = document.getElementById("acct-intro-admin");
   if (introAdminBtn) introAdminBtn.addEventListener("click", () => openIntroAdmin());
 
@@ -5367,6 +5496,7 @@ function extraFromServer(d){
     role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", pinnedFrom: d.pinnedFrom || {}, asPic: d.asPic || "", picsBySheet: d.picsBySheet || {}, sheetPics: d.sheetPics || {}, simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
     createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], createOwnSheets: d.createOwnSheets || [], deleteOwnSheets: d.deleteOwnSheets || [], teamSheets: d.teamSheets || [],
     policy: d.policy || {},
+    partnerSheets: d.partnerSheets || [], canAddPartner: !!d.canAddPartner, selfName: d.selfName || "",
     introSheetUrl: d.introSheetUrl || "", introAuto: !!d.introAuto, introTour: !!d.introTour,
     introSteps: Array.isArray(d.introSteps) ? d.introSteps : [], introVersion: Number(d.introVersion) || 1
   };
@@ -5484,6 +5614,7 @@ async function loadAndRender(isInitial, fromCache){
   const allIdx = [];
   const me = getCurrentUserEmail();
   const simSheets = new Set(extra.simCareerSheets || []);   // Administrator: sheet pada career yang disimulasikan
+  const partnerSet = new Set(extra.partnerSheets || []);    // Task Partner: sheet tempat ia menjadi partner (dihitung seperti sheet miliknya)
   if (visRow){
     for (let c = 1; c < numCols; c++){
       if (!isSheetActive(c)) continue;
@@ -5491,7 +5622,7 @@ async function loadAndRender(isInitial, fromCache){
       if (vi === null) continue;
       if (!allIdx.includes(vi)) allIdx.push(vi);
       if (!me) continue;
-      if (simSheets.has(normSheetName((sheetRow[c] || "").trim()))){ userIdx.add(vi); continue; }
+      if (simSheets.has(normSheetName((sheetRow[c] || "").trim())) || partnerSet.has(normSheetName((sheetRow[c] || "").trim()))){ userIdx.add(vi); continue; }
       try {
         const r = await rowsOf((sheetRow[c] || "").trim());
         const cc = detectColumns(r[0] || []);
@@ -5675,7 +5806,7 @@ async function loadAndRender(isInitial, fromCache){
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
   renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", job: extra.job || "",
-                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picList: uiPicList, devUi: !!extra.developer && (asPicMode || (realRole === "developer" && canSwitch)), uiViewAs: uiViewAs, uiCareer: uiCareer, uiSec: uiSec, canSignOut: !!(extra.perms && extra.perms.signOut), introTour: !!extra.introTour, introAdmin: !!extra.developer && !extra.asPic });
+                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picList: uiPicList, devUi: !!extra.developer && (asPicMode || (realRole === "developer" && canSwitch)), uiViewAs: uiViewAs, uiCareer: uiCareer, uiSec: uiSec, canSignOut: !!(extra.perms && extra.perms.signOut), introTour: !!extra.introTour, introAdmin: !!extra.developer && !extra.asPic, canAddPartner: !!extra.canAddPartner, selfName: extra.selfName || "" });
   maybeAutoLeaderIntro(extra);   // Leader yang baru pertama kali login -> popup intro otomatis
 
   const tabsWrap = document.getElementById("tabs-wrap");

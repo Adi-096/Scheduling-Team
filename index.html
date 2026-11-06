@@ -1190,6 +1190,18 @@
   #partner-modal-overlay .pt-form select{ width:100%; box-sizing:border-box; font:inherit; font-size:14px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
   #partner-modal-overlay .pt-self{ padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface-soft); font-size:14px; }
   #partner-modal-overlay .pt-hint{ font-size:12.5px; line-height:1.45; opacity:.75; }
+
+  /* ===== Task Partners: Remove / Edit / Delete ===== */
+  #partner-modal-overlay .pt-pair{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #partner-modal-overlay .pt-link{ font:inherit; font-size:12.5px; background:none; border:0; padding:2px 4px; color:#B3401F; cursor:pointer; text-decoration:underline; white-space:nowrap; }
+  #partner-modal-overlay .pt-acts{ display:flex; gap:8px; margin-top:6px; }
+  #partner-modal-overlay .pt-mini{ font:inherit; font-size:12.5px; padding:4px 12px; border-radius:7px; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--ink); }
+  #partner-modal-overlay .pt-mini:hover{ border-color:var(--primary); }
+  #partner-modal-overlay .pt-mini.primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+  #partner-modal-overlay .pt-mini.danger{ color:#B3401F; border-color:#E9C6BA; }
+  #partner-modal-overlay .pt-mini.danger:hover{ background:#FBEFEA; }
+  #partner-modal-overlay .pt-edit{ display:grid; gap:6px; margin-top:6px; }
+  #partner-modal-overlay .pt-edit input{ width:100%; box-sizing:border-box; font:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
 </style>
 
 <!--[if gte mso 9]><xml>
@@ -5045,7 +5057,7 @@ async function saveIntroAdmin(){
    - Authorized PIC ke atas: memilih PIC utama dari daftar (sesuai cakupan sheet mereka).
    - Registered PIC: PIC utama otomatis dirinya sendiri.
    ========================================================================= */
-let partnerState = { list: [], busy: false, mode: "manage", picOptions: [], self: null };
+let partnerState = { list: [], busy: false, mode: "manage", picOptions: [], self: null, editing: "" };
 
 function closePartners(){
   document.getElementById("partner-modal-overlay").classList.remove("open");
@@ -5074,12 +5086,37 @@ async function openPartners(){
 
 function renderPartners(note, ok){
   const st = partnerState, self = st.mode === "self";
-  const rows = st.list.map(p => `
+  const rows = st.list.map(p => {
+    const em = escapeHtml(p.email);
+    if (st.editing === p.email){
+      return `<div class="pt-row">
+        <div class="pt-meta">${em}</div>
+        <div class="pt-edit">
+          <input type="text" id="pt-edit-jab" value="${escapeHtml(p.jabatan || "")}" placeholder="Job Title / Position" maxlength="80" aria-label="Job Title / Position">
+          <input type="text" id="pt-edit-name" value="${escapeHtml(p.name || "")}" placeholder="Partner Name" maxlength="80" aria-label="Partner Name">
+        </div>
+        <div class="pt-acts">
+          <button type="button" class="pt-mini primary" data-pt-act="save-edit" data-email="${em}">Save</button>
+          <button type="button" class="pt-mini" data-pt-act="cancel-edit">Cancel</button>
+        </div>
+        <div class="pt-hint">The email cannot be changed. To use a different email, add the person again and remove this one.</div>
+      </div>`;
+    }
+    const pairs = (p.pairs || []).map(a => `
+      <div class="pt-meta pt-pair"><span>Task Partner of: ${escapeHtml(a.pic)} (${escapeHtml(a.sheetName)})</span>
+        <button type="button" class="pt-link" data-pt-act="unpair" data-email="${em}" data-sheet="${escapeHtml(a.sheet)}" data-pic="${escapeHtml(a.picEmail)}" data-label="${escapeHtml(a.pic)}">Remove</button></div>`).join("");
+    const acts = (p.canEdit || p.canDelete) ? `<div class="pt-acts">
+        ${p.canEdit ? `<button type="button" class="pt-mini" data-pt-act="edit" data-email="${em}">Edit</button>` : ""}
+        ${p.canDelete ? `<button type="button" class="pt-mini danger" data-pt-act="delete" data-email="${em}" data-label="${escapeHtml(p.name || p.email)}">Delete from list</button>` : ""}
+      </div>` : "";
+    return `
     <div class="pt-row">
       <div class="pt-name">${escapeHtml(p.name || p.email)}${p.jabatan ? ` <span class="pt-meta">&middot; ${escapeHtml(p.jabatan)}</span>` : ""}</div>
-      <div class="pt-meta">${escapeHtml(p.email)}</div>
-      <div class="pt-meta">${p.pics && p.pics.length ? "Task Partner of: " + escapeHtml(p.pics.join(", ")) : "Not assigned to a PIC yet"}</div>
-    </div>`).join("");
+      <div class="pt-meta">${em}</div>
+      ${pairs || `<div class="pt-meta">Not assigned to a PIC yet</div>`}
+      ${acts}
+    </div>`;
+  }).join("");
   // Pilihan PIC utama: Authorized PIC ke atas memilih dari daftar (dikelompokkan per section); Registered PIC otomatis dirinya sendiri.
   let picHtml;
   if (self){
@@ -5114,8 +5151,61 @@ function renderPartners(note, ok){
       <div class="pt-actions"><button type="submit" class="pt-btn" id="pt-submit">Add Task Partner</button></div>` : ""}
     </form>
     <div class="pt-status${note ? (ok ? " ok" : " err") : ""}" id="pt-status" role="status">${note ? escapeHtml(note) : ""}</div>
-    <div class="pt-note"><b>Next step:</b> the partner is saved in the <b>Data Partner</b> sheet and added to the <b>Task Partner</b> column on the main PIC's row in the team sheet. Then, when adding or editing a menu, choose <b>Share with Task Partner</b> so the partner can see it.</div>`;
+    <div class="pt-note"><b>Next step:</b> the partner is saved in the <b>Data Partner</b> sheet and added to the <b>Task Partner</b> column on the main PIC's row in the team sheet. Then, when adding or editing a menu, choose <b>Share with Task Partner</b> so the partner can see it.<br><b>Manage:</b> use <b>Remove</b> to unpair a partner from one PIC, <b>Edit</b> to change a partner's name or position, and <b>Delete from list</b> to remove a partner who is not paired with anyone.</div>`;
 }
+
+// Remove / Edit / Delete pada daftar Task Partner.
+async function partnerAction(payload, okMessage){
+  if (partnerState.busy) return;
+  partnerState.busy = true;
+  const st = document.getElementById("pt-status");
+  if (st){ st.textContent = "Saving…"; st.className = "pt-status ok"; }
+  try {
+    const d = await picApi(Object.assign({ actor: getRealEmail() }, payload));
+    if (!d.ok) throw new Error(d.error || "Something went wrong.");
+    applyPartnerPayload(d);
+    partnerState.editing = "";
+    renderPartners(okMessage(d), true);
+  } catch (err){
+    const st2 = document.getElementById("pt-status");
+    if (st2){ st2.textContent = err.message || "Something went wrong."; st2.className = "pt-status err"; }
+  } finally {
+    partnerState.busy = false;
+  }
+}
+
+document.getElementById("partner-body").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-pt-act]");
+  if (!b) return;
+  const act = b.getAttribute("data-pt-act");
+  const email = b.getAttribute("data-email") || "";
+  if (act === "edit"){ partnerState.editing = email; renderPartners(); return; }
+  if (act === "cancel-edit"){ partnerState.editing = ""; renderPartners(); return; }
+  if (act === "save-edit"){
+    const jabatan = (document.getElementById("pt-edit-jab") || {}).value || "";
+    const name = (document.getElementById("pt-edit-name") || {}).value || "";
+    if (!jabatan.trim() || !name.trim()){
+      const st = document.getElementById("pt-status");
+      if (st){ st.textContent = "Please fill in Job Title / Position and Partner Name."; st.className = "pt-status err"; }
+      return;
+    }
+    partnerAction({ action: "partnerUpdate", email: email, jabatan: jabatan.trim(), name: name.trim() }, d => (d.partnerName || email) + " was updated.");
+    return;
+  }
+  if (act === "unpair"){
+    const pic = b.getAttribute("data-label") || "this PIC";
+    if (!confirm("Remove " + email + " as a Task Partner of " + pic + "?\n\nThe person stays in the partner list and can be paired again later.")) return;
+    partnerAction({ action: "partnerRemove", email: email, picSheet: b.getAttribute("data-sheet"), picEmail: b.getAttribute("data-pic") },
+                  d => email + " is no longer a Task Partner of " + (d.removedFrom || pic) + ".");
+    return;
+  }
+  if (act === "delete"){
+    const label = b.getAttribute("data-label") || email;
+    if (!confirm("Delete " + label + " from the Task Partner list?\n\nThey are not paired with any PIC. This removes them from the Data Partner sheet.")) return;
+    partnerAction({ action: "partnerDelete", email: email }, d => (d.partnerName || label) + " was deleted from the list.");
+    return;
+  }
+});
 
 document.getElementById("partner-body").addEventListener("submit", async (e) => {
   if (e.target.id !== "partner-form") return;

@@ -2276,7 +2276,7 @@ function renderPicSlot(idx){
   picOwnDeleteMap[idx] = canDelete && viewPerms.delOwn.has(key);
   picManageMap[idx] = canCreate || canDelete;
   // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
-  slot.innerHTML = (list.some(l => !l.pinned) || canCreate)
+  slot.innerHTML = (list.some(inOurLinks) || canCreate)
     ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}Our Links</button>`
     : "";
 }
@@ -2290,6 +2290,10 @@ function applyPicMenus(){
   picOwnDeleteMap = {};
   document.querySelectorAll("[data-pic-slot]").forEach(slot => renderPicSlot(Number(slot.dataset.picSlot)));
 }
+
+// Tampil di daftar Our Links? Menu biasa: ya. Menu On Going: TIDAK bila ditujukan untuk pengguna ini (sudah ditempel di
+// halaman utama), tetapi YA bila On Going-nya untuk role lain (onGoing === false), supaya tetap bisa dibuka dari Our Links.
+function inOurLinks(l){ return !l.pinned || l.onGoing === false; }
 
 function sheetDisplayName(norm){
   const m = sectionMeta.find(x => normSheetName(x.sheetKey) === norm);
@@ -3480,7 +3484,7 @@ function renderPicModal(idx, note){
   const manageView = deleting || picking;   // mode kelola: semua link tampil penuh agar bisa dipilih
   // Kotak pencarian: hanya di tampilan biasa dan Edit Menu (tidak di Delete / Reorder / Add / Edit form).
   const searchable = (picMode === "view" || picMode === "edit-pick") &&
-    (picking ? links.length : links.filter(l => !l.pinned).length) > 0;
+    (picking ? links.length : links.filter(inOurLinks).length) > 0;
   let searchScope = "";
   let listHtml;
   if (reorderingCat){
@@ -3511,10 +3515,10 @@ function renderPicModal(idx, note){
             <button type="button" data-pic-down="${i}" aria-label="Move down" ${i === picReorderList.length - 1 ? "disabled" : ""}>&#9660;</button>
           </div>
         </li>`).join("")}</ul>`;
-  } else if (!(manageView ? links.length : links.some(l => !l.pinned))){
+  } else if (!(manageView ? links.length : links.some(inOurLinks))){
     listHtml = `<p class="pic-empty">${links.length ? "All links here are shown as On Going on the main page." : "No menus yet."}</p>`;
   } else {
-    const groups = picGroupLinks(links, manageView ? null : (l => !l.pinned));
+    const groups = picGroupLinks(links, manageView ? null : inOurLinks);
     const hasCats = !(groups.length === 1 && !groups[0].cat);
     let opened = null;
     if (hasCats && picCatOpen && (!manageView || picking)){   // Edit Menu dari dalam kategori: hanya menu kategori itu

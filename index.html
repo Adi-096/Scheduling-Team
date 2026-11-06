@@ -1184,6 +1184,12 @@
   #geo-consent-overlay .geo-text{ font-size:14px; line-height:1.6; margin:0 0 10px; }
   #geo-consent-overlay ul.geo-text{ padding-left:20px; }
   #geo-consent-overlay .geo-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+  /* ===== Task Partners: pilihan PIC utama ===== */
+  #partner-modal-overlay .pt-lbl{ font-size:13.5px; font-weight:600; margin-top:2px; }
+  #partner-modal-overlay .pt-form select{ width:100%; box-sizing:border-box; font:inherit; font-size:14px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
+  #partner-modal-overlay .pt-self{ padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface-soft); font-size:14px; }
+  #partner-modal-overlay .pt-hint{ font-size:12.5px; line-height:1.45; opacity:.75; }
 </style>
 
 <!--[if gte mso 9]><xml>
@@ -5033,14 +5039,23 @@ async function saveIntroAdmin(){
 })();
 
 /* =========================================================================
-   TASK PARTNERS (Authorized PIC ke atas)
-   Menambah Task Partner ke sheet "Data Partner" (Jabatan / Posisi, Partner Name, Email).
-   Cara memasangkan partner ke PIC: pilih emailnya di kolom "Task Partner" pada baris PIC itu di sheet tim.
+   TASK PARTNERS (Authorized PIC ke atas, dan Registered PIC untuk dirinya sendiri)
+   Menambah Task Partner (Job Title / Position, Partner Name, Email) ke sheet "Data Partner" DAN memasangkannya ke PIC utama:
+   server menambahkan email partner ke kolom "Task Partner" pada baris PIC itu di sheet tim.
+   - Authorized PIC ke atas: memilih PIC utama dari daftar (sesuai cakupan sheet mereka).
+   - Registered PIC: PIC utama otomatis dirinya sendiri.
    ========================================================================= */
-let partnerState = { list: [], busy: false };
+let partnerState = { list: [], busy: false, mode: "manage", picOptions: [], self: null };
 
 function closePartners(){
   document.getElementById("partner-modal-overlay").classList.remove("open");
+}
+
+function applyPartnerPayload(d){
+  partnerState.list = d.partners || [];
+  partnerState.mode = d.mode || "manage";
+  partnerState.picOptions = d.picOptions || [];
+  partnerState.self = d.self || null;
 }
 
 async function openPartners(){
@@ -5050,7 +5065,7 @@ async function openPartners(){
   try {
     const d = await picApi({ action: "partnerList", actor: getRealEmail() });
     if (!d.ok) throw new Error(d.error || "Failed to load Task Partners.");
-    partnerState.list = d.partners || [];
+    applyPartnerPayload(d);
     renderPartners();
   } catch (err){
     box.innerHTML = `<h3 id="partner-title">Task Partners</h3><div class="pt-note">${escapeHtml(err.message || "Failed to load Task Partners.")}</div>`;
@@ -5058,44 +5073,78 @@ async function openPartners(){
 }
 
 function renderPartners(note, ok){
-  const rows = partnerState.list.map(p => `
+  const st = partnerState, self = st.mode === "self";
+  const rows = st.list.map(p => `
     <div class="pt-row">
       <div class="pt-name">${escapeHtml(p.name || p.email)}${p.jabatan ? ` <span class="pt-meta">&middot; ${escapeHtml(p.jabatan)}</span>` : ""}</div>
       <div class="pt-meta">${escapeHtml(p.email)}</div>
-      <div class="pt-meta">${p.sheets && p.sheets.length ? "Task Partner in: " + escapeHtml(p.sheets.join(", ")) : "Not assigned to a PIC yet"}</div>
+      <div class="pt-meta">${p.pics && p.pics.length ? "Task Partner of: " + escapeHtml(p.pics.join(", ")) : "Not assigned to a PIC yet"}</div>
     </div>`).join("");
+  // Pilihan PIC utama: Authorized PIC ke atas memilih dari daftar (dikelompokkan per section); Registered PIC otomatis dirinya sendiri.
+  let picHtml;
+  if (self){
+    const secs = st.self && st.self.sheets && st.self.sheets.length ? ` <span class="pt-meta">&middot; ${escapeHtml(st.self.sheets.join(", "))}</span>` : "";
+    picHtml = `<div class="pt-self"><b>Main PIC:</b> ${escapeHtml((st.self && st.self.name) || "You")} (you)${secs}</div>`;
+  } else if (!st.picOptions.length){
+    picHtml = `<div class="pt-note" style="margin-top:0">No PIC was found in the sections you manage, so there is nobody to pair a partner with.</div>`;
+  } else {
+    const groups = {};
+    st.picOptions.forEach(o => { (groups[o.sheetName] = groups[o.sheetName] || []).push(o); });
+    picHtml = `<label class="pt-lbl" for="pt-pic">Main PIC (the PIC this partner will help)</label>
+      <select id="pt-pic" required>
+        <option value="" disabled selected>Select the main PIC&hellip;</option>
+        ${Object.keys(groups).map(sn => `<optgroup label="${escapeHtml(sn)}">${groups[sn].map(o => `<option value="${escapeHtml(o.sheet + "|" + o.email)}">${escapeHtml(o.name)} (${escapeHtml(o.email)})</option>`).join("")}</optgroup>`).join("")}
+      </select>`;
+  }
+  const canAdd = self || st.picOptions.length > 0;
   document.getElementById("partner-body").innerHTML = `
     <h3 id="partner-title">Task Partners</h3>
-    <p class="pt-sub">A Task Partner helps a PIC with their main task. Partners see the menus their PIC shares with them.</p>
+    <p class="pt-sub">${self
+      ? "A Task Partner helps you with your main task. Partners see the menus you share with them."
+      : "A Task Partner helps a PIC with their main task. Choose the main PIC, then add the partner. Partners see the menus their PIC shares with them."}</p>
     <div class="pt-list">${rows || `<div class="pt-empty">No Task Partner has been added yet.</div>`}</div>
     <h4>Add a Task Partner</h4>
     <form class="pt-form" id="partner-form" autocomplete="off">
-      <input type="text" id="pt-jabatan" placeholder="Jabatan / Posisi" maxlength="80" required>
-      <input type="text" id="pt-name" placeholder="Partner Name" maxlength="80" required>
-      <input type="email" id="pt-email" placeholder="Email" maxlength="120" required>
-      <div class="pt-actions"><button type="submit" class="pt-btn" id="pt-submit">Add Task Partner</button></div>
+      ${picHtml}
+      ${canAdd ? `
+      <input type="text" id="pt-jabatan" placeholder="Job Title / Position" maxlength="80">
+      <input type="text" id="pt-name" placeholder="Partner Name" maxlength="80">
+      <input type="email" id="pt-email" placeholder="Partner Email" maxlength="120" required>
+      <div class="pt-hint">If this email is already in the list, its existing name and position are kept and it is simply added to this PIC.</div>
+      <div class="pt-actions"><button type="submit" class="pt-btn" id="pt-submit">Add Task Partner</button></div>` : ""}
     </form>
     <div class="pt-status${note ? (ok ? " ok" : " err") : ""}" id="pt-status" role="status">${note ? escapeHtml(note) : ""}</div>
-    <div class="pt-note"><b>Next step:</b> the new person is saved in the <b>Data Partner</b> sheet. To make them the partner of a PIC, choose their email in the <b>Task Partner</b> column on that PIC's row in the team sheet. Then, when adding or editing a menu, choose <b>Share with Task Partner</b>.</div>`;
+    <div class="pt-note"><b>Next step:</b> the partner is saved in the <b>Data Partner</b> sheet and added to the <b>Task Partner</b> column on the main PIC's row in the team sheet. Then, when adding or editing a menu, choose <b>Share with Task Partner</b> so the partner can see it.</div>`;
 }
 
 document.getElementById("partner-body").addEventListener("submit", async (e) => {
   if (e.target.id !== "partner-form") return;
   e.preventDefault();
   if (partnerState.busy) return;
-  const val = (id) => document.getElementById(id).value.trim();
+  const val = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
   const jabatan = val("pt-jabatan"), name = val("pt-name"), email = val("pt-email").toLowerCase();
+  const self = partnerState.mode === "self";
   const st = document.getElementById("pt-status");
   const setSt = (t, ok) => { st.textContent = t; st.className = "pt-status" + (t ? (ok ? " ok" : " err") : ""); };
-  if (!jabatan || !name || !email){ setSt("Please fill in Jabatan / Posisi, Partner Name and Email.", false); return; }
+  let picSheet = "", picEmail = "";
+  if (!self){
+    const pv = val("pt-pic");
+    const cut = pv.lastIndexOf("|");
+    if (!pv || cut < 0){ setSt("Please choose the main PIC.", false); return; }
+    picSheet = pv.slice(0, cut); picEmail = pv.slice(cut + 1);
+  }
+  if (!email){ setSt("Please enter the partner's email.", false); return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ setSt("Please enter a valid email address.", false); return; }
+  // Nama dan jabatan wajib untuk email baru; untuk email yang sudah ada di daftar, data lama dipakai.
+  const inList = partnerState.list.some(p => String(p.email).toLowerCase() === email);
+  if (!inList && (!jabatan || !name)){ setSt("Please fill in Job Title / Position and Partner Name (the server also checks if this email is already in Data Partner).", false); if (!jabatan || !name) return; }
   const btn = document.getElementById("pt-submit");
   partnerState.busy = true; btn.disabled = true; setSt("Saving…", true);
   try {
-    const d = await picApi({ action: "partnerAdd", actor: getRealEmail(), jabatan: jabatan, name: name, email: email });
+    const d = await picApi({ action: "partnerAdd", actor: getRealEmail(), jabatan: jabatan, name: name, email: email, picSheet: picSheet, picEmail: picEmail });
     if (!d.ok) throw new Error(d.error || "Failed to add Task Partner.");
-    partnerState.list = d.partners || [];
-    renderPartners(name + " was added to Data Partner.", true);
+    applyPartnerPayload(d);
+    renderPartners((d.partnerName || email) + " is now a Task Partner of " + (d.pairedWith || "the selected PIC") + ".", true);
   } catch (err){
     setSt(err.message || "Failed to add Task Partner.", false);
     btn.disabled = false;
@@ -5418,7 +5467,7 @@ function renderLoginInfo(opts){
   if (opts.introAdmin){
     parts.push(`<button type="button" class="acct-link" id="acct-intro-admin">Edit Intro</button>`);
   }
-  // Task Partners: Authorized PIC ke atas -- tambah Task Partner ke sheet "Data Partner".
+  // Task Partners: Authorized PIC ke atas (pilih PIC utama), dan Registered PIC (untuk dirinya sendiri).
   if (opts.canAddPartner){
     parts.push(`<button type="button" class="acct-link" id="acct-partners">Task Partners</button>`);
   }

@@ -1764,6 +1764,12 @@ const WA_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 // popup "Our Team" sebagai blok "Person In Charge". Urutan array menentukan
 // urutan tampil: Section Head -> Manager -> Senior Manager.
 const LEADER_TITLES = ["section head","manager","senior manager"];
+// Leader yang ditampilkan di Our Team ("Person In Charge") menurut role penonton: Contact Center hanya Section Head;
+// BSP dan Staff / Other Unit: Section Head + Manager; role lain (PIC, Task Partner, Dosen, pimpinan): semua leader.
+// Server juga menyaring data yang dikirim; ini lapisan kedua di tampilan.
+const LEADERS_VISIBLE_BY_ROLE = { cc: ["section head"], bsp: ["section head","manager"], staff: ["section head","manager"] };
+let teamViewRole = "staff";   // role efektif penonton (diisi saat halaman dirender)
+const leadersVisibleFor = (role) => LEADERS_VISIBLE_BY_ROLE[role || "staff"] || LEADER_TITLES;
 // Spasi ganda / spasi non-breaking (sering ikut saat salin-tempel dari web atau Excel) disamakan dulu,
 // supaya "Senior  Manager" tetap dikenali sebagai Senior Manager (sama dengan aturan di server).
 const normJabatan = (j) => String(j || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").toLowerCase().trim();
@@ -1921,16 +1927,19 @@ function openModal(header, sheetKey, members){
   // "Our Team" (tapi tetap ada di daftar task pada halaman utama).
   const teamMembers = members.filter(m => !isGroupRow(m.jabatan));
 
-  document.getElementById("modal-title").textContent = header;
-  document.getElementById("modal-sub").textContent = `${sheetKey} — ${teamMembers.length} anggota tim`;
-
   // Pisahkan anggota biasa dari leader (Senior Manager/Manager/Section Head).
   // Leader ditampilkan terpisah, di blok "Person In Charge" paling bawah,
   // urut sesuai hierarki: Section Head -> Manager -> Senior Manager.
+  // Leader yang boleh tampil bergantung pada role penonton (CC: Section Head saja; BSP dan Staff: Section Head + Manager).
   const regular = teamMembers.filter(m => !LEADER_TITLES.includes(normJabatan(m.jabatan)));
+  const shownLeaderTitles = leadersVisibleFor(teamViewRole);
   const leaders = teamMembers
-    .filter(m => LEADER_TITLES.includes(normJabatan(m.jabatan)))
+    .filter(m => shownLeaderTitles.includes(normJabatan(m.jabatan)))
     .sort((a,b) => LEADER_TITLES.indexOf(normJabatan(a.jabatan)) - LEADER_TITLES.indexOf(normJabatan(b.jabatan)));
+
+  document.getElementById("modal-title").textContent = header;
+  // Jumlah anggota hanya menghitung yang memang ditampilkan (leader yang disembunyikan tidak ikut dihitung).
+  document.getElementById("modal-sub").textContent = `${sheetKey} — ${regular.length + leaders.length} anggota tim`;
 
   const grid = document.getElementById("modal-grid");
   grid.innerHTML = regular.map(m => memberCardHtml(m, canEdit)).join("")
@@ -5846,6 +5855,7 @@ async function loadAndRender(isInitial, fromCache){
   // Pilihan section = semua sub-section yang Active pada career simulasi (tidak ikut disaring Visibility Index).
   const simSecOptions = uiSecOptions;
   const effRole = viewAs || realRole || baseRole;
+  teamViewRole = effRole;   // dipakai Our Team untuk menentukan leader yang ditampilkan
   const viewVis = resolveViewerVisibility({ role: effRole, pol: (extra.policy || {})[effRole] || {}, userIdx: userIdx, allIdx: allIdx });
   const canSeeIdx = (vi) => {
     if (!visRow) return true;                 // belum ada baris Visibility Index -> tidak difilter

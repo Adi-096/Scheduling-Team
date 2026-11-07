@@ -1202,6 +1202,18 @@
   #partner-modal-overlay .pt-mini.danger:hover{ background:#FBEFEA; }
   #partner-modal-overlay .pt-edit{ display:grid; gap:6px; margin-top:6px; }
   #partner-modal-overlay .pt-edit input{ width:100%; box-sizing:border-box; font:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
+
+  /* ===== Request to change: alasan + tag pekerjaan ===== */
+  .job-tags{ display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);cursor:text; }
+  .job-tags:focus-within{ border-color:var(--accent); }
+  .job-chips{ display:contents; }
+  .job-tags input{ flex:1 1 140px;min-width:120px;border:0 !important;outline:none;padding:6px 4px !important;background:transparent !important; }
+  .job-chip{ display:inline-flex;align-items:center;gap:4px;font-size:12.5px;line-height:1.3;padding:3px 4px 3px 10px;border-radius:999px;background:#E6F4FB;color:#0B3A5B;border:1px solid #BFE0F0;word-break:break-word; }
+  .job-chip.ro{ padding:3px 10px; }
+  .job-chip-x{ font:inherit;font-size:15px;line-height:1;border:0;background:transparent;color:#0B3A5B;cursor:pointer;padding:0 5px;border-radius:50%; }
+  .job-chip-x:hover{ background:#BFE0F0; }
+  .req-missing{ color:#B3401F; min-height:1em; }
+  .profile-edit-actions .pic-btn[disabled]{ opacity:.45;cursor:not-allowed; }
 </style>
 
 <!--[if gte mso 9]><xml>
@@ -4388,6 +4400,54 @@ let profileDescEdit = "";    // normSheetName section yang sedang ditulis permin
 let profileReqs = {};        // normSheetName(section) -> permintaan terakhir {status, desc, note, by}
 const profileIsLeaderRow = (r) => LEADER_TITLES.includes(normJabatan(r.m.jabatan));
 
+// ---- Formulir "Request to change": deskripsi baru, alasan, dan pekerjaan yang direkomendasikan (tag dipisah koma) ----
+const REQ_REASON_MIN = 10, REQ_JOBS_MAX = 10, REQ_JOB_LEN = 60;
+let profileJobs = [];   // tag pekerjaan yang direkomendasikan pada formulir yang sedang terbuka
+
+function cleanJobTag(t){
+  return String(t == null ? "" : t).replace(/[\u0000-\u001f]+/g, " ").replace(/^[#\s]+/, "").replace(/\s+/g, " ").trim().slice(0, REQ_JOB_LEN);
+}
+// Tambahkan satu atau beberapa tag dari teks (dipisah koma / baris baru). Duplikat diabaikan, maksimal REQ_JOBS_MAX.
+function addJobTags(text){
+  String(text == null ? "" : text).split(/[,\n]/).forEach(p => {
+    const t = cleanJobTag(p);
+    if (!t || profileJobs.length >= REQ_JOBS_MAX) return;
+    if (profileJobs.some(x => x.toLowerCase() === t.toLowerCase())) return;
+    profileJobs.push(t);
+  });
+}
+function jobChipsHtml(){
+  return profileJobs.map((j, i) => `<span class="job-chip">#${escapeHtml(j)}<button type="button" class="job-chip-x" data-job-del="${i}" aria-label="Remove ${escapeHtml(j)}">&times;</button></span>`).join("");
+}
+function renderJobChips(){
+  const el = document.getElementById("profile-job-chips");
+  if (el) el.innerHTML = jobChipsHtml();
+}
+// Apa saja yang masih kurang sebelum tombol Send request bisa diklik.
+function reqMissing(desc, curDesc, reason, jobCount){
+  const m = [];
+  if (!desc.trim()) m.push("the new description");
+  else if (desc.trim() === String(curDesc || "").trim()) m.push("a change in the description");
+  if (reason.trim().length < REQ_REASON_MIN) m.push("the reason (at least " + REQ_REASON_MIN + " characters)");
+  if (jobCount < 1) m.push("at least one recommended job");
+  return m;
+}
+function currentReqRow(){
+  return profileRowsFor(profileCtx.email).find(r => normSheetName(r.sheetKey) === profileDescEdit);
+}
+// Hitung ulang status tombol Send request + keterangan "Still needed" (dipanggil tiap isian berubah).
+function updateReqSendState(){
+  const ta = document.getElementById("profile-desc-ta"), rs = document.getElementById("profile-reason-ta");
+  const btn = document.getElementById("profile-req-send"), hint = document.getElementById("profile-req-missing");
+  if (!ta || !rs || !btn) return;
+  const inp = document.getElementById("profile-job-in");
+  const pendingJob = inp && cleanJobTag(inp.value) ? 1 : 0;   // teks yang belum dikonfirmasi koma / Enter tetap dihitung
+  const row = currentReqRow();
+  const missing = reqMissing(ta.value, row ? row.m.desc : "", rs.value, profileJobs.length + pendingJob);
+  btn.disabled = missing.length > 0;
+  if (hint) hint.textContent = missing.length ? "Still needed: " + missing.join(", ") + "." : "";
+}
+
 function profileDescBlockHtml(r, own){
   const key = normSheetName(r.sheetKey);
   const req = profileReqs[key];
@@ -4395,12 +4455,24 @@ function profileDescBlockHtml(r, own){
   const pending = req && (req.status === "Pending" || awaitingFinal);
   if (own && profileDescEdit === key){
     const start = pending ? req.desc : (r.m.desc || "");
-    return `<div class="profile-lbl">Task Description</div>
+    const reasonStart = pending ? (req.reason || "") : "";
+    const missing0 = reqMissing(start, r.m.desc, reasonStart, profileJobs.length);
+    return `<div class="profile-lbl">Task Description (detail)</div>
       <div class="profile-edit">
-        <textarea id="profile-desc-ta" maxlength="1000" rows="5" aria-label="New task description">${escapeHtml(start)}</textarea>
+        <textarea id="profile-desc-ta" maxlength="1000" rows="5" aria-label="Task description (detail)">${escapeHtml(start)}</textarea>
+        <div class="profile-hint" style="margin:0">Edit the text so it reads the way you want your Task Description to be.</div>
+        <label class="profile-lbl" for="profile-reason-ta">Reason for the request</label>
+        <textarea id="profile-reason-ta" maxlength="500" rows="3" placeholder="Why do you want to change this task description?" aria-label="Reason for the request">${escapeHtml(reasonStart)}</textarea>
+        <label class="profile-lbl" for="profile-job-in">Recommended jobs you can take on</label>
+        <div class="job-tags" id="profile-job-box">
+          <span class="job-chips" id="profile-job-chips">${jobChipsHtml()}</span>
+          <input type="text" id="profile-job-in" maxlength="${REQ_JOB_LEN}" placeholder="Type a job, then press comma or Enter" autocomplete="off" aria-label="Recommended jobs">
+        </div>
+        <div class="profile-hint" style="margin:0">Separate jobs with commas, like hashtags (up to ${REQ_JOBS_MAX}). These are the jobs you propose to work on.</div>
         <div class="profile-hint" style="margin:0">Your Section Head reviews this first, then your Manager gives the final approval. The description changes only after both approve.</div>
+        <div class="profile-hint req-missing" id="profile-req-missing" style="margin:0">${missing0.length ? "Still needed: " + escapeHtml(missing0.join(", ")) + "." : ""}</div>
         <div class="profile-edit-actions">
-          <button type="button" class="pic-btn primary" data-profile-act="req-send" data-key="${escapeHtml(key)}" data-sheet="${escapeHtml(r.sheetKey)}">Send request</button>
+          <button type="button" class="pic-btn primary" id="profile-req-send" data-profile-act="req-send" data-key="${escapeHtml(key)}" data-sheet="${escapeHtml(r.sheetKey)}"${missing0.length ? " disabled" : ""}>Send request</button>
           <button type="button" class="pic-btn" data-profile-act="req-cancel">Cancel</button>
         </div>
       </div>`;
@@ -4408,9 +4480,11 @@ function profileDescBlockHtml(r, own){
   let note = "";
   const hideBtn = (req && req.id) ? `<button type="button" class="profile-mini" data-profile-act="req-hide" data-key="${escapeHtml(key)}" data-id="${escapeHtml(req.id)}">Hide this history</button>` : "";
   if (pending){
+    const extra = (req.reason ? `<span class="txt">Reason: ${escapeHtml(req.reason)}</span>` : "")
+      + ((req.jobs && req.jobs.length) ? `<span class="txt">Recommended jobs: ${req.jobs.map(j => "#" + escapeHtml(j)).join(" ")}</span>` : "");
     note = awaitingFinal
-      ? `<div class="profile-req"><b>Approved by Section Head${req.shBy ? " (" + escapeHtml(req.shBy) + ")" : ""} &mdash; waiting for final approval by the Manager</b>${req.shNote ? `<span class="txt">Section Head note: ${escapeHtml(req.shNote)}</span>` : ""}<span class="txt">${escapeHtml(req.desc)}</span></div>`
-      : `<div class="profile-req"><b>Change requested &mdash; waiting for Section Head review</b><span class="txt">${escapeHtml(req.desc)}</span></div>`;
+      ? `<div class="profile-req"><b>Approved by Section Head${req.shBy ? " (" + escapeHtml(req.shBy) + ")" : ""} &mdash; waiting for final approval by the Manager</b>${req.shNote ? `<span class="txt">Section Head note: ${escapeHtml(req.shNote)}</span>` : ""}<span class="txt">${escapeHtml(req.desc)}</span>${extra}</div>`
+      : `<div class="profile-req"><b>Change requested &mdash; waiting for Section Head review</b><span class="txt">${escapeHtml(req.desc)}</span>${extra}</div>`;
   } else if (req && req.status === "Rejected"){
     note = `<div class="profile-req"><b>Your last request was rejected${req.by ? " by " + escapeHtml(req.by) : ""}</b>${req.note ? `<span class="txt">${escapeHtml(req.note)}</span>` : ""}${hideBtn}</div>`;
   } else if (req && req.status === "Approved"){
@@ -4548,18 +4622,24 @@ async function saveProfileContact(field, btn){
 async function sendDescRequest(key, sheetKey, btn){
   if (profileBusy) return;
   const ta = document.getElementById("profile-desc-ta");
+  const rs = document.getElementById("profile-reason-ta");
+  const inp = document.getElementById("profile-job-in");
   const text = ta ? ta.value.trim() : "";
+  const reason = rs ? rs.value.trim() : "";
+  if (inp && inp.value.trim()){ addJobTags(inp.value); inp.value = ""; renderJobChips(); }   // teks terakhir yang belum diberi koma
   const row = profileRowsFor(profileCtx.email).find(r => normSheetName(r.sheetKey) === key);
-  if (!text){ setProfileStatus("err", "The new description cannot be empty."); return; }
-  if (row && text === String(row.m.desc || "").trim()){ setProfileStatus("err", "You have not changed the description yet."); return; }
+  const missing = reqMissing(text, row ? row.m.desc : "", reason, profileJobs.length);
+  if (missing.length){ setProfileStatus("err", "Still needed: " + missing.join(", ") + "."); updateReqSendState(); return; }
+  const jobs = profileJobs.slice();
   profileBusy = true;
   setProfileStatus("", "");
   const restore = btnLoading(btn, "Sending...");
   try {
-    const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, desc: text });
+    const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, desc: text, reason: reason, jobs: jobs });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to send the request."); return; }
-    profileReqs[key] = { id: data.id, status: data.stage === 2 ? "Awaiting Final" : "Pending", desc: text, sheet: sheetKey, note: "", by: "" };
+    profileReqs[key] = { id: data.id, status: data.stage === 2 ? "Awaiting Final" : "Pending", desc: text, reason: reason, jobs: jobs, sheet: sheetKey, note: "", by: "" };
     profileDescEdit = "";
+    profileJobs = [];
     renderProfile();
     setProfileStatus(data.emailed ? "ok" : "err", data.emailed
       ? "Request sent to " + data.emailed + (data.stage === 2 ? " Manager" : " Section Head") + (data.emailed > 1 ? "s" : "") + ". " + (data.stage === 2 ? "There is no Section Head in this section, so the Manager gives the final approval." : "After the Section Head approves, it goes to the Manager for the final approval.") + " The description changes only after the final approval."
@@ -4569,6 +4649,7 @@ async function sendDescRequest(key, sheetKey, btn){
   } finally {
     profileBusy = false;
     restore();
+    updateReqSendState();
   }
 }
 
@@ -4599,11 +4680,52 @@ document.addEventListener("click", (e) => {
   if (act === "contact-edit"){ profileEditField = "wa"; profileDescEdit = ""; renderProfile(); const inp = document.getElementById("profile-wa-in"); if (inp) inp.focus(); }
   else if (act === "contact-cancel"){ profileEditField = ""; renderProfile(); }
   else if (act === "contact-save") saveProfileContact("wa", b);
-  else if (act === "req-open"){ profileDescEdit = b.dataset.key; profileEditField = ""; renderProfile(); const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus(); }
-  else if (act === "req-cancel"){ profileDescEdit = ""; renderProfile(); }
+  else if (act === "req-open"){
+    const pr = profileReqs[b.dataset.key];
+    const isPending = pr && (pr.status === "Pending" || pr.status === "Awaiting Final");
+    profileJobs = isPending && Array.isArray(pr.jobs) ? pr.jobs.slice() : [];   // mengubah request yang sedang berjalan: isian lama dibawa
+    profileDescEdit = b.dataset.key; profileEditField = ""; renderProfile();
+    const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus();
+  }
+  else if (act === "req-cancel"){ profileDescEdit = ""; profileJobs = []; renderProfile(); }
   else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet, b);
   else if (act === "req-cancel-pending"){ if (confirm("Cancel this request? The reviewers will no longer see it.")) profileReqCall("cancelDescRequest", b.dataset.key, b.dataset.id, "Request cancelled. The reviewers were notified by email.", b, "Cancelling..."); }
   else if (act === "req-hide") profileReqCall("hideDescRequest", b.dataset.key, b.dataset.id, "History hidden.", b, "Hiding...");
+});
+
+// Formulir request: tag pekerjaan (koma / Enter menambah, Backspace menghapus tag terakhir), dan tombol Send request
+// baru bisa diklik setelah deskripsi berubah, alasan terisi, dan ada minimal satu pekerjaan.
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (!t || !t.id) return;
+  if (t.id === "profile-job-in"){
+    const v = t.value, cutAt = Math.max(v.lastIndexOf(","), v.lastIndexOf("\n"));
+    if (cutAt >= 0){ addJobTags(v.slice(0, cutAt)); t.value = v.slice(cutAt + 1); renderJobChips(); }   // juga untuk teks yang ditempel "a, b, c"
+    updateReqSendState();
+  } else if (t.id === "profile-desc-ta" || t.id === "profile-reason-ta"){
+    updateReqSendState();
+  }
+});
+document.addEventListener("keydown", (e) => {
+  const t = e.target;
+  if (!t || t.id !== "profile-job-in") return;
+  if (e.key === "Enter"){
+    e.preventDefault();
+    if (t.value.trim()){ addJobTags(t.value); t.value = ""; renderJobChips(); updateReqSendState(); }
+  } else if (e.key === "Backspace" && !t.value && profileJobs.length){
+    profileJobs.pop(); renderJobChips(); updateReqSendState();
+  }
+});
+document.addEventListener("focusout", (e) => {
+  const t = e.target;
+  if (t && t.id === "profile-job-in" && t.value.trim()){ addJobTags(t.value); t.value = ""; renderJobChips(); updateReqSendState(); }
+});
+document.addEventListener("click", (e) => {
+  const x = e.target.closest && e.target.closest("[data-job-del]");
+  if (!x) return;
+  profileJobs.splice(Number(x.getAttribute("data-job-del")), 1);
+  renderJobChips();
+  updateReqSendState();
 });
 
 /* =========================================================================
@@ -4636,7 +4758,7 @@ const INTRO_DEFAULT_STEPS = [
   { ico: "🔗", title: "Our Links",
     body: "Open **Our Links** on a section to see its menus, grouped by category.\n\n- **Add, edit, delete** a menu, and **reorder** menus and categories.\n- A menu can be a **link**, a set of **images** (shown as a carousel), a written **note** (or a .txt file), or a **document**.\n- You choose who can see each menu, so each person only sees what is meant for them.\n- **Share with Task Partner** lets the Task Partner(s) of a PIC see a menu too, whether it is a normal or an On Going menu." },
   { ico: "👥", title: "Our Team & Your Profile",
-    body: "**Our Team** shows the contact card of every PIC. Leaders appear in the **Person In Charge** block.\n\n- Use **Edit** on a card to update a team member (within the scope your role allows).\n- **View Profile** lets you change your own photo and WhatsApp number.\n- When a PIC asks to change a task description, it needs **two approvals**: the **Section Head** reviews first, then the **Manager** gives the final approval (with the Section Head's note). It appears under **Requests** when it is your turn." },
+    body: "**Our Team** shows the contact card of every PIC. Leaders appear in the **Person In Charge** block.\n\n- Use **Edit** on a card to update a team member (within the scope your role allows).\n- **View Profile** lets you change your own photo and WhatsApp number.\n- When a PIC asks to change a task description (with a reason and recommended jobs), it needs **two approvals**: the **Section Head** reviews first, then the **Manager** gives the final approval (with the Section Head's note). It appears under **Requests** when it is your turn." },
   { ico: "🤝", title: "Task Partners",
     body: "A **Task Partner** is an account that helps a PIC with their main task. When a Task Partner signs in, they can see the PIC menus that the main PIC chooses to share with them.\n\n**How it works**\n- A PIC adds a partner from **Task Partners** at the top of the page. **Authorized PICs and Leaders** choose the **main PIC** the partner will help. A **Registered PIC** adds partners for themselves only.\n- The partner is saved in the **Data Partner** sheet and added to the **Task Partner** column on the main PIC's row in the team sheet.\n- When adding or editing a menu, choose **Share with Task Partner**. The partner then sees that menu in **Our Links**, whether it is a normal or an On Going menu.\n\n**Managing partners**\n- **Remove** unpairs a partner from one PIC. **Edit** changes the partner's name and position. **Delete from list** removes a partner who is not paired with anyone.\n- A partner's email cannot be changed. To use a different email, add the person again and remove the old one.\n\nNOTE: A Task Partner only sees what the main PIC shares with them. What else they can do is set in the **Role Policy** sheet." },
   { ico: "🧭", title: "Roles at a glance",
@@ -5429,6 +5551,8 @@ function renderReviewModal(){
       <div class="txt">${escapeHtml(q.cur || "-")}</div>
       <div class="profile-lbl">Proposed description</div>
       <div class="txt new">${escapeHtml(q.desc)}</div>
+      ${q.reason ? `<div class="profile-lbl">Reason for the request</div><div class="txt">${escapeHtml(q.reason)}</div>` : ""}
+      ${(q.jobs && q.jobs.length) ? `<div class="profile-lbl">Recommended jobs</div><div class="txt">${q.jobs.map(j => `<span class="job-chip ro">#${escapeHtml(j)}</span>`).join(" ")}</div>` : ""}
       ${q.stage === 2 ? `<div class="profile-lbl">Approved by Section Head${q.shBy ? ": " + escapeHtml(q.shBy) : ""}</div>
       <div class="txt">${escapeHtml(q.shNote || "(no note)")}</div>` : ""}
       <input type="text" maxlength="300" placeholder="${q.stage === 2 ? "Note to the requester (optional)" : "Your note (shown to the Manager and the requester)"}" data-review-note aria-label="Note">

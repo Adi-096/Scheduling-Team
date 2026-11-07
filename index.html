@@ -1214,6 +1214,8 @@
   .job-chip-x:hover{ background:#BFE0F0; }
   .req-missing{ color:#B3401F; min-height:1em; }
   .profile-edit-actions .pic-btn[disabled]{ opacity:.45;cursor:not-allowed; }
+
+  .task-desc-ro{ background:var(--surface-2,#f4f8fb); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; line-height:1.5; text-align:left; white-space:pre-wrap; max-height:180px; overflow:auto; user-select:text; }
 </style>
 
 <!--[if gte mso 9]><xml>
@@ -4423,13 +4425,22 @@ function renderJobChips(){
   const el = document.getElementById("profile-job-chips");
   if (el) el.innerHTML = jobChipsHtml();
 }
+// Item yang sudah ada di deskripsi (dipisah koma atau "+"), huruf kecil, untuk memeriksa tag yang sudah tercantum.
+function descItemSet(desc){
+  const set = {};
+  String(desc == null ? "" : desc).split(/[,+\n]/).forEach(t => { const k = t.replace(/\s+/g, " ").trim().toLowerCase(); if (k) set[k] = true; });
+  return set;
+}
 // Apa saja yang masih kurang sebelum tombol Send request bisa diklik.
-function reqMissing(desc, curDesc, reason, jobCount){
+// (Deskripsi saat ini hanya ditampilkan; yang diajukan adalah alasan + pekerjaan baru yang akan ditambahkan.)
+function reqMissing(curDesc, reason, jobs){
   const m = [];
-  if (!desc.trim()) m.push("the new description");
-  else if (desc.trim() === String(curDesc || "").trim()) m.push("a change in the description");
   if (reason.trim().length < REQ_REASON_MIN) m.push("the reason (at least " + REQ_REASON_MIN + " characters)");
-  if (jobCount < 1) m.push("at least one recommended job");
+  if (!jobs.length) m.push("at least one recommended job");
+  else {
+    const have = descItemSet(curDesc);
+    if (!jobs.some(j => !have[j.toLowerCase()])) m.push("a recommended job that is not already in the description");
+  }
   return m;
 }
 function currentReqRow(){
@@ -4437,13 +4448,13 @@ function currentReqRow(){
 }
 // Hitung ulang status tombol Send request + keterangan "Still needed" (dipanggil tiap isian berubah).
 function updateReqSendState(){
-  const ta = document.getElementById("profile-desc-ta"), rs = document.getElementById("profile-reason-ta");
+  const rs = document.getElementById("profile-reason-ta");
   const btn = document.getElementById("profile-req-send"), hint = document.getElementById("profile-req-missing");
-  if (!ta || !rs || !btn) return;
+  if (!rs || !btn) return;
   const inp = document.getElementById("profile-job-in");
-  const pendingJob = inp && cleanJobTag(inp.value) ? 1 : 0;   // teks yang belum dikonfirmasi koma / Enter tetap dihitung
+  const pendingTag = inp ? cleanJobTag(inp.value) : "";   // teks yang belum dikonfirmasi koma / Enter tetap dihitung
   const row = currentReqRow();
-  const missing = reqMissing(ta.value, row ? row.m.desc : "", rs.value, profileJobs.length + pendingJob);
+  const missing = reqMissing(row ? row.m.desc : "", rs.value, pendingTag ? profileJobs.concat([pendingTag]) : profileJobs);
   btn.disabled = missing.length > 0;
   if (hint) hint.textContent = missing.length ? "Still needed: " + missing.join(", ") + "." : "";
 }
@@ -4454,13 +4465,12 @@ function profileDescBlockHtml(r, own){
   const awaitingFinal = req && req.status === "Awaiting Final";
   const pending = req && (req.status === "Pending" || awaitingFinal);
   if (own && profileDescEdit === key){
-    const start = pending ? req.desc : (r.m.desc || "");
     const reasonStart = pending ? (req.reason || "") : "";
-    const missing0 = reqMissing(start, r.m.desc, reasonStart, profileJobs.length);
+    const missing0 = reqMissing(r.m.desc, reasonStart, profileJobs);
     return `<div class="profile-lbl">Task Description (detail)</div>
       <div class="profile-edit">
-        <textarea id="profile-desc-ta" maxlength="1000" rows="5" aria-label="Task description (detail)">${escapeHtml(start)}</textarea>
-        <div class="profile-hint" style="margin:0">Edit the text so it reads the way you want your Task Description to be.</div>
+        <div class="task-desc task-desc-ro" id="profile-desc-view" aria-readonly="true">${escapeHtml(r.m.desc || "-")}</div>
+        <div class="profile-hint" style="margin:0">This is your current Task Description (view only). It is not edited here: the jobs you recommend below are added to it after approval.</div>
         <label class="profile-lbl" for="profile-reason-ta">Reason for the request</label>
         <textarea id="profile-reason-ta" maxlength="500" rows="3" placeholder="Why do you want to change this task description?" aria-label="Reason for the request">${escapeHtml(reasonStart)}</textarea>
         <label class="profile-lbl" for="profile-job-in">Recommended jobs you can take on</label>
@@ -4483,8 +4493,8 @@ function profileDescBlockHtml(r, own){
     const extra = (req.reason ? `<span class="txt">Reason: ${escapeHtml(req.reason)}</span>` : "")
       + ((req.jobs && req.jobs.length) ? `<span class="txt">Recommended jobs: ${req.jobs.map(j => "#" + escapeHtml(j)).join(" ")}</span>` : "");
     note = awaitingFinal
-      ? `<div class="profile-req"><b>Approved by Section Head${req.shBy ? " (" + escapeHtml(req.shBy) + ")" : ""} &mdash; waiting for final approval by the Manager</b>${req.shNote ? `<span class="txt">Section Head note: ${escapeHtml(req.shNote)}</span>` : ""}<span class="txt">${escapeHtml(req.desc)}</span>${extra}</div>`
-      : `<div class="profile-req"><b>Change requested &mdash; waiting for Section Head review</b><span class="txt">${escapeHtml(req.desc)}</span>${extra}</div>`;
+      ? `<div class="profile-req"><b>Approved by Section Head${req.shBy ? " (" + escapeHtml(req.shBy) + ")" : ""} &mdash; waiting for final approval by the Manager</b>${req.shNote ? `<span class="txt">Section Head note: ${escapeHtml(req.shNote)}</span>` : ""}<span class="txt">New description: ${escapeHtml(req.desc)}</span>${extra}</div>`
+      : `<div class="profile-req"><b>Change requested &mdash; waiting for Section Head review</b><span class="txt">New description: ${escapeHtml(req.desc)}</span>${extra}</div>`;
   } else if (req && req.status === "Rejected"){
     note = `<div class="profile-req"><b>Your last request was rejected${req.by ? " by " + escapeHtml(req.by) : ""}</b>${req.note ? `<span class="txt">${escapeHtml(req.note)}</span>` : ""}${hideBtn}</div>`;
   } else if (req && req.status === "Approved"){
@@ -4621,28 +4631,26 @@ async function saveProfileContact(field, btn){
 
 async function sendDescRequest(key, sheetKey, btn){
   if (profileBusy) return;
-  const ta = document.getElementById("profile-desc-ta");
   const rs = document.getElementById("profile-reason-ta");
   const inp = document.getElementById("profile-job-in");
-  const text = ta ? ta.value.trim() : "";
   const reason = rs ? rs.value.trim() : "";
   if (inp && inp.value.trim()){ addJobTags(inp.value); inp.value = ""; renderJobChips(); }   // teks terakhir yang belum diberi koma
   const row = profileRowsFor(profileCtx.email).find(r => normSheetName(r.sheetKey) === key);
-  const missing = reqMissing(text, row ? row.m.desc : "", reason, profileJobs.length);
+  const missing = reqMissing(row ? row.m.desc : "", reason, profileJobs);
   if (missing.length){ setProfileStatus("err", "Still needed: " + missing.join(", ") + "."); updateReqSendState(); return; }
   const jobs = profileJobs.slice();
   profileBusy = true;
   setProfileStatus("", "");
   const restore = btnLoading(btn, "Sending...");
   try {
-    const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, desc: text, reason: reason, jobs: jobs });
+    const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, reason: reason, jobs: jobs });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to send the request."); return; }
-    profileReqs[key] = { id: data.id, status: data.stage === 2 ? "Awaiting Final" : "Pending", desc: text, reason: reason, jobs: jobs, sheet: sheetKey, note: "", by: "" };
+    profileReqs[key] = { id: data.id, status: data.stage === 2 ? "Awaiting Final" : "Pending", desc: data.desc || "", reason: reason, jobs: Array.isArray(data.added) && data.added.length ? data.added : jobs, sheet: sheetKey, note: "", by: "" };
     profileDescEdit = "";
     profileJobs = [];
     renderProfile();
     setProfileStatus(data.emailed ? "ok" : "err", data.emailed
-      ? "Request sent to " + data.emailed + (data.stage === 2 ? " Manager" : " Section Head") + (data.emailed > 1 ? "s" : "") + ". " + (data.stage === 2 ? "There is no Section Head in this section, so the Manager gives the final approval." : "After the Section Head approves, it goes to the Manager for the final approval.") + " The description changes only after the final approval."
+      ? "Request sent to " + data.emailed + (data.stage === 2 ? " Manager" : " Section Head") + (data.emailed > 1 ? "s" : "") + ". " + (data.stage === 2 ? "There is no Section Head in this section, so the Manager gives the final approval." : "After the Section Head approves, it goes to the Manager for the final approval.") + " The description changes only after the final approval." + (data.skipped && data.skipped.length ? " Left out because they are already in your Task Description: " + data.skipped.join(", ") + "." : "")
       : "Your request was saved, but the email to the reviewers could not be sent. Please tell your Section Head.");
   } catch (err){
     setProfileStatus("err", "Could not reach the server: " + err.message);
@@ -4685,7 +4693,7 @@ document.addEventListener("click", (e) => {
     const isPending = pr && (pr.status === "Pending" || pr.status === "Awaiting Final");
     profileJobs = isPending && Array.isArray(pr.jobs) ? pr.jobs.slice() : [];   // mengubah request yang sedang berjalan: isian lama dibawa
     profileDescEdit = b.dataset.key; profileEditField = ""; renderProfile();
-    const ta = document.getElementById("profile-desc-ta"); if (ta) ta.focus();
+    const ta = document.getElementById("profile-reason-ta"); if (ta) ta.focus();
   }
   else if (act === "req-cancel"){ profileDescEdit = ""; profileJobs = []; renderProfile(); }
   else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet, b);
@@ -4702,7 +4710,7 @@ document.addEventListener("input", (e) => {
     const v = t.value, cutAt = Math.max(v.lastIndexOf(","), v.lastIndexOf("\n"));
     if (cutAt >= 0){ addJobTags(v.slice(0, cutAt)); t.value = v.slice(cutAt + 1); renderJobChips(); }   // juga untuk teks yang ditempel "a, b, c"
     updateReqSendState();
-  } else if (t.id === "profile-desc-ta" || t.id === "profile-reason-ta"){
+  } else if (t.id === "profile-reason-ta"){
     updateReqSendState();
   }
 });

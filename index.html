@@ -4929,10 +4929,24 @@ function profileOffHtml(){
     }).join("");
   }
   if (manage){
-    h += offManageOpen ? `<div class="profile-lbl">Manage Off schedule</div>` + offManageFormHtml(d)
-      : `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="manage-open">Manage Off schedule</button></div>`;
+    if (offManageOpen) h += `<div class="profile-lbl">Off Schedule</div>` + offManageFormHtml(d);
   }
   return h + `</div>`;
+}
+
+let offOpenOnLoad = false;
+// Tombol "Off Schedule" di bar akun: buka View Profile pada bagian Saturday Off dengan formulir pengaturan terbuka.
+function openOffSchedule(){
+  offOpenOnLoad = true;
+  openProfile();
+}
+function offShowManage(){
+  if (!profileOff || !Array.isArray(profileOff.manage) || !profileOff.manage.length) return;
+  offManageOpen = true; offFormOpen = false;
+  if (!profileOff.manage.some(c => c.key === offManageKey)) offManageKey = profileOff.manage[0].key;
+  renderProfile(); offManageUi();
+  const blk = document.querySelector("#profile-card-content .off-block");
+  if (blk) blk.scrollIntoView({ block: "start" });
 }
 
 async function loadProfileOff(){
@@ -4943,6 +4957,7 @@ async function loadProfileOff(){
     if (!d || !d.ok) return;
     d._email = email;
     profileOff = d;
+    if (offOpenOnLoad){ offOpenOnLoad = false; offShowManage(); return; }
     const open = document.getElementById("profile-modal-overlay").classList.contains("open");
     if (open && !profileEditField && !profileDescEdit && !profileBusy && !offFormOpen && !offManageOpen) renderProfile();
   } catch (e){ /* diam: bagian Off hanya tambahan informasi */ }
@@ -4975,11 +4990,6 @@ document.addEventListener("click", (e) => {
   const act = b.dataset.offAct;
   if (act === "open"){ offFormOpen = true; offManageOpen = false; renderProfile(); }
   else if (act === "cancel"){ offFormOpen = false; offManageOpen = false; renderProfile(); }
-  else if (act === "manage-open"){
-    offManageOpen = true; offFormOpen = false;
-    if (!offManageKey && profileOff && profileOff.manage && profileOff.manage[0]) offManageKey = profileOff.manage[0].key;
-    renderProfile(); offManageUi();
-  }
   else if (act === "send"){
     const date = (document.getElementById("off-date") || {}).value || "";
     const withEmail = (document.getElementById("off-with") || {}).value || "";
@@ -5988,6 +5998,10 @@ function renderLoginInfo(opts){
   if (opts.canAddPartner){
     parts.push(`<button type="button" class="acct-link" id="acct-partners">Task Partners</button>`);
   }
+  // Off Schedule: Authorized PIC dan Leader mengatur pekan Off / Non-off (formulir terbuka di View Profile).
+  if (opts.canManageOff && !opts.asPic){
+    parts.push(`<button type="button" class="acct-link" id="acct-offsched">Off Schedule</button>`);
+  }
   // Notifikasi persetujuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
   lastLoginOpts = opts;
   if (reviewReqs.length && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests<span class="notif-badge" id="acct-review-n">${reviewReqs.length > 99 ? "99+" : reviewReqs.length}</span></button>`);
@@ -6051,6 +6065,8 @@ function renderLoginInfo(opts){
   if (profBtn) profBtn.addEventListener("click", () => openProfile());
   const introBtn = document.getElementById("acct-intro");
   if (introBtn) introBtn.addEventListener("click", () => openLeaderIntro());
+  const offSchedBtn = document.getElementById("acct-offsched");
+  if (offSchedBtn) offSchedBtn.addEventListener("click", () => openOffSchedule());
   const partnersBtn = document.getElementById("acct-partners");
   if (partnersBtn) partnersBtn.addEventListener("click", () => openPartners());
   const introAdminBtn = document.getElementById("acct-intro-admin");
@@ -6086,7 +6102,7 @@ function extraFromServer(d){
     role: d.role || "", viewAs: d.viewAs || "", simCareer: d.simCareer || "", simSec: d.simSec || "", pinnedFrom: d.pinnedFrom || {}, asPic: d.asPic || "", picsBySheet: d.picsBySheet || {}, sheetPics: d.sheetPics || {}, simCareerSheets: d.simCareerSheets || [], careers: d.careers || [], perms: d.perms || {},
     createSheets: d.createSheets || [], deleteSheets: d.deleteSheets || [], createOwnSheets: d.createOwnSheets || [], deleteOwnSheets: d.deleteOwnSheets || [], teamSheets: d.teamSheets || [],
     policy: d.policy || {},
-    partnerSheets: d.partnerSheets || [], canAddPartner: !!d.canAddPartner, selfName: d.selfName || "",
+    partnerSheets: d.partnerSheets || [], canAddPartner: !!d.canAddPartner, canManageOff: !!d.canManageOff, selfName: d.selfName || "",
     introSheetUrl: d.introSheetUrl || "", introAuto: !!d.introAuto, introTour: !!d.introTour,
     introSteps: Array.isArray(d.introSteps) ? d.introSteps : [], introVersion: Number(d.introVersion) || 1
   };
@@ -6398,7 +6414,7 @@ async function loadAndRender(isInitial, fromCache){
   document.getElementById("app").innerHTML = introHtml + sectionsHtml.join("");
   applyPicMenus(); // tampilkan PIC Menu sesuai hak lihat email yang sedang login
   renderLoginInfo({ realRole: realRole, baseRole: baseRole, title: extra.title || "", job: extra.job || "",
-                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picList: uiPicList, devUi: !!extra.developer && (asPicMode || (realRole === "developer" && canSwitch)), uiViewAs: uiViewAs, uiCareer: uiCareer, uiSec: uiSec, canSignOut: !!(extra.perms && extra.perms.signOut), introTour: !!extra.introTour, introAdmin: !!extra.developer && !extra.asPic, canAddPartner: !!extra.canAddPartner, selfName: extra.selfName || "" });
+                    card: ((extra.policy || {})[effRole] || {}).loginCard, canSwitch: canSwitch, viewAs: viewAs, careers: extra.careers || [], simCareer: simCareer, simSec: simSec, secOptions: simSecOptions, asPic: extra.asPic || "", picList: uiPicList, devUi: !!extra.developer && (asPicMode || (realRole === "developer" && canSwitch)), uiViewAs: uiViewAs, uiCareer: uiCareer, uiSec: uiSec, canSignOut: !!(extra.perms && extra.perms.signOut), introTour: !!extra.introTour, introAdmin: !!extra.developer && !extra.asPic, canAddPartner: !!extra.canAddPartner, canManageOff: !!extra.canManageOff, selfName: extra.selfName || "" });
   maybeAutoLeaderIntro(extra);   // Leader yang baru pertama kali login -> popup intro otomatis
 
   const tabsWrap = document.getElementById("tabs-wrap");

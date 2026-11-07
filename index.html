@@ -4929,9 +4929,63 @@ function profileOffHtml(){
     }).join("");
   }
   if (manage){
-    if (offManageOpen) h += `<div class="profile-lbl">Off Schedule</div>` + offManageFormHtml(d);
+    if (offManageOpen) h += `<div class="profile-lbl">Off Schedule</div>` + offManageFormHtml(d) + `<div class="profile-lbl">Team Off of each PIC</div><div id="off-roster-box"></div>`;
   }
   return h + `</div>`;
+}
+
+let offRoster = null, offRosterKey = "";
+function offRosterHtml(){
+  const r = offRoster;
+  if (!r) return `<div class="profile-hint">Loading&hellip;</div>`;
+  const teams = r.teams || ["A", "B"];
+  if (!r.sheets || !r.sheets.length) return `<div class="profile-hint">No PIC found in this Career.</div>`;
+  return r.sheets.map(s => `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>
+    ${s.hasCol ? "" : `<div class="profile-hint" style="margin:0">This sheet has no <b>Team Off</b> column yet. It will be added when you save.</div>`}
+    <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
+      <select class="off-input" style="width:auto" data-off-roster data-sheet="${escapeHtml(s.sheetKey)}" data-row="${m.row}" data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.team)}">
+        <option value="">&mdash; none &mdash;</option>${teams.map(t => `<option value="${escapeHtml(t)}"${t === m.team ? " selected" : ""}>Team ${escapeHtml(t)}</option>`).join("")}
+      </select></div>`).join("")}</div>`).join("")
+    + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="roster-save">Save teams</button></div>`;
+}
+function offRosterRender(){
+  const box = document.getElementById("off-roster-box");
+  if (box) box.innerHTML = offRosterHtml();
+}
+async function loadOffRoster(){
+  const key = offManageKey;
+  if (!key) return;
+  offRoster = null; offRosterKey = key; offRosterRender();
+  try {
+    const d = await picApi({ action: "offTeamRoster", actor: getRealEmail(), career: key });
+    if (key !== offManageKey) return;
+    if (!d || !d.ok) throw new Error((d && d.error) || "Failed to load the PIC list.");
+    offRoster = d; offRosterRender();
+  } catch (err){
+    const box = document.getElementById("off-roster-box");
+    if (box) box.innerHTML = `<div class="profile-hint">${escapeHtml(err.message)}</div>`;
+  }
+}
+async function saveOffRoster(btn){
+  const changes = Array.from(document.querySelectorAll("[data-off-roster]"))
+    .filter(s => s.value !== s.dataset.orig)
+    .map(s => ({ sheet: s.dataset.sheet, row: Number(s.dataset.row), email: s.dataset.email, team: s.value }));
+  if (!changes.length){ setProfileStatus("err", "No changes to save."); return; }
+  if (profileBusy) return;
+  const restore = btnLoading(btn, "Saving...");
+  profileBusy = true; setProfileStatus("", "");
+  try {
+    const d = await picApi({ action: "offTeamSave", actor: getRealEmail(), career: offManageKey, changes });
+    if (!d || !d.ok) throw new Error((d && d.error) || "Something went wrong.");
+    profileBusy = false;
+    offRoster = d; offRosterRender();
+    if (d.offBoard) window.__offBoard = d.offBoard;
+    setProfileStatus("ok", `Saved: ${d.saved} PIC(s) updated.`);
+    restore();
+  } catch (err){
+    profileBusy = false; restore();
+    setProfileStatus("err", err.message || "Something went wrong.");
+  }
 }
 
 let offOpenOnLoad = false;
@@ -4944,7 +4998,7 @@ function offShowManage(){
   if (!profileOff || !Array.isArray(profileOff.manage) || !profileOff.manage.length) return;
   offManageOpen = true; offFormOpen = false;
   if (!profileOff.manage.some(c => c.key === offManageKey)) offManageKey = profileOff.manage[0].key;
-  renderProfile(); offManageUi();
+  renderProfile(); offManageUi(); loadOffRoster();
   const blk = document.querySelector("#profile-card-content .off-block");
   if (blk) blk.scrollIntoView({ block: "start" });
 }
@@ -4998,6 +5052,7 @@ document.addEventListener("click", (e) => {
     if (reason.length < 5){ setProfileStatus("err", "Please write a short reason (at least 5 characters)."); return; }
     offCall({ action: "offSwapRequest", date, withEmail, reason }, b, "Sending...", d => `Request sent to ${d.withName || "the PIC"}. They will get an email.`);
   }
+  else if (act === "roster-save") saveOffRoster(b);
   else if (act === "cancel-swap"){
     if (confirm("Cancel this swap request?")) offCall({ action: "offSwapCancel", id: b.dataset.id }, b, "Cancelling...", () => "Request cancelled.");
   }
@@ -5020,7 +5075,7 @@ document.addEventListener("change", (e) => {
   const t = e.target;
   if (!t) return;
   if (t.name === "off-mode") offManageUi();
-  else if (t.id === "off-career"){ offManageKey = t.value; renderProfile(); offManageUi(); }
+  else if (t.id === "off-career"){ offManageKey = t.value; renderProfile(); offManageUi(); loadOffRoster(); }
 });
 document.addEventListener("input", (e) => { if (e.target && e.target.id === "off-weeks") offManageUi(); });
 

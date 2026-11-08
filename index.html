@@ -1235,6 +1235,29 @@
   .off-radio{ display:flex;gap:8px;align-items:center;font-size:13.5px;text-align:left;cursor:pointer; }
   .off-block .profile-req{ margin-top:8px; }
   .off-block .off-btns{ display:flex;flex-wrap:wrap;gap:6px;margin-top:6px; }
+
+  /* ---- Tab di View Profile (Profile / My Off / My Shift) dan di jendela Off / Shift Schedule ---- */
+  .sub-tabs{ display:flex;flex-wrap:wrap;gap:6px;width:100%;box-sizing:border-box;margin:0 0 10px;align-items:center; }
+  .sub-tabs.profile-tabs{ justify-content:center;margin-top:24px; }   /* di bawah tombol Tutup, selebar kartu */
+  .sub-tabs.centered{ justify-content:center;margin-top:8px; }
+  .off-list{ width:100%; }
+  /* radio / checkbox di formulir profil jangan ikut melebar seperti kolom isian */
+  .profile-edit input[type="radio"], .profile-edit input[type="checkbox"]{ width:auto;padding:0;flex:none;margin:0; }
+  .sub-tab{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+    color:var(--ink-soft);cursor:pointer;white-space:nowrap;
+  }
+  .sub-tab:hover{ border-color:var(--accent);color:var(--ink); }
+  .sub-tab[aria-selected="true"]{ background:var(--primary);border-color:var(--primary);color:#fff; }
+  .sub-tab .tab-n{
+    display:inline-block;min-width:15px;height:15px;line-height:15px;padding:0 4px;margin-left:6px;
+    border-radius:999px;background:#B3401F;color:#fff;font-size:10px;text-align:center;letter-spacing:0;
+  }
+  .sub-tabs.small .sub-tab{ font-size:10.5px;padding:5px 10px;text-transform:none;letter-spacing:.02em; }
+  /* panel meniru susunan .member-card (kolom, rata tengah) supaya isi lama tidak bergeser */
+  .sub-pane{ width:100%;display:flex;flex-direction:column;align-items:center; }
+  .sub-pane[hidden]{ display:none; }
 </style>
 
 <!--[if gte mso 9]><xml>
@@ -4551,11 +4574,11 @@ function renderProfile(){
   if (!box) return;
   const rows = profileRowsFor(profileCtx.email);
   if (!rows.length){
-    box.innerHTML = `
+    box.innerHTML = profileLayout(`
       <div class="dp fallback">${escapeHtml(initials(profileCtx.email.split("@")[0].replace(/[._-]+/g, " ")))}</div>
       <hr>
       <div class="pic-name">${escapeHtml(profileCtx.email)}</div>
-      <div class="task-desc" style="margin-top:10px">No team profile was found for this email in the sheets you can see.</div>${profileOffHtml()}${profileSignOutHtml()}`;
+      <div class="task-desc" style="margin-top:10px">No team profile was found for this email in the sheets you can see.</div>${profileSignOutHtml()}`);
     return;
   }
   const dpRow = rows.find(r => r.m.dp) || rows[0];
@@ -4583,14 +4606,13 @@ function renderProfile(){
     : `<div class="profile-field"><div class="profile-lbl">WhatsApp</div>${waDigits ? `<a href="https://wa.me/${waDigits}" target="_blank" rel="noopener">${escapeHtml(waRow.m.whatsapp)}</a>` : "-"}${pencil("wa", "WhatsApp")}</div>`;
   const contactHtml = emailHtml + waHtml;
   const allLeader = rows.every(profileIsLeaderRow);
-  box.innerHTML = `
+  box.innerHTML = profileLayout(`
     ${dpHtml(Object.assign({}, dpRow.m, { pic: name }))}
     ${own ? `<div class="profile-photo-actions">
         <button type="button" class="pic-btn" id="profile-photo-btn">${dpRow.m.dp ? "Change photo" : "Upload photo"}</button>
         ${dpRow.m.dp ? `<button type="button" class="pic-btn" id="profile-photo-remove">Remove photo</button>` : ""}
         <input type="file" id="profile-photo-input" accept="image/*" hidden>
       </div>` : ""}
-    <div class="pic-status" id="profile-status"></div>
     <hr>
     <div class="pic-name">${escapeHtml(name)}</div>
     ${contactHtml}
@@ -4602,9 +4624,8 @@ function renderProfile(){
         <div class="task">${escapeHtml(r.m.task || "-")}</div>
         ${profileDescBlockHtml(r, own)}`}
       </div>`).join("")}
-    ${profileOffHtml()}
     ${own ? `<div class="profile-hint">You can change your photo and WhatsApp here. ${allLeader ? "Your name and email are managed in Our Team &rsaquo; Edit." : "Your name, email and task are managed by your team leader (Our Team &rsaquo; Edit). To change your task description, use Request to change &mdash; it is applied once approved."}</div>` : ""}
-    ${profileSignOutHtml()}`;
+    ${profileSignOutHtml()}`);
   hydrateMemberPhotos(box);
 }
 
@@ -4899,19 +4920,17 @@ function offManageUi(){
   }
 }
 
-function profileOffHtml(){
+// Isi tab "My Off": tim, status Sabtu, tukar Off, jawaban atas permintaan, dan daftar pantauan Off.
+// Mengembalikan { html, waiting }; html kosong = tab tidak ditampilkan; waiting = jumlah permintaan yang menunggu jawaban.
+function profileOffPaneHtml(){
   const d = profileOff;
-  if (!d || d._email !== String(profileCtx.email || "").trim()) return "";
+  if (!d || d._email !== String(profileCtx.email || "").trim()) return { html: "", waiting: 0 };
   const own = profileCtx.own;
   const inc = own ? (d.incoming || []) : [];
   const out = d.outgoing || [];
-  const shInfo = shiftReady();
   const wOff = own ? (d.watch || []) : [];
-  const wSh = own && shInfo ? (shInfo.watch || []) : [];
-  if (!d.enabled && !shInfo && !inc.length && !out.length && !wOff.length && !wSh.length) return "";
-  let h = `<hr><div class="profile-block off-block"><div class="profile-sec">Work Schedule</div>`;
-  h += profileShiftHtml();
-  if (d.enabled || inc.length || out.length) h += `<div class="profile-lbl" style="margin-top:12px">Saturday Off</div>`;
+  if (!d.enabled && !inc.length && !out.length && !wOff.length) return { html: "", waiting: 0 };
+  let h = `<div class="profile-block off-block"><div class="profile-sec">Saturday Off</div>`;
   if (d.enabled){
     const sats = d.saturdays || [], first = sats[0];
     h += `<div class="profile-lbl">My team</div><div class="task">Team ${escapeHtml(d.team)}</div>`;
@@ -4946,9 +4965,47 @@ function profileOffHtml(){
       return `<div class="profile-req"><b>${escapeHtml(q.dateLabel)} &harr; ${escapeHtml(q.withName || q.withEmail)}</b><span class="txt">${escapeHtml(offStatusText(q))}${note ? "\nNote: " + escapeHtml(note) : ""}</span>${active && own ? `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="cancel-swap" data-id="${escapeHtml(q.id)}">Cancel request</button></div>` : ""}</div>`;
     }).join("");
   }
-  h += swapWatchHtml(wOff, !!d.canCancelWatch, "off") + swapWatchHtml(wSh, !!(shInfo && shInfo.canCancelWatch), "shift");
-  return h + `</div>`;
+  h += swapWatchHtml(wOff, !!d.canCancelWatch, "off");
+  return { html: h + `</div>`, waiting: inc.length };
 }
+
+// Isi tab "My Shift": shift kerja, tukar shift, jawaban atas permintaan, dan daftar pantauan shift.
+function profileShiftPaneHtml(){
+  const s = shiftReady();
+  if (!s) return { html: "", waiting: 0 };
+  const own = profileCtx.own;
+  const wSh = own ? (s.watch || []) : [];
+  const inc = own ? (s.incoming || []) : [];
+  return { html: `<div class="profile-block off-block"><div class="profile-sec">Work Schedule</div>` + profileShiftHtml() + swapWatchHtml(wSh, !!s.canCancelWatch, "shift") + `</div>`, waiting: inc.length };
+}
+
+// Susunan View Profile: tab (bila ada Off / Shift), baris status, lalu panel yang aktif. Tab dipindah tanpa menggambar ulang,
+// jadi isian yang sedang diketik tidak hilang.
+let profileTab = "profile";   // "profile" | "off" | "shift"
+function profileLayout(profilePaneHtml){
+  const offPane = profileOffPaneHtml(), shiftPane = profileShiftPaneHtml();
+  const tabs = [{ key: "profile", label: "Profile", n: 0 }];
+  if (offPane.html) tabs.push({ key: "off", label: "My Off", n: offPane.waiting });
+  if (shiftPane.html) tabs.push({ key: "shift", label: "My Shift", n: shiftPane.waiting });
+  if (!tabs.some(t => t.key === profileTab)) profileTab = "profile";
+  const bar = tabs.length > 1
+    ? `<div class="sub-tabs profile-tabs" role="tablist" aria-label="Profile sections">${tabs.map(t =>
+        `<button type="button" role="tab" class="sub-tab" data-ptab="${t.key}" aria-selected="${t.key === profileTab}">${t.label}${t.n ? `<span class="tab-n" title="${t.n} waiting for your answer">${t.n}</span>` : ""}</button>`).join("")}</div>`
+    : "";
+  const pane = (key, html) => `<div class="sub-pane" data-ppane="${key}"${profileTab === key ? "" : " hidden"}>${html}</div>`;
+  return bar + `<div class="pic-status" id="profile-status"></div>` + pane("profile", profilePaneHtml)
+    + (offPane.html ? pane("off", offPane.html) : "") + (shiftPane.html ? pane("shift", shiftPane.html) : "");
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest && e.target.closest("[data-ptab]");
+  if (!t) return;
+  profileTab = t.dataset.ptab;
+  const box = document.getElementById("profile-card-content");
+  if (!box) return;
+  box.querySelectorAll("[data-ptab]").forEach(b => b.setAttribute("aria-selected", String(b === t)));
+  box.querySelectorAll("[data-ppane]").forEach(pn => { pn.hidden = pn.dataset.ppane !== profileTab; });
+  document.getElementById("profile-modal-overlay").scrollTop = 0;
+});
 
 const SHIFT_UI = { pagi: ["Morning", "07:00"], normal: ["Normal", "09:00"], siang: ["Afternoon", "11:00"] };
 function localTodayISO(){
@@ -4958,6 +5015,8 @@ function localTodayISO(){
 
 /* ---------- Modal Off Schedule / Shift Schedule (login card terpisah dari View Profile) ---------- */
 let schedKind = "", schedOff = null, schedRoster = null, schedShift = null;
+let schedTab = "";      // tab aktif di Off Schedule: "week" | "teams"
+let schedSheet = 0;     // sub-tab sheet aktif pada daftar PIC (bila ada lebih dari satu sheet)
 function setSchedStatus(type, text){
   const el = document.getElementById("sched-status");
   if (!el) return;
@@ -4971,6 +5030,7 @@ document.getElementById("sched-modal-overlay").addEventListener("click", (e) => 
 
 function openSched(kind){
   schedKind = kind; schedOff = null; schedRoster = null; schedShift = null;
+  schedTab = ""; schedSheet = 0;
   document.getElementById("sched-modal-overlay").classList.add("open");
   renderSched();
   if (kind === "off") loadSchedOff(); else loadSchedShift();
@@ -4980,17 +5040,27 @@ function renderSched(){
   if (!box) return;
   const isOff = schedKind === "off";
   let h = `<div class="pic-name">${isOff ? "Off Schedule" : "Shift Schedule"}</div><hr>`;
+  const pane = (key, html) => `<div class="sub-pane" data-spane="${key}"${schedTab === key ? "" : " hidden"}>${html}</div>`;
   if (isOff){
     h += `<div class="profile-hint" style="margin-top:0">Set whether this week has an Off, and which team each PIC belongs to.</div>`;
-    if (!schedOff) h += `<div class="profile-hint">Loading&hellip;</div>`;
+    if (!schedOff) h += `<div class="pic-status" id="sched-status"></div><div class="profile-hint">Loading&hellip;</div>`;
     else {
-      if ((schedOff.manage || []).length) h += `<div class="profile-sec">This week</div>` + offManageFormHtml(schedOff);
-      h += `<div class="profile-sec" style="margin-top:14px">Team Off of each PIC</div>${offRosterHtml()}`;
+      const tabs = [];
+      if ((schedOff.manage || []).length) tabs.push({ key: "week", label: "This week" });
+      tabs.push({ key: "teams", label: "Team of each PIC" });
+      if (!tabs.some(t => t.key === schedTab)) schedTab = tabs[0].key;
+      h += tabs.length > 1
+        ? `<div class="sub-tabs centered" role="tablist" aria-label="Off Schedule sections">${tabs.map(t =>
+            `<button type="button" role="tab" class="sub-tab" data-stab="${t.key}" aria-selected="${t.key === schedTab}">${t.label}</button>`).join("")}</div>`
+        : "";
+      h += `<div class="pic-status" id="sched-status"></div>`;
+      if (tabs.some(t => t.key === "week")) h += pane("week", offManageFormHtml(schedOff));
+      h += pane("teams", (tabs.length > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">Team Off of each PIC</div>`) + offRosterHtml());
     }
   } else {
-    h += `<div class="profile-hint" style="margin-top:0">Choose the work shift of each PIC. Default is Normal. Morning starts 07:00, Normal 09:00, Afternoon 11:00.</div>${shiftRosterHtml()}`;
+    h += `<div class="profile-hint" style="margin-top:0">Choose the work shift of each PIC. Default is Normal. Morning starts 07:00, Normal 09:00, Afternoon 11:00.</div>`;
+    h += `<div class="pic-status" id="sched-status"></div>${shiftRosterHtml()}`;
   }
-  h += `<div class="pic-status" id="sched-status"></div>`;
   box.innerHTML = h;
   if (isOff && schedOff) offManageUi();
 }
@@ -5025,29 +5095,60 @@ async function loadSchedShift(){
   }
 }
 
+// Sub-tab per sheet (hanya bila ada lebih dari satu sheet), supaya daftar PIC tidak memanjang ke bawah.
+function sheetTabsHtml(sheets){
+  if (sheets.length < 2) return "";
+  if (schedSheet >= sheets.length) schedSheet = 0;
+  return `<div class="sub-tabs small centered" role="tablist" aria-label="Sheets">${sheets.map((x, i) =>
+    `<button type="button" role="tab" class="sub-tab" data-sstab="${i}" aria-selected="${i === schedSheet}">${escapeHtml(x.sheetName)}</button>`).join("")}</div>`;
+}
+function sheetPaneHtml(i, count, inner){
+  return `<div class="sub-pane" data-sspane="${i}"${(count < 2 || i === schedSheet) ? "" : " hidden"}>${inner}</div>`;
+}
 function offRosterHtml(){
   const r = schedRoster;
   if (!r) return `<div class="profile-hint">Loading&hellip;</div>`;
   if (!r.sheets || !r.sheets.length) return `<div class="profile-hint">${escapeHtml(r.err || "No PIC found in your sections.")}</div>`;
-  return r.sheets.map(s => `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>
+  const n = r.sheets.length;
+  return sheetTabsHtml(r.sheets) + r.sheets.map((s, i) => sheetPaneHtml(i, n, `${n > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>`}
     ${s.hasCol ? "" : `<div class="profile-hint" style="margin:0">This sheet has no <b>Team Off</b> column yet. It will be added when you save.</div>`}
     <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
       <select class="off-input" style="width:auto" data-off-roster data-sheet="${escapeHtml(s.sheetKey)}" data-row="${m.row}" data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.team)}">
         <option value="">&mdash; none &mdash;</option>${(s.teams || ["A", "B"]).map(t => `<option value="${escapeHtml(t)}"${t === m.team ? " selected" : ""}>Team ${escapeHtml(t)}</option>`).join("")}
-      </select></div>`).join("")}</div>`).join("")
+      </select></div>`).join("")}</div>`)).join("")
     + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="roster-save">Save teams</button></div>`;
 }
 function shiftRosterHtml(){
   const d = schedShift;
   if (!d) return `<div class="profile-hint">Loading&hellip;</div>`;
   if (!d.sheets || !d.sheets.length) return `<div class="profile-hint">No PIC found in your sections.</div>`;
-  return d.sheets.map(s => `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>
+  const n = d.sheets.length;
+  return sheetTabsHtml(d.sheets) + d.sheets.map((s, i) => sheetPaneHtml(i, n, `${n > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>`}
     <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
       <select class="off-input" style="width:auto" data-shift-roster data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.shift)}">
         ${["pagi", "normal", "siang"].map(k => `<option value="${k}"${k === m.shift ? " selected" : ""}>${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`).join("")}
-      </select></div>`).join("")}</div>`).join("")
+      </select></div>`).join("")}</div>`)).join("")
     + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="shift-save">Save shifts</button></div>`;
 }
+
+// Pindah tab di jendela Off / Shift Schedule tanpa menggambar ulang (pilihan yang belum disimpan tetap ada).
+document.addEventListener("click", (e) => {
+  const box = schedBox();
+  if (!box) return;
+  const t = e.target.closest && e.target.closest("[data-stab]");
+  if (t){
+    schedTab = t.dataset.stab;
+    box.querySelectorAll("[data-stab]").forEach(b => b.setAttribute("aria-selected", String(b === t)));
+    box.querySelectorAll("[data-spane]").forEach(pn => { pn.hidden = pn.dataset.spane !== schedTab; });
+    return;
+  }
+  const x = e.target.closest && e.target.closest("[data-sstab]");
+  if (x){
+    schedSheet = Number(x.dataset.sstab);
+    box.querySelectorAll("[data-sstab]").forEach(b => b.setAttribute("aria-selected", String(b === x)));
+    box.querySelectorAll("[data-sspane]").forEach(pn => { pn.hidden = Number(pn.dataset.sspane) !== schedSheet; });
+  }
+});
 
 async function schedCall(btn, payload, busyText, onOk){
   const restore = btnLoading(btn, busyText);
@@ -5963,6 +6064,7 @@ document.addEventListener("keydown", (e) => {
 function openProfile(){
   profileEditField = ""; profileDescEdit = "";
   offFormOpen = false; offManageOpen = false; shiftFormOpen = false;
+  profileTab = "profile";
   renderProfile();
   document.getElementById("profile-modal-overlay").classList.add("open");
   loadProfileShift();  // shift kerja, tukar shift, dan daftar pantauan Leader / Authorized PIC

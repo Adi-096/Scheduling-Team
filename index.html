@@ -1233,6 +1233,22 @@
   .off-row{ display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;padding:4px 8px;border:1px solid var(--line);border-radius:8px; }
   .off-input{ width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff;color:inherit; }
   .off-radio{ display:flex;gap:8px;align-items:center;font-size:13.5px;text-align:left;cursor:pointer; }
+  /* saklar ON / OFF (Off Schedule per Career, Shift Schedule per Section) */
+  .sw{ position:relative;display:inline-flex;align-items:center;gap:8px;cursor:pointer;flex:none; }
+  .sw input[type="checkbox"]{ position:absolute;opacity:0;width:0 !important;height:0;margin:0; }
+  .sw-ui{ position:relative;width:40px;height:22px;border-radius:999px;background:#c9d3de;transition:background .15s; }
+  .sw-ui::after{ content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s; }
+  .sw input:checked + .sw-ui{ background:var(--primary); }
+  .sw input:checked + .sw-ui::after{ transform:translateX(18px); }
+  .sw input:focus-visible + .sw-ui{ outline:2px solid var(--primary);outline-offset:2px; }
+  .sw-txt{ font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;min-width:24px;color:var(--ink-soft); }
+  .sec-card{ border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;text-align:left; }
+  .sec-head{ display:flex;justify-content:space-between;align-items:center;gap:10px; }
+  .sec-name{ font-weight:600;font-size:14px; }
+  .sec-body{ margin-top:8px; }
+  .apply-row{ display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;text-align:left;font-size:13.5px; }
+  .period-card{ display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;text-align:left; }
+  .period-head{ display:flex;justify-content:space-between;align-items:center;gap:8px; }
   .off-block .profile-req{ margin-top:8px; }
   .off-block .off-btns{ display:flex;flex-wrap:wrap;gap:6px;margin-top:6px; }
 
@@ -1829,6 +1845,9 @@ const WA_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 // popup "Our Team" sebagai blok "Person In Charge". Urutan array menentukan
 // urutan tampil: Section Head -> Manager -> Senior Manager.
 const LEADER_TITLES = ["section head","manager","senior manager"];
+// Leader yang TIDAK masuk daftar task bernomor. Section Head sengaja tidak dimasukkan di sini, jadi Section Head
+// tampil di daftar task (staff bisa langsung email Section Head), tetapi di Our Team tetap di blok "Person In Charge".
+const TASK_LIST_HIDDEN_TITLES = ["manager","senior manager"];
 // Leader yang ditampilkan di Our Team ("Person In Charge") menurut role penonton: Contact Center hanya Section Head;
 // BSP dan Staff / Other Unit: Section Head + Manager; role lain (PIC, Task Partner, Dosen, pimpinan): semua leader.
 // Server juga menyaring data yang dikirim; ini lapisan kedua di tampilan.
@@ -1910,9 +1929,10 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
   // Jabatan/posisi yang diperlakukan sebagai "leader" — tidak ikut dihitung/
   // tampil sebagai item bernomor di daftar task. Hanya muncul di popup
   // "Our Team" sebagai blok "Person In Charge" (lihat openModal / LEADER_TITLES).
+  // Section Head ikut masuk daftar task (lihat TASK_LIST_HIDDEN_TITLES); Manager dan Senior Manager tidak.
   const regularIdx = [];
   members.forEach((m,i) => {
-    if (!LEADER_TITLES.includes(normJabatan(m.jabatan))) regularIdx.push(i);
+    if (!TASK_LIST_HIDDEN_TITLES.includes(normJabatan(m.jabatan))) regularIdx.push(i);
   });
 
   const taskLinks = regularIdx.map((i, displayPos) => {
@@ -1929,7 +1949,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
     <li>
       <div class="task-link" data-sec="${idx}" data-member="${i}" role="button" tabindex="0" aria-haspopup="dialog">
         <span class="idx">${String(displayPos+1).padStart(2,"0")}</span>
-        <span class="name">${escapeHtml(m.task || "(Tanpa nama task)")}</span>
+        <span class="name">${escapeHtml(m.task || (normJabatan(m.jabatan) === "section head" ? ("Section Head" + (m.pic ? " — " + m.pic : "")) : "(Tanpa nama task)"))}</span>
         <span class="actions">${emailBtn}${waBtn}</span>
       </div>
     </li>`;
@@ -4816,6 +4836,7 @@ function offBadgeHtml(m, career){
   const team = normOffTeam(m.team);
   if (!team) return "";
   const c = b.careers[normSheetName(career)];
+  if (c && c.state === "disabled") return "";   // sistem Off dimatikan untuk Career ini
   if (!c) return `<div class="off-badge non">Team ${escapeHtml(team)}</div>`;
   const tip = escapeHtml(b.label || "");
   if (c.state === "nonoff") return `<div class="off-badge non" title="${tip}">Team ${escapeHtml(team)} &middot; Non-off</div>`;
@@ -4827,7 +4848,7 @@ function offBadgeHtml(m, career){
 }
 function offSubText(career){
   const b = window.__offBoard, c = b && b.careers ? b.careers[normSheetName(career)] : null;
-  if (!c) return "";
+  if (!c || c.state === "disabled") return "";
   if (b.satOnly && b.date !== localTodayISO()) return "";
   const day = String(b.label || "").replace(/^Saturday,\s*/, "");
   if (c.state === "nonoff") return ` — Non-off (${day}): everyone works`;
@@ -4876,48 +4897,117 @@ function offSwapFormHtml(d){
     </div>`;
 }
 
+/* ---- Off Schedule > This week ----
+   Urutan formulir: (1) Terapkan sistem Off untuk Career ini? ON/OFF  ->  (2) bila ON: Off atau Non-off, tim, dan
+   rentang Non-off (boleh lebih dari satu, tiap rentang punya "Start from" dan jumlah pekan).
+   Isian disimpan sementara di offDraft, jadi pindah tab / tambah rentang tidak menghapus yang sedang diketik. */
+let offDraft = null;          // { key, enabled, mode, team, periods: [{from, weeks}] }
+const OFF_MAX_PERIODS = 12;   // sama dengan OFF_MAX_NONOFF_PERIODS di Code.gs
+
+function offDraftOf(cur){
+  if (!offDraft || offDraft.key !== cur.key){
+    const ps = (cur.periods || []).map(p => ({ from: p.from, weeks: Number(p.weeks) }));
+    offDraft = { key: cur.key, enabled: cur.enabled !== false, mode: ps.length ? "nonoff" : "off",
+                 team: cur.pendingTeam || (cur.teams || ["A"])[0], periods: ps };
+  }
+  return offDraft;
+}
+// Sabtu yang bisa dipilih sebagai "Start from": Sabtu ini dan 51 Sabtu berikutnya (+ tanggal mulai rentang yang sedang berjalan).
+function offSatOptions(cur, selected){
+  const list = [];
+  for (let i = 0; i < 52; i++) list.push(offAddDaysStr(cur.thisSat, i * 7));
+  if (selected && !list.includes(selected)) list.push(selected);
+  return list.sort();
+}
+// Rentang Non-off baru: mulai Sabtu setelah rentang terakhir (atau Sabtu ini bila belum ada).
+function offNewPeriod(cur, periods){
+  let from = cur.thisSat;
+  if (periods.length){
+    const lasts = periods.map(p => offAddDaysStr(p.from, 7 * ((Math.floor(Number(p.weeks)) || 1) - 1))).sort();
+    from = offAddDaysStr(lasts[lasts.length - 1], 7);
+  }
+  return { from, weeks: 1 };
+}
+// Pesan masalah pada daftar rentang ("" = aman).
+function offPeriodsProblem(periods){
+  const r = periods.map((p, i) => ({ i, from: p.from, last: offAddDaysStr(p.from, 7 * ((Math.floor(Number(p.weeks)) || 1) - 1)) }));
+  for (let a = 0; a < r.length; a++) for (let b = a + 1; b < r.length; b++){
+    if (r[a].from <= r[b].last && r[b].from <= r[a].last) return `Non-off period ${r[a].i + 1} and ${r[b].i + 1} overlap. Please change the dates.`;
+  }
+  return "";
+}
+
 function offManageFormHtml(d){
   const list = d.manage || [];
   const cur = list.find(c => c.key === offManageKey) || list[0];
   offManageKey = cur.key;
-  const isNon = cur.mode === "nonoff";
-  const now = isNon ? `Non-off until ${escapeHtml(cur.nonOffUntilLabel)}`
-    : cur.mode === "off" ? `Off week &mdash; Team ${escapeHtml(cur.pendingTeam)} is off on ${escapeHtml(cur.thisSatLabel)}`
-    : "Not set yet";
-  const left = isNon ? Math.max(1, Math.round((Date.parse(cur.nonOffUntil) - Date.parse(cur.thisSat)) / 604800000) + 1) : 1;
+  const dr = offDraftOf(cur);
   const sel = (a, b) => a === b ? " selected" : "";
-  return `<div class="profile-edit">
-      ${list.length > 1
-        ? `<div class="profile-lbl">Career</div><select id="off-career" class="off-input">${list.map(c => `<option value="${escapeHtml(c.key)}"${sel(c.key, cur.key)}>${escapeHtml(c.name)}</option>`).join("")}</select>`
-        : `<div class="profile-lbl">Career</div><div class="task">${escapeHtml(cur.name)}</div>`}
-      <div class="profile-hint" style="margin:0">Now: ${now}</div>
-      <div class="profile-lbl">This week (${escapeHtml(cur.thisSatLabel)})</div>
-      <label class="off-radio"><input type="radio" name="off-mode" value="off"${isNon ? "" : " checked"}> Off week &mdash; one team is off</label>
-      <label class="off-radio"><input type="radio" name="off-mode" value="nonoff"${isNon ? " checked" : ""}> Non-off &mdash; everyone works</label>
-      <div id="off-weeks-wrap"${isNon ? "" : " hidden"}>
-        <div class="profile-lbl">For how many weeks (including this week)</div>
-        <input type="number" id="off-weeks" class="off-input" min="1" max="26" value="${left}" data-sat="${escapeHtml(cur.thisSat)}">
-        <div class="profile-hint" id="off-weeks-hint" style="margin:0"></div>
+  const careerBlock = list.length > 1
+    ? `<div class="profile-lbl">Career</div><select id="off-career" class="off-input">${list.map(c => `<option value="${escapeHtml(c.key)}"${sel(c.key, cur.key)}>${escapeHtml(c.name)}</option>`).join("")}</select>`
+    : `<div class="profile-lbl">Career</div><div class="task">${escapeHtml(cur.name)}</div>`;
+  // 1) Pertanyaan pertama: sistem Off diterapkan atau tidak
+  const applyBlock = `<div class="apply-row"><span><b>Apply the Off system for this Career?</b></span>
+      <label class="sw"><input type="checkbox" id="off-apply"${dr.enabled ? " checked" : ""}><span class="sw-ui"></span><span class="sw-txt">${dr.enabled ? "ON" : "OFF"}</span></label></div>`;
+  let body = "";
+  if (!dr.enabled){
+    body = `<div class="profile-hint">The Off system is turned off for this Career. No Off / Non-off badge is shown and Saturday Off swaps are not available. Your earlier Off settings are kept, so turning it on again brings them back.</div>`;
+  } else {
+    const now = cur.enabled === false ? "The Off system is currently turned off"
+      : cur.mode === "nonoff" ? `Non-off until ${escapeHtml(cur.nonOffUntilLabel)}`
+      : cur.mode === "off" ? `Off week &mdash; Team ${escapeHtml(cur.offTeamNow)} is off on ${escapeHtml(cur.thisSatLabel)}`
+      : "Not set yet";
+    const isNon = dr.mode === "nonoff";
+    const periodsHtml = dr.periods.map((p, i) => `<div class="period-card">
+        <div class="period-head"><div class="profile-lbl" style="margin:0">Non-off period ${i + 1}</div>
+          <button type="button" class="profile-mini" data-off-act="period-del" data-i="${i}">Remove</button></div>
+        <div class="profile-lbl">Start from</div>
+        <select class="off-input" data-period-from="${i}">${offSatOptions(cur, p.from).map(x => `<option value="${escapeHtml(x)}"${sel(x, p.from)}>${escapeHtml(offDateLabelJs(x))}</option>`).join("")}</select>
+        <div class="profile-lbl">For how many weeks</div>
+        <input type="number" class="off-input" min="1" max="26" value="${escapeHtml(String(p.weeks))}" data-period-weeks="${i}">
+        <div class="profile-hint" data-period-hint="${i}" style="margin:0"></div>
+      </div>`).join("");
+    body = `<div class="profile-hint" style="margin:8px 0 0">Now: ${now}</div>
+      <div class="profile-lbl">Off or Non-off</div>
+      <label class="off-radio"><input type="radio" name="off-mode" value="off"${isNon ? "" : " checked"}> Off &mdash; no Non-off period, one team is off</label>
+      <label class="off-radio"><input type="radio" name="off-mode" value="nonoff"${isNon ? " checked" : ""}> Non-off &mdash; choose when everyone works</label>
+      <div id="off-nonoff-wrap"${isNon ? "" : " hidden"}>
+        ${periodsHtml}
+        <div class="profile-hint" id="off-period-problem" style="margin:6px 0 0;color:#B3401F"></div>
+        ${dr.periods.length < OFF_MAX_PERIODS ? `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="period-add">+ Add another Non-off period</button></div>` : ""}
       </div>
       <div class="profile-lbl" id="off-team-lbl"></div>
-      <select id="off-team" class="off-input">${(cur.teams || ["A", "B"]).map(t => `<option value="${escapeHtml(t)}"${sel(t, cur.pendingTeam)}>Team ${escapeHtml(t)}</option>`).join("")}</select>
-      <div class="profile-hint">After a Non-off period ends, the rotation continues from where it stopped. The Non-off weeks are not counted.</div>
+      <select id="off-team" class="off-input">${(cur.teams || ["A", "B"]).map(t => `<option value="${escapeHtml(t)}"${sel(t, dr.team)}>Team ${escapeHtml(t)}</option>`).join("")}</select>
+      <div class="profile-hint">The Non-off weeks are not counted. After each Non-off period ends, the rotation continues from where it stopped.</div>`;
+  }
+  return `<div class="profile-edit">
+      ${careerBlock}
+      ${applyBlock}
+      ${body}
       <div class="profile-edit-actions">
         <button type="button" class="pic-btn primary" data-off-act="manage-save">Save</button>
         <button type="button" class="pic-btn" data-off-act="sched-close">Close</button>
       </div>
     </div>`;
 }
+// Memperbarui teks bantu (label tim, tanggal akhir tiap rentang) tanpa menggambar ulang formulir.
 function offManageUi(){
-  const mode = (document.querySelector('input[name="off-mode"]:checked') || {}).value || "off";
-  const wrap = document.getElementById("off-weeks-wrap"), lbl = document.getElementById("off-team-lbl");
-  if (wrap) wrap.hidden = mode !== "nonoff";
-  if (lbl) lbl.textContent = mode === "nonoff" ? "Team that goes off first when Off resumes" : "Team that is off this Saturday";
-  const w = document.getElementById("off-weeks"), hint = document.getElementById("off-weeks-hint");
-  if (w && hint){
-    const n = Math.floor(Number(w.value));
-    hint.textContent = (n >= 1 && n <= 26) ? `Non-off through ${offDateLabelJs(offAddDaysStr(w.dataset.sat, (n - 1) * 7))}.` : "Enter a number from 1 to 26.";
-  }
+  const dr = offDraft;
+  if (!dr) return;
+  const wrap = document.getElementById("off-nonoff-wrap"), lbl = document.getElementById("off-team-lbl");
+  if (wrap) wrap.hidden = dr.mode !== "nonoff";
+  if (lbl) lbl.textContent = dr.mode === "nonoff" ? "Team that is off on the first Off Saturday (from this week)" : "Team that is off this Saturday";
+  const problem = offPeriodsProblem(dr.periods);
+  dr.periods.forEach((p, i) => {
+    const h = document.querySelector(`[data-period-hint="${i}"]`);
+    if (!h) return;
+    const n = Math.floor(Number(p.weeks));
+    h.textContent = (n >= 1 && n <= 26)
+      ? `Non-off from ${offDateLabelJs(p.from)} through ${offDateLabelJs(offAddDaysStr(p.from, (n - 1) * 7))}.`
+      : "Enter a number from 1 to 26.";
+  });
+  const pb = document.getElementById("off-period-problem");
+  if (pb) pb.textContent = problem;
 }
 
 // Isi tab "My Off": tim, status Sabtu, tukar Off, jawaban atas permintaan, dan daftar pantauan Off.
@@ -5030,7 +5120,7 @@ document.getElementById("sched-modal-overlay").addEventListener("click", (e) => 
 
 function openSched(kind){
   schedKind = kind; schedOff = null; schedRoster = null; schedShift = null;
-  schedTab = ""; schedSheet = 0;
+  schedTab = ""; schedSheet = 0; offDraft = null;
   document.getElementById("sched-modal-overlay").classList.add("open");
   renderSched();
   if (kind === "off") loadSchedOff(); else loadSchedShift();
@@ -5058,7 +5148,7 @@ function renderSched(){
       h += pane("teams", (tabs.length > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">Team Off of each PIC</div>`) + offRosterHtml());
     }
   } else {
-    h += `<div class="profile-hint" style="margin-top:0">Choose the work shift of each PIC. Default is Normal. Morning starts 07:00, Normal 09:00, Afternoon 11:00.</div>`;
+    h += `<div class="profile-hint" style="margin-top:0">Switch each Section ON or OFF. When ON, choose the work shift of each PIC (default is Normal; Morning starts 07:00, Normal 09:00, Afternoon 11:00). When OFF, the shift of that Section is not shown.</div>`;
     h += `<div class="pic-status" id="sched-status"></div>${shiftRosterHtml()}`;
   }
   box.innerHTML = h;
@@ -5109,8 +5199,10 @@ function offRosterHtml(){
   const r = schedRoster;
   if (!r) return `<div class="profile-hint">Loading&hellip;</div>`;
   if (!r.sheets || !r.sheets.length) return `<div class="profile-hint">${escapeHtml(r.err || "No PIC found in your sections.")}</div>`;
-  const n = r.sheets.length;
-  return sheetTabsHtml(r.sheets) + r.sheets.map((s, i) => sheetPaneHtml(i, n, `${n > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>`}
+  const shown = r.sheets.filter(x => x.offEnabled !== false);   // Career dengan sistem Off OFF tidak ditampilkan
+  if (!shown.length) return `<div class="profile-hint">The Off system is turned off for your Career(s), so there are no teams to set. Turn it on in the <b>This week</b> tab first.</div>`;
+  const n = shown.length;
+  return sheetTabsHtml(shown) + shown.map((s, i) => sheetPaneHtml(i, n, `${n > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>`}
     ${s.hasCol ? "" : `<div class="profile-hint" style="margin:0">This sheet has no <b>Team Off</b> column yet. It will be added when you save.</div>`}
     <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
       <select class="off-input" style="width:auto" data-off-roster data-sheet="${escapeHtml(s.sheetKey)}" data-row="${m.row}" data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.team)}">
@@ -5122,13 +5214,20 @@ function shiftRosterHtml(){
   const d = schedShift;
   if (!d) return `<div class="profile-hint">Loading&hellip;</div>`;
   if (!d.sheets || !d.sheets.length) return `<div class="profile-hint">No PIC found in your sections.</div>`;
-  const n = d.sheets.length;
-  return sheetTabsHtml(d.sheets) + d.sheets.map((s, i) => sheetPaneHtml(i, n, `${n > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>`}
-    <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
-      <select class="off-input" style="width:auto" data-shift-roster data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.shift)}">
-        ${["pagi", "normal", "siang"].map(k => `<option value="${k}"${k === m.shift ? " selected" : ""}>${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`).join("")}
-      </select></div>`).join("")}</div>`)).join("")
-    + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="shift-save">Save shifts</button></div>`;
+  // Tiap Section = satu baris dengan saklar ON/OFF. ON -> daftar PIC dan pilihan shift tampil. OFF -> tidak tampil, dan
+  // shift Section itu tidak muncul di Our Team / View Profile.
+  return d.sheets.map(s => {
+    const on = s.enabled !== false;
+    return `<div class="sec-card" data-shsec="${escapeHtml(s.sheetKey)}">
+      <div class="sec-head"><span class="sec-name">${escapeHtml(s.sheetName)}</span>
+        <label class="sw"><input type="checkbox" data-shift-toggle data-sheet="${escapeHtml(s.sheetKey)}" data-orig="${on ? "1" : "0"}"${on ? " checked" : ""}><span class="sw-ui"></span><span class="sw-txt">${on ? "ON" : "OFF"}</span></label></div>
+      <div class="sec-body"${on ? "" : " hidden"}>
+        <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
+          <select class="off-input" style="width:auto" data-shift-roster data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.shift)}">
+            ${["pagi", "normal", "siang"].map(k => `<option value="${k}"${k === m.shift ? " selected" : ""}>${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`).join("")}
+          </select></div>`).join("")}</div>
+      </div></div>`;
+  }).join("") + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="shift-save">Save</button></div>`;
 }
 
 // Pindah tab di jendela Off / Shift Schedule tanpa menggambar ulang (pilihan yang belum disimpan tetap ada).
@@ -5165,14 +5264,26 @@ async function schedCall(btn, payload, busyText, onOk){
   }
 }
 function schedSaveConfig(btn){
-  const mode = (document.querySelector('input[name="off-mode"]:checked') || {}).value || "off";
-  const team = (document.getElementById("off-team") || {}).value || "";
-  const weeks = Math.floor(Number((document.getElementById("off-weeks") || {}).value));
-  if (mode === "nonoff" && !(weeks >= 1 && weeks <= 26)){ setSchedStatus("err", "Weeks must be a number from 1 to 26."); return; }
-  schedCall(btn, { action: "offConfigSave", career: offManageKey, mode, team, weeks }, "Saving...", d => {
+  const dr = offDraft;
+  if (!dr){ setSchedStatus("err", "Nothing to save."); return; }
+  let periods = [];
+  if (dr.enabled && dr.mode === "nonoff"){
+    periods = dr.periods.map(p => ({ from: p.from, weeks: Math.floor(Number(p.weeks)) }));
+    if (!periods.length){ setSchedStatus("err", "Add at least one Non-off period, or choose Off."); return; }
+    const badIdx = periods.findIndex(p => !(p.weeks >= 1 && p.weeks <= 26));
+    if (badIdx >= 0){ setSchedStatus("err", `Non-off period ${badIdx + 1}: weeks must be a number from 1 to 26.`); return; }
+    const problem = offPeriodsProblem(periods);
+    if (problem){ setSchedStatus("err", problem); return; }
+    periods.sort((a, b) => a.from < b.from ? -1 : 1);
+  }
+  const payload = { action: "offConfigSave", career: offManageKey, enabled: dr.enabled, mode: dr.mode, team: dr.team, periods };
+  const wasEnabled = dr.enabled, mode = dr.mode, n = periods.length;
+  schedCall(btn, payload, "Saving...", d => {
     window.__offBoard = d.offBoard || window.__offBoard;
     if (schedOff) schedOff.manage = d.manage || schedOff.manage;
-    d._msg = mode === "nonoff" ? `Saved: Non-off for ${weeks} week(s).` : "Saved: this week has Off.";
+    offDraft = null;   // dibaca ulang dari data terbaru server
+    d._msg = !wasEnabled ? "Saved: the Off system is turned off for this Career."
+      : mode === "nonoff" ? `Saved: ${n} Non-off period${n === 1 ? "" : "s"}.` : "Saved: Off week.";
   });
 }
 function schedSaveRoster(btn){
@@ -5186,13 +5297,21 @@ function schedSaveRoster(btn){
   });
 }
 function schedSaveShift(btn){
-  const changes = Array.from(document.querySelectorAll("[data-shift-roster]")).filter(s => s.value !== s.dataset.orig)
-    .map(s => ({ email: s.dataset.email, shift: s.value }));
-  if (!changes.length){ setSchedStatus("err", "No changes to save."); return; }
-  schedCall(btn, { action: "shiftSave", changes }, "Saving...", d => {
+  const toggles = Array.from(document.querySelectorAll("[data-shift-toggle]")).filter(c => c.checked !== (c.dataset.orig === "1"))
+    .map(c => ({ sheet: c.dataset.sheet, enabled: c.checked }));
+  // Pilihan shift hanya dikirim untuk Section yang sedang ON.
+  const changes = Array.from(document.querySelectorAll("[data-shift-roster]")).filter(x => {
+    const card = x.closest("[data-shsec]"), sw = card && card.querySelector("[data-shift-toggle]");
+    return x.value !== x.dataset.orig && (!sw || sw.checked);
+  }).map(x => ({ email: x.dataset.email, shift: x.value }));
+  if (!changes.length && !toggles.length){ setSchedStatus("err", "No changes to save."); return; }
+  schedCall(btn, { action: "shiftSave", changes, toggles }, "Saving...", d => {
     schedShift = d;
     if (d.shiftBoard) window.__shiftBoard = d.shiftBoard;
-    d._msg = `Saved: ${d.saved} PIC(s) updated.`;
+    const parts = [];
+    if (d.saved) parts.push(`${d.saved} PIC(s) updated`);
+    if (d.toggled) parts.push(`${d.toggled} section(s) switched`);
+    d._msg = "Saved: " + parts.join(", ") + ".";
   });
 }
 
@@ -5203,6 +5322,7 @@ function shiftBadgeHtml(m){
   if (LEADER_TITLES.includes(normJabatan(m.jabatan))) return "";
   const emails = splitEmails(m.email).map(x => x.toLowerCase());
   if (!emails.length) return "";
+  if ((b.hidden || []).some(e => emails.includes(e))) return "";   // shift Section ini dimatikan
   const k = emails.map(e => b.map[e]).find(Boolean) || "normal";
   const sd = SHIFT_UI[k] || SHIFT_UI.normal;
   return `<div class="off-badge shift-${k}" title="Work shift">${sd[0]} &middot; ${sd[1]}</div>`;
@@ -5389,6 +5509,15 @@ document.addEventListener("click", (e) => {
     if (note === null) return;
     offCall({ action: "offSwapRespond", id: b.dataset.id, decision: b.dataset.decision, note }, b, "Saving...", d => d.message || "Saved.");
   }
+  else if (act === "period-add"){
+    if (offDraft){
+      const cur = ((schedOff && schedOff.manage) || []).find(c => c.key === offDraft.key);
+      if (cur && offDraft.periods.length < OFF_MAX_PERIODS){ offDraft.periods.push(offNewPeriod(cur, offDraft.periods)); renderSched(); }
+    }
+  }
+  else if (act === "period-del"){
+    if (offDraft){ offDraft.periods.splice(Number(b.dataset.i), 1); if (!offDraft.periods.length) offDraft.mode = "off"; renderSched(); }
+  }
   else if (act === "manage-save") schedSaveConfig(b);
   else if (act === "roster-save") schedSaveRoster(b);
   else if (act === "shift-save") schedSaveShift(b);
@@ -5397,10 +5526,40 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", (e) => {
   const t = e.target;
   if (!t) return;
-  if (t.name === "off-mode") offManageUi();
-  else if (t.id === "off-career"){ offManageKey = t.value; renderSched(); }
+  if (t.name === "off-mode"){
+    if (offDraft){
+      offDraft.mode = t.value;
+      if (t.value === "nonoff" && !offDraft.periods.length){
+        const cur = ((schedOff && schedOff.manage) || []).find(c => c.key === offDraft.key);
+        if (cur) offDraft.periods.push(offNewPeriod(cur, []));
+        renderSched();
+        return;
+      }
+    }
+    offManageUi();
+  }
+  else if (t.id === "off-career"){ offManageKey = t.value; offDraft = null; renderSched(); }
+  else if (t.id === "off-apply"){ if (offDraft){ offDraft.enabled = t.checked; renderSched(); } }
+  else if (t.id === "off-team"){ if (offDraft) offDraft.team = t.value; }
+  else if (t.dataset && t.dataset.periodFrom !== undefined){
+    if (offDraft && offDraft.periods[Number(t.dataset.periodFrom)]){ offDraft.periods[Number(t.dataset.periodFrom)].from = t.value; offManageUi(); }
+  }
+  else if (t.matches && t.matches("[data-shift-toggle]")){
+    const card = t.closest("[data-shsec]");
+    if (card){
+      const body = card.querySelector(".sec-body"), txt = card.querySelector(".sw-txt");
+      if (body) body.hidden = !t.checked;
+      if (txt) txt.textContent = t.checked ? "ON" : "OFF";
+    }
+  }
 });
-document.addEventListener("input", (e) => { if (e.target && e.target.id === "off-weeks") offManageUi(); });
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (t && t.dataset && t.dataset.periodWeeks !== undefined && offDraft && offDraft.periods[Number(t.dataset.periodWeeks)]){
+    offDraft.periods[Number(t.dataset.periodWeeks)].weeks = t.value;
+    offManageUi();
+  }
+});
 
 /* =========================================================================
    POPUP INTRO (Welcome Tour)

@@ -4894,20 +4894,29 @@ function offStatusText(q){
 }
 
 function offSwapFormHtml(d){
-  const sats = (d.saturdays || []).filter(s => !s.nonOff && (d.scheduleKnown ? s.status === "off" : true));
+  // Tukar berpasangan: "Saturday to swap" (tanggal tukar) + "Payback Saturday" (tanggal pengganti).
+  // requesterOffFirst = true : pengaju OFF pada tanggal tukar (timnya kerja) dan KERJA pada Sabtu pengganti (timnya off).
+  const first = d.requesterOffFirst !== false;
+  const free = (d.saturdays || []).filter(s => !s.nonOff);
+  const known = !!d.scheduleKnown;
+  const dateSats = free.filter(s => !known || s.status === (first ? "work" : "off"));
+  const paySats = free.filter(s => !known || s.status === (first ? "off" : "work"));
   const cands = d.candidates || [];
   const closeBtn = `<div class="profile-edit-actions"><button type="button" class="pic-btn" data-off-act="cancel">Close</button></div>`;
-  if (!sats.length){
-    return `<div class="profile-req"><b>No Saturday to swap</b><span class="txt">Your team has no Off Saturday in the coming 8 weeks (or those weeks are Non-off).</span></div>${closeBtn}`;
+  if (!dateSats.length || !paySats.length){
+    return `<div class="profile-req"><b>No Saturday to swap</b><span class="txt">A swap needs two Saturdays in the coming 8 weeks: one when your team is ${first ? "working" : "off"} and one when your team is ${first ? "off" : "working"} (Non-off weeks do not count).</span></div>${closeBtn}`;
   }
+  const opts = list => list.map(s => `<option value="${escapeHtml(s.date)}">${escapeHtml(s.label)}</option>`).join("");
   return `<div class="profile-edit">
-      <div class="profile-lbl">Saturday to swap</div>
-      <select id="off-date" class="off-input">${sats.map(s => `<option value="${escapeHtml(s.date)}">${escapeHtml(s.label)}</option>`).join("")}</select>
+      <div class="profile-lbl">Saturday to swap (${first ? "you take Off" : "you work"})</div>
+      <select id="off-date" class="off-input">${opts(dateSats)}</select>
+      <div class="profile-lbl">Payback Saturday (${first ? "you work" : "you take Off"})</div>
+      <select id="off-payback" class="off-input">${opts(paySats)}</select>
       <div class="profile-lbl">Swap with (other team, same Section)</div>
       <select id="off-with" class="off-input">${cands.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)} &mdash; Team ${escapeHtml(c.team)} (${escapeHtml(c.sheetName)})</option>`).join("")}</select>
       <div class="profile-lbl">Reason</div>
       <textarea id="off-reason" class="off-input" rows="3" maxlength="300" placeholder="Why do you need this swap?"></textarea>
-      <div class="profile-hint" style="margin:0">The other PIC decides. If they agree, the swap takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.</div>
+      <div class="profile-hint" style="margin:0">A swap always has two Saturdays, so nobody loses an Off: on both dates the two of you exchange status. The other PIC decides. If they agree, it takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.</div>
       <div class="profile-edit-actions">
         <button type="button" class="pic-btn primary" data-off-act="send">Send request</button>
         <button type="button" class="pic-btn" data-off-act="cancel">Cancel</button>
@@ -5070,7 +5079,7 @@ function profileOffPaneHtml(){
   }
   if (inc.length){
     h += `<div class="profile-lbl">Waiting for your answer</div>` + inc.map(q => `<div class="profile-req"><b>${escapeHtml(q.reqName || q.reqEmail)} (Team ${escapeHtml(q.reqTeam)}) &harr; ${escapeHtml(q.withName || q.withEmail)} (Team ${escapeHtml(q.withTeam)})</b>
-        <span class="txt">${escapeHtml(q.dateLabel)}\nReason: ${escapeHtml(q.reason)}</span>
+        <span class="txt">${escapeHtml(q.dateLabel)}${q.paybackLabel ? "\nPayback: " + escapeHtml(q.paybackLabel) : ""}\nReason: ${escapeHtml(q.reason)}</span>
         <div class="off-btns">
           <button type="button" class="pic-btn primary" data-off-act="respond" data-id="${escapeHtml(q.id)}" data-decision="approve">${q.stage === "counterpart" ? "I agree" : "Approve"}</button>
           <button type="button" class="pic-btn" data-off-act="respond" data-id="${escapeHtml(q.id)}" data-decision="reject">${q.stage === "counterpart" ? "Decline" : "Reject"}</button>
@@ -5080,7 +5089,7 @@ function profileOffPaneHtml(){
     h += `<div class="profile-lbl">My swap requests</div>` + out.map(q => {
       const active = String(q.status).indexOf("Awaiting") === 0;
       const note = q.status === "Declined" ? q.withNote : ((q.status === "Rejected" || q.status === "Cancelled by Leader") ? q.byNote : "");
-      return `<div class="profile-req"><b>${escapeHtml(q.dateLabel)} &harr; ${escapeHtml(q.withName || q.withEmail)}</b><span class="txt">${escapeHtml(offStatusText(q))}${note ? "\nNote: " + escapeHtml(note) : ""}</span>${active && own ? `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="cancel-swap" data-id="${escapeHtml(q.id)}">Cancel request</button></div>` : ""}</div>`;
+      return `<div class="profile-req"><b>${escapeHtml(q.dateLabel)} &harr; ${escapeHtml(q.withName || q.withEmail)}</b><span class="txt">${q.paybackLabel ? "Payback: " + escapeHtml(q.paybackLabel) + "\n" : ""}${escapeHtml(offStatusText(q))}${note ? "\nNote: " + escapeHtml(note) : ""}</span>${active && own ? `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="cancel-swap" data-id="${escapeHtml(q.id)}">Cancel request</button></div>` : ""}</div>`;
     }).join("");
   }
   h += swapWatchHtml(wOff, !!d.canCancelWatch, "off");
@@ -5485,7 +5494,7 @@ function swapWatchHtml(list, canCancel, kind){
   const title = kind === "off" ? "Saturday Off swaps in your sections" : "Shift swaps in your sections";
   return `<div class="profile-lbl">${title}${canCancel ? "" : " (for your information)"}</div>` + list.map(q => {
     const who = `${escapeHtml(q.reqName || q.reqEmail)} &harr; ${escapeHtml(q.withName || q.withEmail)}`;
-    const when = kind === "off" ? escapeHtml(q.dateLabel) : escapeHtml(q.rangeLabel);
+    const when = kind === "off" ? escapeHtml(q.dateLabel) + (q.paybackLabel ? " (payback " + escapeHtml(String(q.paybackLabel).replace(/^Saturday,\s*/, "")) + ")" : "") : escapeHtml(q.rangeLabel);
     const st = q.status === "Approved" ? "Approved" : "Waiting for " + escapeHtml(q.withName || q.withEmail);
     return `<div class="profile-req"><b>${who}</b><span class="txt">${when} &middot; ${st}\nSection: ${escapeHtml(q.sheetName || "")}\nReason: ${escapeHtml(q.reason)}</span>${canCancel ? `<div class="off-btns"><button type="button" class="profile-mini" data-sw-act="${kind}-lcancel" data-id="${escapeHtml(q.id)}">Cancel swap</button></div>` : ""}</div>`;
   }).join("");
@@ -5573,10 +5582,12 @@ document.addEventListener("click", (e) => {
   else if (act === "send"){
     const date = (document.getElementById("off-date") || {}).value || "";
     const withEmail = (document.getElementById("off-with") || {}).value || "";
+    const payback = (document.getElementById("off-payback") || {}).value || "";
     const reason = ((document.getElementById("off-reason") || {}).value || "").trim();
-    if (!date || !withEmail){ setProfileStatus("err", "Please choose a Saturday and a PIC."); return; }
+    if (!date || !payback || !withEmail){ setProfileStatus("err", "Please choose a Saturday, a Payback Saturday and a PIC."); return; }
+    if (date === payback){ setProfileStatus("err", "The Payback Saturday must be a different Saturday."); return; }
     if (reason.length < 5){ setProfileStatus("err", "Please write a short reason (at least 5 characters)."); return; }
-    offCall({ action: "offSwapRequest", date, withEmail, reason }, b, "Sending...", d => `Request sent to ${d.withName || "the PIC"}. They will get an email.`);
+    offCall({ action: "offSwapRequest", date, payback, withEmail, reason }, b, "Sending...", d => `Request sent to ${d.withName || "the PIC"}. They will get an email.`);
   }
   else if (act === "cancel-swap"){
     if (confirm("Cancel this swap request?")) offCall({ action: "offSwapCancel", id: b.dataset.id }, b, "Cancelling...", () => "Request cancelled.");

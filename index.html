@@ -4895,7 +4895,7 @@ function offStatusText(q){
   return q.status;
 }
 
-// Teks pernyataan yang dicentang pengaju bila aturan mewajibkannya (mis. Leader mengajukan tukar Off dengan Registered PIC).
+// Teks pernyataan bawaan (cadangan). Teks yang dipakai diatur Administrator di Off Schedule > Swap rules.
 const OFF_DECLARATION_TEXT = "I agree to this swap and take responsibility that at least one Authorized PIC or Leader is still working on both Saturdays.";
 // Tampilkan / sembunyikan kotak pernyataan sesuai pilihan "Swap with"; tombol Send aktif setelah dicentang.
 function offDeclareUi(){
@@ -4929,7 +4929,7 @@ function offSwapFormHtml(d){
       <select id="off-payback" class="off-input">${opts(paySats)}</select>
       <div class="profile-lbl">Swap with (other team, same Section)</div>
       <select id="off-with" class="off-input">${cands.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)} &mdash; Team ${escapeHtml(c.team)} (${c.cls === "leader" ? "Leader, " : c.cls === "authorized" ? "Authorized PIC, " : ""}${escapeHtml(c.sheetName)})</option>`).join("")}</select>
-      <label id="off-declare-box" class="profile-hint" style="margin:6px 0 0;display:${cands[0] && cands[0].needsDeclaration ? "flex" : "none"};gap:8px;align-items:flex-start"><input type="checkbox" id="off-declare" style="margin-top:3px"><span>${escapeHtml(OFF_DECLARATION_TEXT)}</span></label>
+      <label id="off-declare-box" class="profile-hint" style="margin:6px 0 0;display:${cands[0] && cands[0].needsDeclaration ? "flex" : "none"};gap:8px;align-items:flex-start"><input type="checkbox" id="off-declare" style="margin-top:3px"><span>${escapeHtml(d.declarationText || OFF_DECLARATION_TEXT)}</span></label>
       <div class="profile-lbl">Reason</div>
       <textarea id="off-reason" class="off-input" rows="3" maxlength="300" placeholder="Why do you need this swap?"></textarea>
       <div class="profile-hint" style="margin:0">A swap always has two Saturdays, so nobody loses an Off: on both dates the two of you exchange status. The other PIC decides. If they agree, it takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.</div>
@@ -5176,9 +5176,17 @@ function swapRulesHtml(){
     <div class="profile-hint" style="margin:0 0 6px">Both PICs must be in the same Section and in different teams. The PIC who is asked to swap always has to approve.</div>
     ${swapTableHtml("allow", "Who may request a swap with whom", "Read each row as: the requester (left) may swap with the checked roles (top).")}
     ${swapTableHtml("declare", "Agreement required", "When checked, the requester must tick an agreement box before the request can be sent (only for pairs allowed above).")}
+    <div class="profile-lbl" style="margin-top:8px">Agreement sentence</div>
+    <div class="profile-hint" style="margin:0 0 4px">Shown beside the checkbox the requester must tick (max 300 characters).</div>
+    <textarea id="swr-text" class="off-input" rows="3" maxlength="300">${escapeHtml(swapRulesDraft.text || "")}</textarea>
     <div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="rules-save">Save rules</button><button type="button" class="pic-btn" data-off-act="rules-reset">Reset to default</button></div></div>`;
 }
 function schedSaveRules(btn, reset){
+  const ta = document.getElementById("swr-text");
+  if (ta && swapRulesDraft){
+    swapRulesDraft.text = ta.value.trim();
+    if (!reset && !swapRulesDraft.text){ setSchedStatus("err", "The agreement sentence cannot be empty."); return; }
+  }
   const payload = reset ? { action: "offSwapRulesSave", reset: true } : { action: "offSwapRulesSave", rules: swapRulesDraft };
   schedCall(btn, payload, "Saving...", d => {
     if (schedOff) schedOff.swapRules = d.rules;
@@ -5808,7 +5816,7 @@ document.addEventListener("change", (e) => {
         const dl = swapRulesDraft.declare[t.dataset.swrFrom] || [];
         swapRulesDraft.declare[t.dataset.swrFrom] = dl.filter(k => k !== t.dataset.swrTo);
       }
-      if (kind === "allow") renderSched();   // menyegarkan tabel Agreement (kotak yang tidak diizinkan dinonaktifkan)
+      if (kind === "allow"){ const ta = document.getElementById("swr-text"); if (ta) swapRulesDraft.text = ta.value; renderSched(); }   // menyegarkan tabel Agreement (kotak yang tidak diizinkan dinonaktifkan)
     }
   }
   else if (t.id === "off-career"){ offManageKey = t.value; offDraft = null; schedSheet = 0; renderSched(); }

@@ -4373,7 +4373,7 @@ function resolveViewerVisibility(ctx){
 // (email · peran · unit/ID · Sign out). Sengaja dibuat tidak mencolok.
 const ROLE_LABELS = {
   developer: "Administrator", seniormanager: "Senior Manager", manager: "Manager", sectionhead: "Section Head",
-  authorizedpic: "Authorized PIC", registeredpic: "Registered PIC", taskpartner: "Task Partner",
+  authorizedpic: "Authorized PIC", authorizedpic2: "Authorized PIC (Limited)", registeredpic: "Registered PIC", taskpartner: "Task Partner",
   bsp: "Staff", cc: "Staff", staff: "Staff", dosen: "Lecturer"
 };
 const VIEW_AS_KEY = "srsc_view_as";   // "" | kunci role di ROLE_ORDER  (Role Switch)
@@ -4382,7 +4382,7 @@ const SIM_CAREER_KEY = "srsc_sim_career";   // KHUSUS Administrator: career yang
 
 // Urutan role dari yang tertinggi ke terendah. Role Switch menawarkan role DI BAWAH role sendiri:
 // Administrator -> Senior Manager ... Lecturer; Manager -> Section Head ... Lecturer; dst.
-const ROLE_ORDER = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic", "taskpartner", "bsp", "cc", "staff", "dosen"];
+const ROLE_ORDER = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "authorizedpic2", "registeredpic", "taskpartner", "bsp", "cc", "staff", "dosen"];
 const SWITCH_LABELS = Object.assign({}, ROLE_LABELS, { bsp: "Binus Support", cc: "Contact Center" });   // di daftar pilihan, BSP disebut jelas
 function rolesBelow(role){
   const i = ROLE_ORDER.indexOf(role);
@@ -4423,6 +4423,7 @@ const SIM_CAP = {
   manager:       { career: true, section: false, pic: false },
   sectionhead:   { career: true, section: true,  pic: false },
   authorizedpic: { career: true, section: true,  pic: false },
+  authorizedpic2: { career: true, section: true, pic: false },
   registeredpic: { career: true, section: true,  pic: true  },
   taskpartner:   { career: true, section: true,  pic: true  }   // "As PIC" menampilkan daftar email Task Partner juga
 };
@@ -5676,7 +5677,7 @@ const INTRO_DEFAULT_STEPS = [
   { ico: "🤝", title: "Task Partners",
     body: "A **Task Partner** is an account that helps a PIC with their main task. When a Task Partner signs in, they can see the PIC menus that the main PIC chooses to share with them.\n\n**How it works**\n- A PIC adds a partner from **Task Partners** at the top of the page. **Authorized PICs and Leaders** choose the **main PIC** the partner will help. A **Registered PIC** adds partners for themselves only.\n- The partner is saved in the **Data Partner** sheet and added to the **Task Partner** column on the main PIC's row in the team sheet.\n- When adding or editing a menu, choose **Share with Task Partner**. The partner then sees that menu in **Our Links**, whether it is a normal or an On Going menu.\n\n**Managing partners**\n- **Remove** unpairs a partner from one PIC. **Edit** changes the partner's name and position. **Delete from list** removes a partner who is not paired with anyone.\n- A partner's email cannot be changed. To use a different email, add the person again and remove the old one.\n\nNOTE: A Task Partner only sees what the main PIC shares with them. What else they can do is set in the **Role Policy** sheet." },
   { ico: "🧭", title: "Roles at a glance",
-    body: "Every account has a **role**. The role decides what you can see and change. The exact rights are in the **Role Policy** sheet, so they can differ from this summary if the sheet was changed.\n\n- **Administrator** – builds and maintains the site. Full access, including this tour.\n- **Senior Manager** – top leadership of the team. Sees everything, can add and edit menus anywhere, and can edit all Our Team cards.\n- **Manager** – leads the team. Sees everything and can add menus anywhere; edits Our Team cards and deletes menus within their own career. Gives the **final approval** of task description changes.\n- **Section Head** – leads one career. Sees everything; adds, deletes and edits within their own career. Gives the **first approval** of task description changes.\n- **Authorized PIC** – a PIC who is set as Editor Menu of a section. Manages the menus of that section. Is **notified by email** about task description requests, but does not approve them.\n- **Registered PIC** – a PIC listed in a team sheet. Can add, edit and delete only their own links.\n- **Task Partner** – supports a PIC with their main task. Sees the menus that PIC shares with partners. Authorized PICs and Leaders add Task Partners for the PICs in their sections, and a Registered PIC adds their own, from **Task Partners** at the top of the page.\n- **Binus Support (BSP), Contact Center (CC) and Staff / Other Unit** – view only. They see the information meant for them.\n- **Dosen / Lecturer** – lecturers signing in with an @binus.ac.id email and Lecturer code. View only.\n\nNOTE: The names and emails of the people in each role are on the **Our Team** cards and in the team sheets." },
+    body: "Every account has a **role**. The role decides what you can see and change. The exact rights are in the **Role Policy** sheet, so they can differ from this summary if the sheet was changed.\n\n- **Administrator** – builds and maintains the site. Full access, including this tour.\n- **Senior Manager** – top leadership of the team. Sees everything, can add and edit menus anywhere, and can edit all Our Team cards.\n- **Manager** – leads the team. Sees everything and can add menus anywhere; edits Our Team cards and deletes menus within their own career. Gives the **final approval** of task description changes.\n- **Section Head** – leads one career. Sees everything; adds, deletes and edits within their own career. Gives the **first approval** of task description changes.\n- **Authorized PIC (Limited)** – a PIC who is set as Editor Menu (Limited) of a section. Works like an Authorized PIC, but the rights are set in their own row of the **Role Policy** sheet.\n- **Authorized PIC** – a PIC who is set as Editor Menu of a section. Manages the menus of that section. Is **notified by email** about task description requests, but does not approve them.\n- **Registered PIC** – a PIC listed in a team sheet. Can add, edit and delete only their own links.\n- **Task Partner** – supports a PIC with their main task. Sees the menus that PIC shares with partners. Authorized PICs and Leaders add Task Partners for the PICs in their sections, and a Registered PIC adds their own, from **Task Partners** at the top of the page.\n- **Binus Support (BSP), Contact Center (CC) and Staff / Other Unit** – view only. They see the information meant for them.\n- **Dosen / Lecturer** – lecturers signing in with an @binus.ac.id email and Lecturer code. View only.\n\nNOTE: The names and emails of the people in each role are on the **Our Team** cards and in the team sheets." },
   { ico: "🔐", title: "Access & Role View",
     body: "What each role can see and do is set in the **Role Policy** sheet.\n\n- Use the **role selector** at the top (if you have it) to **view the site as a lower role**, to check what they see.\n- Some sections use a password. Those passwords are in the Master sheet.\n- Every sign-in and page visit is recorded in the **Logs** sheet." },
   { ico: "📊", title: "Spreadsheet for data adjustment",
@@ -5847,7 +5848,7 @@ async function openIntroAdmin(){
 
 const IA_ROLES = [
   ["developer", "Administrator"], ["seniormanager", "Senior Manager"], ["manager", "Manager"],
-  ["sectionhead", "Section Head"], ["authorizedpic", "Authorized PIC"], ["registeredpic", "Registered PIC"], ["taskpartner", "Task Partner"]
+  ["sectionhead", "Section Head"], ["authorizedpic", "Authorized PIC"], ["authorizedpic2", "Authorized PIC (Limited)"], ["registeredpic", "Registered PIC"], ["taskpartner", "Task Partner"]
 ];
 const IA_VARS = [
   ["name", "Name of the person viewing"], ["email", "Their email"], ["role", "Their role"], ["job", "Their job title"],
@@ -6594,7 +6595,7 @@ function renderLoginInfo(opts){
   }
   // Urutan tombol di login card: ... Welcome Tour > Edit Intro > Requests > View Profile (paling akhir).
   // Tombol Sign out dipindahkan ke dalam View Profile.
-  const hasProfile = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole);
+  const hasProfile = ["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "authorizedpic2", "registeredpic"].includes(ownRole);
   // View Profile: untuk akun berperan PIC / pimpinan (yang bisa terdaftar di sheet tim). Saat Administrator memakai
   // "As PIC", profil yang tampil adalah milik PIC itu (hanya lihat); foto hanya bisa diubah oleh pemiliknya sendiri.
   profileCtx = { email: String(opts.asPic || saved.email || "").trim(), own: !opts.asPic, canSignOut: !!opts.canSignOut && hasProfile, signOutEmail: saved.email };
@@ -6637,7 +6638,7 @@ function renderLoginInfo(opts){
   box.className = "acct-bar show";
   box.innerHTML = parts.join(`<span class="acct-sep">·</span>`);
   // Polling notifikasi hanya untuk akun berperan PIC / pimpinan (pengunjung biasa tidak pernah jadi reviewer).
-  if (["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "registeredpic"].includes(ownRole)) startReviewPolling();
+  if (["developer", "seniormanager", "manager", "sectionhead", "authorizedpic", "authorizedpic2", "registeredpic"].includes(ownRole)) startReviewPolling();
 
   const sw = document.getElementById("acct-switch");
   if (sw) sw.addEventListener("change", () => {

@@ -2057,7 +2057,7 @@ function openModal(header, sheetKey, members){
   hydrateMemberPhotos(grid);
 }
 
-function openMemberModal(m){
+function openMemberModal(m, career){
   const waDigits = formatWaLink(m.whatsapp);
   const pEmail = primaryEmail(m.email);
 
@@ -2075,6 +2075,7 @@ function openMemberModal(m){
     ${dpHtml(m)}
     <hr>
     <div class="pic-name">${escapeHtml(m.pic || "-")}</div>
+    <div>${offBadgeHtml(m, career, { withLeader: true })}${shiftBadgeHtml(m)}</div>
     <hr>
     <div class="task">${escapeHtml(m.task || "-")}</div>
     <hr>
@@ -2125,7 +2126,7 @@ document.addEventListener("click", (e) => {
   const member = members && members[Number(idx)];
   if (member){
     Activity.ctx.sheet = (sectionMeta[Number(sec)] || {}).sheetKey || "";
-    openMemberModal(member);
+    openMemberModal(member, (sectionMeta[Number(sec)] || {}).career || "");
   }
 });
 
@@ -4845,11 +4846,12 @@ function normOffTeam(v){
 }
 
 // Badge di kartu Our Team. Leader dan baris tanpa Team Off tidak diberi badge.
-function offBadgeHtml(m, career){
+// Di popup detail task (opts.withLeader = true), leader yang punya Team Off ikut diberi badge.
+function offBadgeHtml(m, career, opts){
   const b = window.__offBoard;
   if (!b || !b.careers) return "";
   if (b.satOnly && b.date !== localTodayISO()) return "";   // Staff: badge Off hanya pada hari Sabtu itu sendiri
-  if (LEADER_TITLES.includes(normJabatan(m.jabatan))) return "";
+  if (!(opts && opts.withLeader) && LEADER_TITLES.includes(normJabatan(m.jabatan))) return "";
   const team = normOffTeam(m.team);
   if (!team) return "";
   const c = b.careers[normSheetName(career)];
@@ -4913,7 +4915,7 @@ function offSwapFormHtml(d){
       <div class="profile-lbl">Payback Saturday (${first ? "you work" : "you take Off"})</div>
       <select id="off-payback" class="off-input">${opts(paySats)}</select>
       <div class="profile-lbl">Swap with (other team, same Section)</div>
-      <select id="off-with" class="off-input">${cands.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)} &mdash; Team ${escapeHtml(c.team)} (${escapeHtml(c.sheetName)})</option>`).join("")}</select>
+      <select id="off-with" class="off-input">${cands.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)} &mdash; Team ${escapeHtml(c.team)} (${c.leader ? "Section Head, " : ""}${escapeHtml(c.sheetName)})</option>`).join("")}</select>
       <div class="profile-lbl">Reason</div>
       <textarea id="off-reason" class="off-input" rows="3" maxlength="300" placeholder="Why do you need this swap?"></textarea>
       <div class="profile-hint" style="margin:0">A swap always has two Saturdays, so nobody loses an Off: on both dates the two of you exchange status. The other PIC decides. If they agree, it takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.</div>
@@ -5226,6 +5228,7 @@ async function loadSchedShift(){
     if (schedKind !== "shift") return;
     if (!d || !d.ok) throw new Error((d && d.error) || "Failed to load.");
     schedShift = d;
+    shiftWeekDraft = {};
     renderSched();
   } catch (err){
     const box = schedBox();
@@ -5283,14 +5286,120 @@ function shiftRosterHtml(){
       <div class="sec-head"><span class="sec-name">${escapeHtml(s.sheetName)}</span>
         <label class="sw"><input type="checkbox" data-shift-toggle data-sheet="${escapeHtml(s.sheetKey)}" data-orig="${on ? "1" : "0"}"${on ? " checked" : ""}><span class="sw-ui"></span><span class="sw-txt">${on ? "ON" : "OFF"}</span></label></div>
       <div class="sec-body"${on ? "" : " hidden"}>
+        <div class="profile-lbl">Default shift (used for weeks that are not scheduled below)</div>
         <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
           <select class="off-input" style="width:auto" data-shift-roster data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.shift)}">
             ${["pagi", "normal", "siang"].map(k => `<option value="${k}"${k === m.shift ? " selected" : ""}>${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`).join("")}
           </select></div>`).join("")}</div>
+        <div class="profile-lbl" style="margin-top:14px">Weekly schedule</div>
+        <div class="wk-block" data-wk-sheet="${escapeHtml(s.sheetKey)}">${shiftWeeklyInnerHtml(s)}</div>
       </div></div>`);
   }).join("");
   return tabs + panes + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="shift-save">Save</button></div>`;
 }
+
+/* ---- Shift Schedule: jadwal PIC per pekan ----
+   Draft per Section disimpan di shiftWeekDraft (belum tersimpan sampai tombol "Save weekly schedule").
+   Aturan: tiap pekan terjadwal minimal s.needMorning PIC Morning (hanya untuk Section yang ON dan berisi >= 2 PIC). */
+let shiftWeekDraft = {};   // sheetKey -> { weeks: [{start,label,shifts:{email:shift}}], clear: [start] }
+function swDraftOf(s){
+  if (!shiftWeekDraft[s.sheetKey]) shiftWeekDraft[s.sheetKey] = { weeks: JSON.parse(JSON.stringify(s.weekly || [])), clear: [] };
+  return shiftWeekDraft[s.sheetKey];
+}
+function swWeekLabel(ds){
+  const a = offDateLabelJs(ds).replace(/^[A-Za-z]+,\s*/, ""), b = offDateLabelJs(offAddDaysStr(ds, 6)).replace(/^[A-Za-z]+,\s*/, "");
+  return a.replace(/\s\d{4}$/, "") + " - " + b;
+}
+function swMorningCount(w, members){ return members.filter(m => (w.shifts[m.email] || "normal") === "pagi").length; }
+function shiftWeeklyInnerHtml(s){
+  const d = schedShift || {}, dr = swDraftOf(s), members = s.members || [], need = s.needMorning || 0;
+  const mons = []; for (let i = 0; i < (d.maxWeeks || 26); i++) mons.push(offAddDaysStr(d.thisMonday, i * 7));
+  const opt = k => `<option value="${k}">${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`;
+  let h = need ? `<div class="profile-hint" style="margin:0 0 8px">Rule: every scheduled week needs at least ${need} PIC on the Morning shift. Weeks that are not listed use the default shift above.</div>`
+               : `<div class="profile-hint" style="margin:0 0 8px">Weeks that are not listed use the default shift above.</div>`;
+  h += `<div class="off-list"><div class="off-row"><span>Start from</span><select class="off-input" style="width:auto" data-wk-from>${mons.map(m => `<option value="${m}">${escapeHtml(swWeekLabel(m))}</option>`).join("")}</select></div>
+    <div class="off-row"><span>For how many weeks</span><input type="number" class="off-input" style="width:90px" min="1" max="${d.maxWeeks || 26}" value="4" data-wk-count></div>
+    <div class="off-row"><span>First Morning PIC</span><select class="off-input" style="width:auto" data-wk-first>${members.map((m, i) => `<option value="${i}">${escapeHtml(m.name || m.email)}</option>`).join("")}</select></div></div>
+    <div class="off-btns"><button type="button" class="profile-mini" data-wk-act="fill">Rotate Morning for these weeks</button></div>`;
+  if (!dr.weeks.length){
+    h += `<div class="profile-hint">No weekly schedule yet. Use the button above to fill weeks, then adjust any cell.</div>`;
+  } else {
+    h += `<div style="overflow-x:auto;margin-top:8px"><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr><th style="text-align:left;padding:4px 6px">Week</th>${members.map(m => `<th style="text-align:left;padding:4px 6px">${escapeHtml(m.name || m.email)}</th>`).join("")}<th></th></tr></thead><tbody>${dr.weeks.map(w => {
+      const bad = need && swMorningCount(w, members) < need;
+      return `<tr><td style="padding:4px 6px;white-space:nowrap">${escapeHtml(swWeekLabel(w.start))}${bad ? `<div style="color:#b3261e;font-size:12px">No Morning PIC</div>` : ""}</td>${members.map(m => `<td style="padding:4px 6px"><select class="off-input" style="width:auto" data-wk-cell data-week="${escapeHtml(w.start)}" data-email="${escapeHtml(m.email)}">${["pagi", "normal", "siang"].map(k => `<option value="${k}"${(w.shifts[m.email] || "normal") === k ? " selected" : ""}>${SHIFT_UI[k][0]}</option>`).join("")}</select></td>`).join("")}<td style="padding:4px 6px"><button type="button" class="profile-mini" data-wk-act="remove" data-week="${escapeHtml(w.start)}">Remove</button></td></tr>`;
+    }).join("")}</tbody></table></div>`;
+  }
+  h += `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-wk-act="save">Save weekly schedule</button></div>`;
+  return h;
+}
+function swRedraw(sheetKey){
+  const s = ((schedShift && schedShift.sheets) || []).find(x => x.sheetKey === sheetKey);
+  const box = document.querySelector(`[data-wk-sheet="${CSS.escape(sheetKey)}"]`);
+  if (s && box){
+    const keep = ["[data-wk-from]", "[data-wk-count]", "[data-wk-first]"].map(q => { const el = box.querySelector(q); return el ? el.value : null; });
+    box.innerHTML = shiftWeeklyInnerHtml(s);
+    ["[data-wk-from]", "[data-wk-count]", "[data-wk-first]"].forEach((q, i) => { const el = box.querySelector(q); if (el && keep[i] != null) el.value = keep[i]; });
+  }
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-wk-act]");
+  if (!b) return;
+  const blk = b.closest("[data-wk-sheet]");
+  if (!blk) return;
+  const key = blk.dataset.wkSheet;
+  const s = ((schedShift && schedShift.sheets) || []).find(x => x.sheetKey === key);
+  if (!s) return;
+  const dr = swDraftOf(s), members = s.members || [], act = b.dataset.wkAct, maxW = (schedShift && schedShift.maxWeeks) || 26;
+  if (act === "fill"){
+    const from = (blk.querySelector("[data-wk-from]") || {}).value;
+    const idx0 = (schedShift.thisMonday && from) ? Math.round((Date.parse(from) - Date.parse(schedShift.thisMonday)) / (7 * 86400000)) : 0;
+    let count = Math.floor(Number((blk.querySelector("[data-wk-count]") || {}).value) || 0);
+    const first = Math.floor(Number((blk.querySelector("[data-wk-first]") || {}).value) || 0);
+    if (!from || count < 1){ setSchedStatus("err", "Please choose the start week and how many weeks."); return; }
+    count = Math.min(count, maxW - idx0);
+    if (!members.length) return;
+    for (let i = 0; i < count; i++){
+      const start = offAddDaysStr(from, i * 7), shifts = {};
+      members.forEach((m, j) => { shifts[m.email] = j === (first + i) % members.length ? "pagi" : "normal"; });
+      const w = { start, label: swWeekLabel(start), shifts };
+      const at = dr.weeks.findIndex(x => x.start === start);
+      if (at >= 0) dr.weeks[at] = w; else dr.weeks.push(w);
+      dr.clear = dr.clear.filter(c => c !== start);
+    }
+    dr.weeks.sort((a, c) => a.start < c.start ? -1 : (a.start > c.start ? 1 : 0));
+    setSchedStatus("", "");
+    swRedraw(key);
+  }
+  else if (act === "remove"){
+    const wk = b.dataset.week;
+    dr.weeks = dr.weeks.filter(x => x.start !== wk);
+    if ((s.weekly || []).some(x => x.start === wk) && !dr.clear.includes(wk)) dr.clear.push(wk);
+    swRedraw(key);
+  }
+  else if (act === "save"){
+    const need = s.needMorning || 0;
+    if (!dr.weeks.length && !dr.clear.length){ setSchedStatus("err", "No changes to save."); return; }
+    const bad = need ? dr.weeks.find(w => swMorningCount(w, members) < need) : null;
+    if (bad){ setSchedStatus("err", `Week ${swWeekLabel(bad.start)} has no Morning PIC. Every week needs at least ${need}.`); return; }
+    const weeks = dr.weeks.map(w => ({ start: w.start, shifts: w.shifts })), clear = dr.clear.slice();
+    schedCall(b, { action: "shiftWeeklySave", sheet: key, weeks, clear }, "Saving...", d => {
+      schedShift = d; shiftWeekDraft = {};
+      if (d.shiftBoard) window.__shiftBoard = d.shiftBoard;
+      d._msg = `Saved: ${d.savedWeeks} week(s) scheduled${d.clearedWeeks ? `, ${d.clearedWeeks} cleared` : ""}.`;
+    });
+  }
+});
+document.addEventListener("change", (e) => {
+  const c = e.target && e.target.matches && e.target.matches("[data-wk-cell]") ? e.target : null;
+  if (!c) return;
+  const blk = c.closest("[data-wk-sheet]");
+  if (!blk) return;
+  const key = blk.dataset.wkSheet;
+  const s = ((schedShift && schedShift.sheets) || []).find(x => x.sheetKey === key);
+  if (!s) return;
+  const w = swDraftOf(s).weeks.find(x => x.start === c.dataset.week);
+  if (w){ w.shifts[c.dataset.email] = c.value; swRedraw(key); }
+});
 
 // Pindah tab di jendela Off / Shift Schedule tanpa menggambar ulang (pilihan yang belum disimpan tetap ada).
 document.addEventListener("click", (e) => {
@@ -5448,11 +5557,15 @@ function shiftSwapFormHtml(s){
         <select id="sw-week" class="off-input">${(s.weeks || []).map(w => `<option value="${escapeHtml(w.start)}">${escapeHtml(w.label)}</option>`).join("")}</select></div>
       <div id="sw-day-wrap" hidden><div class="profile-lbl">Day (Monday to Saturday)</div>
         <input type="date" id="sw-day" class="off-input" min="${escapeHtml(s.minDay)}" max="${escapeHtml(s.maxDay)}"></div>
+      <div id="sw-pb-week-wrap"><div class="profile-lbl">Payback week</div>
+        <select id="sw-pb-week" class="off-input">${(s.weeks || []).map(w => `<option value="${escapeHtml(w.start)}">${escapeHtml(w.label)}</option>`).join("")}</select></div>
+      <div id="sw-pb-day-wrap" hidden><div class="profile-lbl">Payback day (Monday to Saturday)</div>
+        <input type="date" id="sw-pb-day" class="off-input" min="${escapeHtml(s.minDay)}" max="${escapeHtml(s.maxDay)}"></div>
       <div class="profile-lbl">Swap with (same Section)</div>
       <select id="sw-with" class="off-input">${cands.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)} &mdash; ${escapeHtml(shiftLabelUi(c.shift))}</option>`).join("")}</select>
       <div class="profile-lbl">Reason</div>
       <textarea id="sw-reason" class="off-input" rows="3" maxlength="300" placeholder="Why do you need this swap?"></textarea>
-      <div class="profile-hint" style="margin:0">The other PIC decides. If they agree, the swap takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.</div>
+      <div class="profile-hint" style="margin:0">A swap has two periods, the swap and the payback (same length, not overlapping). In both periods the two of you work each other's shift. The other PIC decides. If they agree, it takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.</div>
       <div class="profile-edit-actions">
         <button type="button" class="pic-btn primary" data-sw-act="send">Send request</button>
         <button type="button" class="pic-btn" data-sw-act="cancel">Cancel</button>
@@ -5472,7 +5585,7 @@ function profileShiftHtml(){
   const inc = own ? (s.incoming || []) : [];
   if (inc.length){
     h += `<div class="profile-lbl">Shift swap waiting for your answer</div>` + inc.map(q => `<div class="profile-req"><b>${escapeHtml(q.reqName || q.reqEmail)} (${escapeHtml(shiftLabelUi(q.reqShift))}) &harr; you (${escapeHtml(shiftLabelUi(q.withShift))})</b>
-        <span class="txt">${escapeHtml(q.rangeLabel)}\nReason: ${escapeHtml(q.reason)}</span>
+        <span class="txt">${escapeHtml(q.rangeLabel)}${q.paybackLabel ? "\nPayback: " + escapeHtml(q.paybackLabel) : ""}\nReason: ${escapeHtml(q.reason)}</span>
         <div class="off-btns">
           <button type="button" class="pic-btn primary" data-sw-act="respond" data-id="${escapeHtml(q.id)}" data-decision="approve">I agree</button>
           <button type="button" class="pic-btn" data-sw-act="respond" data-id="${escapeHtml(q.id)}" data-decision="reject">Decline</button>
@@ -5483,7 +5596,7 @@ function profileShiftHtml(){
     h += `<div class="profile-lbl">My shift swap requests</div>` + out.map(q => {
       const active = q.status === "Awaiting Counterpart";
       const note = q.status === "Declined" ? q.withNote : (q.status === "Cancelled by Leader" ? q.cancelNote : "");
-      return `<div class="profile-req"><b>${escapeHtml(q.rangeLabel)} &harr; ${escapeHtml(q.withName || q.withEmail)}</b><span class="txt">${escapeHtml(shiftStatusText(q))}${note ? "\nNote: " + escapeHtml(note) : ""}</span>${active && own ? `<div class="off-btns"><button type="button" class="profile-mini" data-sw-act="cancel-swap" data-id="${escapeHtml(q.id)}">Cancel request</button></div>` : ""}</div>`;
+      return `<div class="profile-req"><b>${escapeHtml(q.rangeLabel)} &harr; ${escapeHtml(q.withName || q.withEmail)}</b><span class="txt">${q.paybackLabel ? "Payback: " + escapeHtml(q.paybackLabel) + "\n" : ""}${escapeHtml(shiftStatusText(q))}${note ? "\nNote: " + escapeHtml(note) : ""}</span>${active && own ? `<div class="off-btns"><button type="button" class="profile-mini" data-sw-act="cancel-swap" data-id="${escapeHtml(q.id)}">Cancel request</button></div>` : ""}</div>`;
     }).join("");
   }
   return h;
@@ -5494,7 +5607,7 @@ function swapWatchHtml(list, canCancel, kind){
   const title = kind === "off" ? "Saturday Off swaps in your sections" : "Shift swaps in your sections";
   return `<div class="profile-lbl">${title}${canCancel ? "" : " (for your information)"}</div>` + list.map(q => {
     const who = `${escapeHtml(q.reqName || q.reqEmail)} &harr; ${escapeHtml(q.withName || q.withEmail)}`;
-    const when = kind === "off" ? escapeHtml(q.dateLabel) + (q.paybackLabel ? " (payback " + escapeHtml(String(q.paybackLabel).replace(/^Saturday,\s*/, "")) + ")" : "") : escapeHtml(q.rangeLabel);
+    const when = kind === "off" ? escapeHtml(q.dateLabel) + (q.paybackLabel ? " (payback " + escapeHtml(String(q.paybackLabel).replace(/^Saturday,\s*/, "")) + ")" : "") : escapeHtml(q.rangeLabel) + (q.paybackLabel ? " (payback " + escapeHtml(q.paybackLabel) + ")" : "");
     const st = q.status === "Approved" ? "Approved" : "Waiting for " + escapeHtml(q.withName || q.withEmail);
     return `<div class="profile-req"><b>${who}</b><span class="txt">${when} &middot; ${st}\nSection: ${escapeHtml(q.sheetName || "")}\nReason: ${escapeHtml(q.reason)}</span>${canCancel ? `<div class="off-btns"><button type="button" class="profile-mini" data-sw-act="${kind}-lcancel" data-id="${escapeHtml(q.id)}">Cancel swap</button></div>` : ""}</div>`;
   }).join("");
@@ -5509,12 +5622,15 @@ document.addEventListener("click", (e) => {
   else if (act === "send"){
     const mode = (document.querySelector('input[name="sw-mode"]:checked') || {}).value || "week";
     const date = mode === "week" ? ((document.getElementById("sw-week") || {}).value || "") : ((document.getElementById("sw-day") || {}).value || "");
+    const paybackDate = mode === "week" ? ((document.getElementById("sw-pb-week") || {}).value || "") : ((document.getElementById("sw-pb-day") || {}).value || "");
     const withEmail = (document.getElementById("sw-with") || {}).value || "";
     const reason = ((document.getElementById("sw-reason") || {}).value || "").trim();
     if (!date){ setProfileStatus("err", mode === "week" ? "Please choose a week." : "Please choose a day."); return; }
+    if (!paybackDate){ setProfileStatus("err", mode === "week" ? "Please choose a payback week." : "Please choose a payback day."); return; }
+    if (paybackDate === date){ setProfileStatus("err", "The payback must be different from the swap."); return; }
     if (!withEmail){ setProfileStatus("err", "Please choose a PIC."); return; }
     if (reason.length < 5){ setProfileStatus("err", "Please write a short reason (at least 5 characters)."); return; }
-    offCall({ action: "shiftSwapRequest", mode, date, withEmail, reason }, b, "Sending...", d => `Request sent to ${d.withName || "the PIC"}. They will get an email.`);
+    offCall({ action: "shiftSwapRequest", mode, date, paybackDate, withEmail, reason }, b, "Sending...", d => `Request sent to ${d.withName || "the PIC"}. They will get an email.`);
   }
   else if (act === "cancel-swap"){
     if (confirm("Cancel this swap request?")) offCall({ action: "shiftSwapCancel", id: b.dataset.id }, b, "Cancelling...", () => "Request cancelled.");
@@ -5535,6 +5651,9 @@ function swModeUi(){
   const w = document.getElementById("sw-week-wrap"), d = document.getElementById("sw-day-wrap");
   if (w) w.hidden = mode !== "week";
   if (d) d.hidden = mode !== "day";
+  const pw = document.getElementById("sw-pb-week-wrap"), pd = document.getElementById("sw-pb-day-wrap");
+  if (pw) pw.hidden = mode !== "week";
+  if (pd) pd.hidden = mode !== "day";
 }
 document.addEventListener("change", (e) => { if (e.target && e.target.name === "sw-mode") swModeUi(); });
 

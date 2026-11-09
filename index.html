@@ -1242,7 +1242,10 @@
   .sw input:checked + .sw-ui::after{ transform:translateX(18px); }
   .sw input:focus-visible + .sw-ui{ outline:2px solid var(--primary);outline-offset:2px; }
   .sw-txt{ font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;min-width:24px;color:var(--ink-soft); }
-  .sec-card{ border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;text-align:left; }
+  .tab-st{ margin-left:6px;font-size:9px;padding:1px 5px;border-radius:999px;background:#e3f6e8;color:#17692f; }
+  .tab-st.off{ background:#eef1f4;color:#6b7885; }
+  .sub-tab[aria-selected="true"] .tab-st{ background:rgba(255,255,255,.9); }
+  .sec-card{ width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;text-align:left; }
   .sec-head{ display:flex;justify-content:space-between;align-items:center;gap:10px; }
   .sec-name{ font-weight:600;font-size:14px; }
   .sec-body{ margin-top:8px; }
@@ -1923,6 +1926,15 @@ function escapeHtml(str){
   }[m]));
 }
 
+// Teks baris di daftar task. Role Section Head menampilkan Task Description (bukan Task Name);
+// bila Task Description kosong dipakai Task Name, lalu "Section Head - Nama". Role lain tetap Task Name.
+function taskListText(m){
+  if (normJabatan(m.jabatan) === "section head"){
+    return String(m.desc || "").trim() || String(m.task || "").trim() || ("Section Head" + (m.pic ? " — " + m.pic : ""));
+  }
+  return m.task || "(Tanpa nama task)";
+}
+
 function buildSection(idx, sheetKey, header, subheader, members, career){
   const secId = `sec-${idx}`;
 
@@ -1949,7 +1961,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
     <li>
       <div class="task-link" data-sec="${idx}" data-member="${i}" role="button" tabindex="0" aria-haspopup="dialog">
         <span class="idx">${String(displayPos+1).padStart(2,"0")}</span>
-        <span class="name">${escapeHtml(m.task || (normJabatan(m.jabatan) === "section head" ? ("Section Head" + (m.pic ? " — " + m.pic : "")) : "(Tanpa nama task)"))}</span>
+        <span class="name">${escapeHtml(taskListText(m))}</span>
         <span class="actions">${emailBtn}${waBtn}</span>
       </div>
     </li>`;
@@ -1982,7 +1994,9 @@ function canEditTeamSheet(sheetKey){
 }
 
 function memberCardHtml(m, canEdit, career){
-  const hasDesc = !!String(m.desc || "").trim();
+  // Kartu leader (Section Head, Manager, Senior Manager) di Our Team hanya menampilkan Nama dan Task Name, tanpa tombol Details.
+  const isLeaderCard = LEADER_TITLES.includes(normJabatan(m.jabatan));
+  const hasDesc = !isLeaderCard && !!String(m.desc || "").trim();
   const editBtn = canEdit
     ? `<button type="button" class="card-edit" data-tedit="${teamEditRefs.push(m) - 1}" title="Edit ${escapeHtml(m.pic || "")}">✎ Edit</button>`
     : "";
@@ -5214,11 +5228,19 @@ function shiftRosterHtml(){
   const d = schedShift;
   if (!d) return `<div class="profile-hint">Loading&hellip;</div>`;
   if (!d.sheets || !d.sheets.length) return `<div class="profile-hint">No PIC found in your sections.</div>`;
-  // Tiap Section = satu baris dengan saklar ON/OFF. ON -> daftar PIC dan pilihan shift tampil. OFF -> tidak tampil, dan
-  // shift Section itu tidak muncul di Our Team / View Profile.
-  return d.sheets.map(s => {
+  // Satu tab per Section (supaya tidak memanjang ke bawah). Di dalam tab: saklar ON/OFF. ON -> daftar PIC dan pilihan shift tampil.
+  // OFF -> tidak tampil, dan shift Section itu tidak muncul di Our Team / View Profile.
+  const n = d.sheets.length;
+  if (schedSheet >= n) schedSheet = 0;
+  const tabs = n > 1
+    ? `<div class="sub-tabs small centered" role="tablist" aria-label="Sections">${d.sheets.map((s, i) => {
+        const on = s.enabled !== false;
+        return `<button type="button" role="tab" class="sub-tab" data-sstab="${i}" aria-selected="${i === schedSheet}">${escapeHtml(s.sheetName)}<span class="tab-st${on ? "" : " off"}" data-tabst="${i}">${on ? "ON" : "OFF"}</span></button>`;
+      }).join("")}</div>`
+    : "";
+  const panes = d.sheets.map((s, i) => {
     const on = s.enabled !== false;
-    return `<div class="sec-card" data-shsec="${escapeHtml(s.sheetKey)}">
+    return sheetPaneHtml(i, n, `<div class="sec-card" data-shsec="${escapeHtml(s.sheetKey)}">
       <div class="sec-head"><span class="sec-name">${escapeHtml(s.sheetName)}</span>
         <label class="sw"><input type="checkbox" data-shift-toggle data-sheet="${escapeHtml(s.sheetKey)}" data-orig="${on ? "1" : "0"}"${on ? " checked" : ""}><span class="sw-ui"></span><span class="sw-txt">${on ? "ON" : "OFF"}</span></label></div>
       <div class="sec-body"${on ? "" : " hidden"}>
@@ -5226,8 +5248,9 @@ function shiftRosterHtml(){
           <select class="off-input" style="width:auto" data-shift-roster data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.shift)}">
             ${["pagi", "normal", "siang"].map(k => `<option value="${k}"${k === m.shift ? " selected" : ""}>${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`).join("")}
           </select></div>`).join("")}</div>
-      </div></div>`;
-  }).join("") + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="shift-save">Save</button></div>`;
+      </div></div>`);
+  }).join("");
+  return tabs + panes + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="shift-save">Save</button></div>`;
 }
 
 // Pindah tab di jendela Off / Shift Schedule tanpa menggambar ulang (pilihan yang belum disimpan tetap ada).
@@ -5550,6 +5573,9 @@ document.addEventListener("change", (e) => {
       const body = card.querySelector(".sec-body"), txt = card.querySelector(".sw-txt");
       if (body) body.hidden = !t.checked;
       if (txt) txt.textContent = t.checked ? "ON" : "OFF";
+      const pane = card.closest("[data-sspane]");
+      const st = pane && document.querySelector(`[data-tabst="${pane.dataset.sspane}"]`);
+      if (st){ st.textContent = t.checked ? "ON" : "OFF"; st.classList.toggle("off", !t.checked); }
     }
   }
 });

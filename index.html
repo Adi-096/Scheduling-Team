@@ -429,6 +429,14 @@
   .acct-bar .acct-link:hover{ color:var(--ink); }
   #profile-modal-overlay .modal, #review-modal-overlay .modal, #sched-modal-overlay .modal{ margin:auto; }
   #sched-status{ margin-top:12px;width:100%;box-sizing:border-box; }
+  /* Jendela Off Schedule / Shift Schedule dilebarkan dan isinya disusun dua kolom, supaya tidak memanjang ke bawah (di HP tetap satu kolom). */
+  #sched-modal-overlay .modal{ max-width:min(980px,96vw); }
+  #sched-card-content .sub-pane, #sched-card-content .sec-card, #sched-card-content .profile-edit, #sched-card-content .profile-block{ width:100%;box-sizing:border-box; }
+  #sched-card-content .off-list{ display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px 16px; }
+  #sched-card-content .sched-head{ display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px 28px;align-items:start; }
+  #sched-card-content .sched-head > .full{ grid-column:1 / -1; }
+  #sched-card-content .sched-col{ display:flex;flex-direction:column;gap:8px; }
+  #sched-card-content .swr-grid{ display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:4px 28px;align-items:start; }
   .off-badge.shift-pagi{ background:#fff4d6;color:#8a5a00;border:1px solid #f0d58a; }
   .off-badge.shift-normal{ background:#e8f0fb;color:#1f4f8f;border:1px solid #b9cff0; }
   .off-badge.shift-siang{ background:#efe6fb;color:#5b2a99;border:1px solid #d3bff0; }
@@ -5000,7 +5008,7 @@ function offHeaderHtml(list, cur, dr){
   // Tombol Save di bagian atas hanya muncul bila saklar berubah (supaya tidak ada dua tombol Save yang membingungkan).
   const dirty = dr.enabled !== (cur.enabled !== false) || secs.some(x => (dr.sections[x.key] !== false) !== (x.enabled !== false));
   const saveRow = dirty ? `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="head-save">Save</button><button type="button" class="pic-btn" data-off-act="sched-close">Close</button></div>` : "";
-  return `<div class="profile-edit">${careerBlock}${applyBlock}${secBlock}${offHint}${saveRow}</div>`;
+  return `<div class="profile-edit sched-head"><div class="sched-col">${careerBlock}${applyBlock}</div>${secBlock ? `<div class="sched-col">${secBlock}</div>` : ""}${offHint ? `<div class="full">${offHint}</div>` : ""}${saveRow ? `<div class="full">${saveRow}</div>` : ""}</div>`;
 }
 
 // Isi tab "This week" (hanya tampil saat sistem Off untuk Career itu ON).
@@ -5174,8 +5182,8 @@ function swapRulesHtml(){
   if (!swapRulesDraft) swapRulesDraft = JSON.parse(JSON.stringify(d.swapRules));
   return `<div class="profile-block" style="margin-top:14px"><div class="profile-sec">Swap rules (Administrator only)</div>
     <div class="profile-hint" style="margin:0 0 6px">Both PICs must be in the same Section and in different teams. The PIC who is asked to swap always has to approve.</div>
-    ${swapTableHtml("allow", "Who may request a swap with whom", "Read each row as: the requester (left) may swap with the checked roles (top).")}
-    ${swapTableHtml("declare", "Agreement required", "When checked, the requester must tick an agreement box before the request can be sent (only for pairs allowed above).")}
+    <div class="swr-grid"><div>${swapTableHtml("allow", "Who may request a swap with whom", "Read each row as: the requester (left) may swap with the checked roles (top).")}</div>
+    <div>${swapTableHtml("declare", "Agreement required", "When checked, the requester must tick an agreement box before the request can be sent (only for pairs allowed above).")}</div></div>
     <div class="profile-lbl" style="margin-top:8px">Agreement sentence</div>
     <div class="profile-hint" style="margin:0 0 4px">Shown beside the checkbox the requester must tick (max 300 characters).</div>
     <textarea id="swr-text" class="off-input" rows="3" maxlength="300">${escapeHtml(swapRulesDraft.text || "")}</textarea>

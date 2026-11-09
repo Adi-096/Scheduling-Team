@@ -1245,6 +1245,8 @@
   .tab-st{ margin-left:6px;font-size:9px;padding:1px 5px;border-radius:999px;background:#e3f6e8;color:#17692f; }
   .tab-st.off{ background:#eef1f4;color:#6b7885; }
   .sub-tab[aria-selected="true"] .tab-st{ background:rgba(255,255,255,.9); }
+  #app-toast{ position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(16px);background:#0A3D62;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;line-height:1.4;max-width:90vw;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:100000; }
+  #app-toast.show{ opacity:1;transform:translateX(-50%); }
   .sec-card{ width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;text-align:left; }
   .sec-head{ display:flex;justify-content:space-between;align-items:center;gap:10px; }
   .sec-name{ font-weight:600;font-size:14px; }
@@ -4851,6 +4853,7 @@ function offBadgeHtml(m, career){
   if (!team) return "";
   const c = b.careers[normSheetName(career)];
   if (c && c.state === "disabled") return "";   // sistem Off dimatikan untuk Career ini
+  if ((b.hidden || []).some(e => splitEmails(m.email).map(x => x.toLowerCase()).includes(e))) return "";   // Section ini dimatikan
   if (!c) return `<div class="off-badge non">Team ${escapeHtml(team)}</div>`;
   const tip = escapeHtml(b.label || "");
   if (c.state === "nonoff") return `<div class="off-badge non" title="${tip}">Team ${escapeHtml(team)} &middot; Non-off</div>`;
@@ -4921,8 +4924,10 @@ const OFF_MAX_PERIODS = 12;   // sama dengan OFF_MAX_NONOFF_PERIODS di Code.gs
 function offDraftOf(cur){
   if (!offDraft || offDraft.key !== cur.key){
     const ps = (cur.periods || []).map(p => ({ from: p.from, weeks: Number(p.weeks) }));
+    const secs = {};
+    (cur.sections || []).forEach(x => { secs[x.key] = x.enabled !== false; });
     offDraft = { key: cur.key, enabled: cur.enabled !== false, mode: ps.length ? "nonoff" : "off",
-                 team: cur.pendingTeam || (cur.teams || ["A"])[0], periods: ps };
+                 team: cur.pendingTeam || (cur.teams || ["A"])[0], periods: ps, sections: secs };
   }
   return offDraft;
 }
@@ -4951,37 +4956,50 @@ function offPeriodsProblem(periods){
   return "";
 }
 
+// Bagian atas jendela Off Schedule: (1) pilih Career, (2) saklar ON/OFF sistem Off untuk Career itu,
+// (3) bila Career punya beberapa Section: daftar Section dengan saklar ON/OFF masing-masing.
+function offHeaderHtml(list, cur, dr){
+  const sel = (a, b) => a === b ? " selected" : "";
+  const sw = (attrs, on) => `<label class="sw"><input type="checkbox" ${attrs}${on ? " checked" : ""}><span class="sw-ui"></span><span class="sw-txt">${on ? "ON" : "OFF"}</span></label>`;
+  const careerBlock = list.length > 1
+    ? `<div class="profile-lbl">Career</div><select id="off-career" class="off-input">${list.map(c => `<option value="${escapeHtml(c.key)}"${sel(c.key, cur.key)}>${escapeHtml(c.name)}</option>`).join("")}</select>`
+    : `<div class="profile-lbl">Career</div><div class="task">${escapeHtml(cur.name)}</div>`;
+  const applyBlock = `<div class="apply-row" style="margin-top:8px"><span><b>Apply the Off system for this Career?</b></span>${sw('id="off-apply"', dr.enabled)}</div>`;
+  const secs = cur.sections || [];
+  const secBlock = (dr.enabled && secs.length > 1)
+    ? `<div class="profile-lbl">Sections in this Career</div>` + secs.map(x =>
+        `<div class="apply-row" style="margin-top:6px"><span>${escapeHtml(x.name)}</span>${sw(`data-off-sec data-sheet="${escapeHtml(x.key)}"`, dr.sections[x.key] !== false)}</div>`).join("")
+    : "";
+  const offHint = dr.enabled ? "" : `<div class="profile-hint">The Off system is turned off for this Career. No Off / Non-off badge is shown and Saturday Off swaps are not available. Your earlier Off settings are kept, so turning it on again brings them back.</div>`;
+  // Tombol Save di bagian atas hanya muncul bila saklar berubah (supaya tidak ada dua tombol Save yang membingungkan).
+  const dirty = dr.enabled !== (cur.enabled !== false) || secs.some(x => (dr.sections[x.key] !== false) !== (x.enabled !== false));
+  const saveRow = dirty ? `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="head-save">Save</button><button type="button" class="pic-btn" data-off-act="sched-close">Close</button></div>` : "";
+  return `<div class="profile-edit">${careerBlock}${applyBlock}${secBlock}${offHint}${saveRow}</div>`;
+}
+
+// Isi tab "This week" (hanya tampil saat sistem Off untuk Career itu ON).
 function offManageFormHtml(d){
   const list = d.manage || [];
   const cur = list.find(c => c.key === offManageKey) || list[0];
   offManageKey = cur.key;
   const dr = offDraftOf(cur);
   const sel = (a, b) => a === b ? " selected" : "";
-  const careerBlock = list.length > 1
-    ? `<div class="profile-lbl">Career</div><select id="off-career" class="off-input">${list.map(c => `<option value="${escapeHtml(c.key)}"${sel(c.key, cur.key)}>${escapeHtml(c.name)}</option>`).join("")}</select>`
-    : `<div class="profile-lbl">Career</div><div class="task">${escapeHtml(cur.name)}</div>`;
-  // 1) Pertanyaan pertama: sistem Off diterapkan atau tidak
-  const applyBlock = `<div class="apply-row"><span><b>Apply the Off system for this Career?</b></span>
-      <label class="sw"><input type="checkbox" id="off-apply"${dr.enabled ? " checked" : ""}><span class="sw-ui"></span><span class="sw-txt">${dr.enabled ? "ON" : "OFF"}</span></label></div>`;
-  let body = "";
-  if (!dr.enabled){
-    body = `<div class="profile-hint">The Off system is turned off for this Career. No Off / Non-off badge is shown and Saturday Off swaps are not available. Your earlier Off settings are kept, so turning it on again brings them back.</div>`;
-  } else {
-    const now = cur.enabled === false ? "The Off system is currently turned off"
-      : cur.mode === "nonoff" ? `Non-off until ${escapeHtml(cur.nonOffUntilLabel)}`
-      : cur.mode === "off" ? `Off week &mdash; Team ${escapeHtml(cur.offTeamNow)} is off on ${escapeHtml(cur.thisSatLabel)}`
-      : "Not set yet";
-    const isNon = dr.mode === "nonoff";
-    const periodsHtml = dr.periods.map((p, i) => `<div class="period-card">
-        <div class="period-head"><div class="profile-lbl" style="margin:0">Non-off period ${i + 1}</div>
-          <button type="button" class="profile-mini" data-off-act="period-del" data-i="${i}">Remove</button></div>
-        <div class="profile-lbl">Start from</div>
-        <select class="off-input" data-period-from="${i}">${offSatOptions(cur, p.from).map(x => `<option value="${escapeHtml(x)}"${sel(x, p.from)}>${escapeHtml(offDateLabelJs(x))}</option>`).join("")}</select>
-        <div class="profile-lbl">For how many weeks</div>
-        <input type="number" class="off-input" min="1" max="26" value="${escapeHtml(String(p.weeks))}" data-period-weeks="${i}">
-        <div class="profile-hint" data-period-hint="${i}" style="margin:0"></div>
-      </div>`).join("");
-    body = `<div class="profile-hint" style="margin:8px 0 0">Now: ${now}</div>
+  const now = cur.enabled === false ? "The Off system is currently turned off"
+    : cur.mode === "nonoff" ? `Non-off until ${escapeHtml(cur.nonOffUntilLabel)}`
+    : cur.mode === "off" ? `Off week &mdash; Team ${escapeHtml(cur.offTeamNow)} is off on ${escapeHtml(cur.thisSatLabel)}`
+    : "Not set yet";
+  const isNon = dr.mode === "nonoff";
+  const periodsHtml = dr.periods.map((p, i) => `<div class="period-card">
+      <div class="period-head"><div class="profile-lbl" style="margin:0">Non-off period ${i + 1}</div>
+        <button type="button" class="profile-mini" data-off-act="period-del" data-i="${i}">Remove</button></div>
+      <div class="profile-lbl">Start from</div>
+      <select class="off-input" data-period-from="${i}">${offSatOptions(cur, p.from).map(x => `<option value="${escapeHtml(x)}"${sel(x, p.from)}>${escapeHtml(offDateLabelJs(x))}</option>`).join("")}</select>
+      <div class="profile-lbl">For how many weeks</div>
+      <input type="number" class="off-input" min="1" max="26" value="${escapeHtml(String(p.weeks))}" data-period-weeks="${i}">
+      <div class="profile-hint" data-period-hint="${i}" style="margin:0"></div>
+    </div>`).join("");
+  return `<div class="profile-edit">
+      <div class="profile-hint" style="margin:0">Now: ${now}</div>
       <div class="profile-lbl">Off or Non-off</div>
       <label class="off-radio"><input type="radio" name="off-mode" value="off"${isNon ? "" : " checked"}> Off &mdash; no Non-off period, one team is off</label>
       <label class="off-radio"><input type="radio" name="off-mode" value="nonoff"${isNon ? " checked" : ""}> Non-off &mdash; choose when everyone works</label>
@@ -4992,12 +5010,7 @@ function offManageFormHtml(d){
       </div>
       <div class="profile-lbl" id="off-team-lbl"></div>
       <select id="off-team" class="off-input">${(cur.teams || ["A", "B"]).map(t => `<option value="${escapeHtml(t)}"${sel(t, dr.team)}>Team ${escapeHtml(t)}</option>`).join("")}</select>
-      <div class="profile-hint">The Non-off weeks are not counted. After each Non-off period ends, the rotation continues from where it stopped.</div>`;
-  }
-  return `<div class="profile-edit">
-      ${careerBlock}
-      ${applyBlock}
-      ${body}
+      <div class="profile-hint">The Non-off weeks are not counted. After each Non-off period ends, the rotation continues from where it stopped.</div>
       <div class="profile-edit-actions">
         <button type="button" class="pic-btn primary" data-off-act="manage-save">Save</button>
         <button type="button" class="pic-btn" data-off-act="sched-close">Close</button>
@@ -5146,20 +5159,31 @@ function renderSched(){
   let h = `<div class="pic-name">${isOff ? "Off Schedule" : "Shift Schedule"}</div><hr>`;
   const pane = (key, html) => `<div class="sub-pane" data-spane="${key}"${schedTab === key ? "" : " hidden"}>${html}</div>`;
   if (isOff){
-    h += `<div class="profile-hint" style="margin-top:0">Set whether this week has an Off, and which team each PIC belongs to.</div>`;
+    h += `<div class="profile-hint" style="margin-top:0">Choose the Career first, then switch the Off system ON or OFF. When it is ON, set this week and the team of each PIC.</div>`;
     if (!schedOff) h += `<div class="pic-status" id="sched-status"></div><div class="profile-hint">Loading&hellip;</div>`;
     else {
-      const tabs = [];
-      if ((schedOff.manage || []).length) tabs.push({ key: "week", label: "This week" });
-      tabs.push({ key: "teams", label: "Team of each PIC" });
-      if (!tabs.some(t => t.key === schedTab)) schedTab = tabs[0].key;
-      h += tabs.length > 1
-        ? `<div class="sub-tabs centered" role="tablist" aria-label="Off Schedule sections">${tabs.map(t =>
-            `<button type="button" role="tab" class="sub-tab" data-stab="${t.key}" aria-selected="${t.key === schedTab}">${t.label}</button>`).join("")}</div>`
-        : "";
+      const manage = schedOff.manage || [];
+      let on = true;
+      if (manage.length){
+        const cur = manage.find(c => c.key === offManageKey) || manage[0];
+        offManageKey = cur.key;
+        const dr = offDraftOf(cur);
+        on = dr.enabled;
+        h += offHeaderHtml(manage, cur, dr);
+      }
       h += `<div class="pic-status" id="sched-status"></div>`;
-      if (tabs.some(t => t.key === "week")) h += pane("week", offManageFormHtml(schedOff));
-      h += pane("teams", (tabs.length > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">Team Off of each PIC</div>`) + offRosterHtml());
+      if (on){
+        const tabs = [];
+        if (manage.length) tabs.push({ key: "week", label: "This week" });
+        tabs.push({ key: "teams", label: "Team of each PIC" });
+        if (!tabs.some(t => t.key === schedTab)) schedTab = tabs[0].key;
+        h += tabs.length > 1
+          ? `<div class="sub-tabs centered" role="tablist" aria-label="Off Schedule sections">${tabs.map(t =>
+              `<button type="button" role="tab" class="sub-tab" data-stab="${t.key}" aria-selected="${t.key === schedTab}">${t.label}</button>`).join("")}</div>`
+          : "";
+        if (tabs.some(t => t.key === "week")) h += pane("week", offManageFormHtml(schedOff));
+        h += pane("teams", (tabs.length > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">Team Off of each PIC</div>`) + offRosterHtml());
+      }
     }
   } else {
     h += `<div class="profile-hint" style="margin-top:0">Switch each Section ON or OFF. When ON, choose the work shift of each PIC (default is Normal; Morning starts 07:00, Normal 09:00, Afternoon 11:00). When OFF, the shift of that Section is not shown.</div>`;
@@ -5213,8 +5237,13 @@ function offRosterHtml(){
   const r = schedRoster;
   if (!r) return `<div class="profile-hint">Loading&hellip;</div>`;
   if (!r.sheets || !r.sheets.length) return `<div class="profile-hint">${escapeHtml(r.err || "No PIC found in your sections.")}</div>`;
-  const shown = r.sheets.filter(x => x.offEnabled !== false);   // Career dengan sistem Off OFF tidak ditampilkan
-  if (!shown.length) return `<div class="profile-hint">The Off system is turned off for your Career(s), so there are no teams to set. Turn it on in the <b>This week</b> tab first.</div>`;
+  // Hanya Section dari Career yang sedang dipilih, dan hanya yang sistem Off-nya ON (menurut saklar di bagian atas).
+  const dr = offDraft;
+  const shown = r.sheets.filter(x => {
+    if (dr){ if (x.career && x.career !== dr.key) return false; return dr.enabled && dr.sections[x.sheetKey] !== false; }
+    return x.offEnabled !== false;
+  });
+  if (!shown.length) return `<div class="profile-hint">No Section with the Off system turned ON in this Career.</div>`;
   const n = shown.length;
   return sheetTabsHtml(shown) + shown.map((s, i) => sheetPaneHtml(i, n, `${n > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>`}
     ${s.hasCol ? "" : `<div class="profile-hint" style="margin:0">This sheet has no <b>Team Off</b> column yet. It will be added when you save.</div>`}
@@ -5272,6 +5301,30 @@ document.addEventListener("click", (e) => {
   }
 });
 
+// Pesan singkat di bawah layar (hilang sendiri).
+function showToast(msg){
+  let t = document.getElementById("app-toast");
+  if (!t){ t = document.createElement("div"); t.id = "app-toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+  t.textContent = msg;
+  t.className = "show";
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => { t.className = ""; }, 3500);
+}
+// Setelah Save berhasil: popup ditutup dan data dimuat ulang, seolah-olah halaman di-refresh.
+// (Isian sementara dibuang, Our Team yang sedang terbuka digambar ulang, My Off / My Shift dibaca ulang.)
+function finishSched(msg){
+  closeSched();
+  offDraft = null; schedOff = null; schedRoster = null; schedShift = null;
+  try {
+    const ov = document.getElementById("modal-overlay");
+    if (ov && ov.classList.contains("open") && lastTeamModal) openModal(lastTeamModal.header, lastTeamModal.sheetKey, lastTeamModal.members);
+  } catch (e) { /* abaikan */ }
+  try {
+    profileOff = null; profileShift = null;
+    if (profileCtx && String(profileCtx.email || "").trim()){ loadProfileOff(); loadProfileShift(); }
+  } catch (e) { /* abaikan */ }
+  showToast(msg);
+}
 async function schedCall(btn, payload, busyText, onOk){
   const restore = btnLoading(btn, busyText);
   setSchedStatus("", "");
@@ -5279,18 +5332,17 @@ async function schedCall(btn, payload, busyText, onOk){
     const d = await picApi(Object.assign({ actor: getRealEmail() }, payload));
     if (!d || !d.ok) throw new Error((d && d.error) || "Something went wrong.");
     onOk(d);
-    renderSched();
-    setSchedStatus("ok", d._msg || "Saved.");
+    finishSched(d._msg || "Saved.");
   } catch (err){
     restore();
     setSchedStatus("err", err.message || "Something went wrong.");
   }
 }
-function schedSaveConfig(btn){
+function schedSaveConfig(btn, toggleOnly){
   const dr = offDraft;
   if (!dr){ setSchedStatus("err", "Nothing to save."); return; }
   let periods = [];
-  if (dr.enabled && dr.mode === "nonoff"){
+  if (!toggleOnly && dr.enabled && dr.mode === "nonoff"){
     periods = dr.periods.map(p => ({ from: p.from, weeks: Math.floor(Number(p.weeks)) }));
     if (!periods.length){ setSchedStatus("err", "Add at least one Non-off period, or choose Off."); return; }
     const badIdx = periods.findIndex(p => !(p.weeks >= 1 && p.weeks <= 26));
@@ -5299,13 +5351,14 @@ function schedSaveConfig(btn){
     if (problem){ setSchedStatus("err", problem); return; }
     periods.sort((a, b) => a.from < b.from ? -1 : 1);
   }
-  const payload = { action: "offConfigSave", career: offManageKey, enabled: dr.enabled, mode: dr.mode, team: dr.team, periods };
+  const sections = Object.keys(dr.sections || {}).map(k => ({ sheet: k, enabled: dr.sections[k] !== false }));
+  const payload = { action: "offConfigSave", career: offManageKey, enabled: dr.enabled, toggleOnly: !!toggleOnly, sections, mode: dr.mode, team: dr.team, periods };
   const wasEnabled = dr.enabled, mode = dr.mode, n = periods.length;
   schedCall(btn, payload, "Saving...", d => {
     window.__offBoard = d.offBoard || window.__offBoard;
     if (schedOff) schedOff.manage = d.manage || schedOff.manage;
-    offDraft = null;   // dibaca ulang dari data terbaru server
     d._msg = !wasEnabled ? "Saved: the Off system is turned off for this Career."
+      : toggleOnly ? "Saved: the Off system is turned on."
       : mode === "nonoff" ? `Saved: ${n} Non-off period${n === 1 ? "" : "s"}.` : "Saved: Off week.";
   });
 }
@@ -5541,7 +5594,8 @@ document.addEventListener("click", (e) => {
   else if (act === "period-del"){
     if (offDraft){ offDraft.periods.splice(Number(b.dataset.i), 1); if (!offDraft.periods.length) offDraft.mode = "off"; renderSched(); }
   }
-  else if (act === "manage-save") schedSaveConfig(b);
+  else if (act === "head-save") schedSaveConfig(b, true);
+  else if (act === "manage-save") schedSaveConfig(b, false);
   else if (act === "roster-save") schedSaveRoster(b);
   else if (act === "shift-save") schedSaveShift(b);
   else if (act === "sched-close") closeSched();
@@ -5561,8 +5615,9 @@ document.addEventListener("change", (e) => {
     }
     offManageUi();
   }
-  else if (t.id === "off-career"){ offManageKey = t.value; offDraft = null; renderSched(); }
+  else if (t.id === "off-career"){ offManageKey = t.value; offDraft = null; schedSheet = 0; renderSched(); }
   else if (t.id === "off-apply"){ if (offDraft){ offDraft.enabled = t.checked; renderSched(); } }
+  else if (t.matches && t.matches("[data-off-sec]")){ if (offDraft){ offDraft.sections[t.dataset.sheet] = t.checked; renderSched(); } }
   else if (t.id === "off-team"){ if (offDraft) offDraft.team = t.value; }
   else if (t.dataset && t.dataset.periodFrom !== undefined){
     if (offDraft && offDraft.periods[Number(t.dataset.periodFrom)]){ offDraft.periods[Number(t.dataset.periodFrom)].from = t.value; offManageUi(); }

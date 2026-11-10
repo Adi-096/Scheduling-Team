@@ -2044,17 +2044,19 @@ function memberCardHtml(m, canEdit, career){
     </div>`;
 }
 
-// Urutan kartu Our Team menurut Team Off: Team A dulu, lalu Team B, dst.; tanpa tim di paling akhir.
-// Urutan asli sheet dipertahankan di dalam tim yang sama. Tidak diurutkan bila sistem Off Career ini dimatikan.
+// Urutan kartu Our Team: Team A dulu, lalu Team B, dst. (tanpa tim di paling akhir); di dalam satu tim urut ABJAD menurut nama PIC.
+// Bila sistem Off Career ini dimatikan (atau tidak ada Team Off), semua PIC diurutkan abjad saja.
 function sortByTeamOff(list, career){
   const b = window.__offBoard, c = b && b.careers ? b.careers[normSheetName(career)] : null;
-  if (!b || !b.careers || (c && c.state === "disabled")) return list;
-  if (!list.some(m => normOffTeam(m.team))) return list;
-  return list.map((m, i) => ({ m, i, t: normOffTeam(m.team) }))
+  const useTeam = !!(b && b.careers && !(c && c.state === "disabled") && list.some(m => normOffTeam(m.team)));
+  const name = m => String(m.pic || "").trim();
+  return list.map((m, i) => ({ m, i, t: useTeam ? normOffTeam(m.team) : "", n: name(m) }))
     .sort((x, y) => {
       if (!x.t !== !y.t) return x.t ? -1 : 1;
       if (x.t !== y.t) return x.t < y.t ? -1 : 1;
-      return x.i - y.i;
+      if (!x.n !== !y.n) return x.n ? -1 : 1;
+      const c2 = x.n.localeCompare(y.n, "id", { sensitivity: "base", numeric: true });
+      return c2 || x.i - y.i;
     }).map(o => o.m);
 }
 

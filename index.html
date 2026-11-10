@@ -429,6 +429,11 @@
   .acct-bar .acct-link:hover{ color:var(--ink); }
   #profile-modal-overlay .modal, #review-modal-overlay .modal, #sched-modal-overlay .modal{ margin:auto; }
   #sched-status{ margin-top:12px;width:100%;box-sizing:border-box; }
+  /* Popup Off Schedule / Shift Schedule: lebar (bukan 380px seperti kartu anggota), daftar PIC 2 kolom */
+  #sched-modal-overlay .modal{ max-width:980px; }
+  #sched-modal-overlay .member-card{ align-items:stretch; }
+  #sched-modal-overlay .off-list{ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
+  @media (max-width:640px){ #sched-modal-overlay .off-list{ grid-template-columns:1fr; } }
   .off-badge.shift-pagi{ background:#fff4d6;color:#8a5a00;border:1px solid #f0d58a; }
   .off-badge.shift-normal{ background:#e8f0fb;color:#1f4f8f;border:1px solid #b9cff0; }
   .off-badge.shift-siang{ background:#efe6fb;color:#5b2a99;border:1px solid #d3bff0; }
@@ -1263,6 +1268,7 @@
   .tm-move{ border:1px solid var(--line);background:transparent;border-radius:7px;font-size:14px;line-height:1;padding:3px 7px;cursor:pointer; }
   @media (max-width:520px){ .tm-board:not(.tm-none-board){ grid-template-columns:1fr 1fr; } }
   /* Shift Schedule: centang role */
+  .role-hide{ display:none !important; }
   .role-checks{ display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 12px; }
   .role-chk{ display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer; }
   .sec-card{ width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;text-align:left; }
@@ -5387,7 +5393,7 @@ function shiftRosterHtml(){
         ${(s.roles && s.roles.length) ? `<div class="profile-lbl">Show shift badge in Our Team for these roles</div>
         <div class="role-checks">${s.roles.map(r => `<label class="role-chk"><input type="checkbox" data-shift-role data-sheet="${escapeHtml(s.sheetKey)}" data-role="${escapeHtml(r.key)}" data-orig="${r.enabled !== false ? "1" : "0"}"${r.enabled !== false ? " checked" : ""}> ${escapeHtml(r.label)}</label>`).join("")}</div>` : ""}
         <div class="profile-lbl">Default shift (used for weeks that are not scheduled below)</div>
-        <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
+        <div class="off-list">${s.members.map(m => `<div class="off-row${(s.roles || []).some(r => r.key === m.role && r.enabled === false) ? " role-hide" : ""}" data-role="${escapeHtml(m.role || "")}"><span>${escapeHtml(m.name || m.email)}</span>
           <select class="off-input" style="width:auto" data-shift-roster data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.shift)}">
             ${["pagi", "normal", "siang"].map(k => `<option value="${k}"${k === m.shift ? " selected" : ""}>${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`).join("")}
           </select></div>`).join("")}</div>
@@ -5410,9 +5416,17 @@ function swWeekLabel(ds){
   const a = offDateLabelJs(ds).replace(/^[A-Za-z]+,\s*/, ""), b = offDateLabelJs(offAddDaysStr(ds, 6)).replace(/^[A-Za-z]+,\s*/, "");
   return a.replace(/\s\d{4}$/, "") + " - " + b;
 }
+// PIC yang tampil = role-nya tercentang (kotak centang di atas daftar; sebelum diubah, memakai data server).
+function swVisibleMembers(s){
+  const off = new Set(); let found = false;
+  document.querySelectorAll("[data-shift-role]").forEach(c => { if (c.dataset.sheet === s.sheetKey){ found = true; if (!c.checked) off.add(c.dataset.role); } });
+  if (!found) (s.roles || []).forEach(r => { if (r.enabled === false) off.add(r.key); });
+  return (s.members || []).filter(m => !off.has(m.role));
+}
+function swNeedMorning(s, members){ return members.length >= 2 ? ((schedShift && schedShift.minMorning) || 1) : 0; }
 function swMorningCount(w, members){ return members.filter(m => (w.shifts[m.email] || "normal") === "pagi").length; }
 function shiftWeeklyInnerHtml(s){
-  const d = schedShift || {}, dr = swDraftOf(s), members = s.members || [], need = s.needMorning || 0;
+  const d = schedShift || {}, dr = swDraftOf(s), members = swVisibleMembers(s), need = swNeedMorning(s, members);
   const mons = []; for (let i = 0; i < (d.maxWeeks || 26); i++) mons.push(offAddDaysStr(d.thisMonday, i * 7));
   const opt = k => `<option value="${k}">${SHIFT_UI[k][0]} (${SHIFT_UI[k][1]})</option>`;
   let h = need ? `<div class="profile-hint" style="margin:0 0 8px">Rule: every scheduled week needs at least ${need} PIC on the Morning shift. Weeks that are not listed use the default shift above.</div>`
@@ -5449,7 +5463,7 @@ document.addEventListener("click", (e) => {
   const key = blk.dataset.wkSheet;
   const s = ((schedShift && schedShift.sheets) || []).find(x => x.sheetKey === key);
   if (!s) return;
-  const dr = swDraftOf(s), members = s.members || [], act = b.dataset.wkAct, maxW = (schedShift && schedShift.maxWeeks) || 26;
+  const dr = swDraftOf(s), members = swVisibleMembers(s), act = b.dataset.wkAct, maxW = (schedShift && schedShift.maxWeeks) || 26;
   if (act === "fill"){
     const from = (blk.querySelector("[data-wk-from]") || {}).value;
     const idx0 = (schedShift.thisMonday && from) ? Math.round((Date.parse(from) - Date.parse(schedShift.thisMonday)) / (7 * 86400000)) : 0;
@@ -5477,11 +5491,13 @@ document.addEventListener("click", (e) => {
     swRedraw(key);
   }
   else if (act === "save"){
-    const need = s.needMorning || 0;
+    const need = swNeedMorning(s, members);
+    if (document.querySelector(`[data-shift-role][data-sheet="${CSS.escape(key)}"]`) && Array.from(document.querySelectorAll("[data-shift-role]")).some(c => c.dataset.sheet === key && c.checked !== (c.dataset.orig === "1"))){ setSchedStatus("err", "You changed the role checkboxes. Click Save (bottom) first, then save the weekly schedule."); return; }
     if (!dr.weeks.length && !dr.clear.length){ setSchedStatus("err", "No changes to save."); return; }
     const bad = need ? dr.weeks.find(w => swMorningCount(w, members) < need) : null;
     if (bad){ setSchedStatus("err", `Week ${swWeekLabel(bad.start)} has no Morning PIC. Every week needs at least ${need}.`); return; }
-    const weeks = dr.weeks.map(w => ({ start: w.start, shifts: w.shifts })), clear = dr.clear.slice();
+    const vis = new Set(members.map(m => m.email));
+    const weeks = dr.weeks.map(w => ({ start: w.start, shifts: Object.fromEntries(Object.entries(w.shifts || {}).filter(([em]) => vis.has(em))) })), clear = dr.clear.slice();
     schedCall(b, { action: "shiftWeeklySave", sheet: key, weeks, clear }, "Saving...", d => {
       schedShift = d; shiftWeekDraft = {};
       if (d.shiftBoard) window.__shiftBoard = d.shiftBoard;
@@ -5499,6 +5515,16 @@ document.addEventListener("change", (e) => {
   if (!s) return;
   const w = swDraftOf(s).weeks.find(x => x.start === c.dataset.week);
   if (w){ w.shifts[c.dataset.email] = c.value; swRedraw(key); }
+});
+
+// Centang role di Shift Schedule: daftar PIC (Default shift) dan jadwal pekanan ikut menyesuaikan seketika.
+document.addEventListener("change", (e) => {
+  const c = e.target && e.target.matches && e.target.matches("[data-shift-role]") ? e.target : null;
+  if (!c) return;
+  const card = c.closest("[data-shsec]");
+  if (!card) return;
+  card.querySelectorAll(`.off-row[data-role="${CSS.escape(c.dataset.role)}"]`).forEach(r => r.classList.toggle("role-hide", !c.checked));
+  swRedraw(c.dataset.sheet);
 });
 
 // Pindah tab di jendela Off / Shift Schedule tanpa menggambar ulang (pilihan yang belum disimpan tetap ada).

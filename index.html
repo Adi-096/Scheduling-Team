@@ -2338,7 +2338,7 @@ function mapServerLinks(arr){
     category: String(l.category || "").trim(),  // kolom "Category" (opsional)
     pinned: !!l.pinned,                         // kolom "On-Going Status" (Master / PIC Only) -> link On Going
     pinMode: l.pinMode || (l.picOnly ? "pic" : (l.pinned ? "master" : "")),   // master / pic / public / staff
-    picOnly: (l.pinMode || (l.picOnly ? "pic" : "")) === "pic",
+    picOnly: (l.pinMode || (l.picOnly ? "pic" : "")) === "pic",   // hanya untuk kompatibilitas; mode baru: picothers / picpartner / other / partner
     expiresOn: l.expiresOn || "",               // kolom "On-Going Expiry": kapan On Going berakhir ('yyyy-MM-dd HH:mm' / tanggal lama)
     startsOn: l.startsOn || "",                 // kolom "On-Going Start": kapan On Going mulai ("" = langsung)
     ogScheduled: !!l.ogScheduled,               // On Going sudah diatur tapi belum mulai (tampil sebagai link biasa dulu)
@@ -2467,7 +2467,7 @@ function visibilityLabel(l){
   else t = "Visible to: this sheet's PIC only";
   if (l.staffVisible) t += " + Staff";
   if (l.pinned){
-    const who = { master: "everyone", pic: "PIC only", "public": "Public (staff incl. Contact Center)", staff: "Staff (excl. Contact Center)" }[l.pinMode] || "everyone";
+    const who = LINK_STATUS_WHO[l.pinMode] || "everyone";
     t += " | On Going: " + who + (l.onGoing === false ? " (not shown to you)" : "");
     if (l.startsOn) t += " | Started " + fmtStamp(l.startsOn);
     if (l.expiresOn) t += " | Ends " + fmtStamp(l.expiresOn, true);
@@ -2612,13 +2612,23 @@ function partnerShareSelectHtml(link, own){
 
 // Status On Going yang dipakai form: link yang belum mulai tetap menampilkan status yang sudah diatur.
 const linkEffMode = (l) => !l ? "" : (l.pinned ? (l.pinMode || "master") : (l.ogScheduled ? (l.pinModeStored || "") : ""));
+// Nilai pilihan di form -> kode internal (sama dengan yang dibaca server dari kolom On-Going Status).
+const LINK_STATUS_MODE = { "Master": "master", "PIC Only": "pic", "PIC + Others": "picothers", "PIC + Partner": "picpartner",
+                           "Other PIC Only": "other", "Partner Only": "partner", "Public": "public", "Staff": "staff" };
+const LINK_STATUS_WHO = { master: "everyone", pic: "PIC only", picothers: "PIC + other PICs", picpartner: "PIC + Task Partner",
+                          other: "other PICs only", partner: "Task Partner only",
+                          "public": "Public (staff incl. Contact Center)", staff: "Staff (excl. Contact Center)" };
 function linkStatusSelectHtml(link){
   const cur = linkEffMode(link);
-  const opt = (v, label) => `<option value="${v}"${cur === (v === "" ? "" : v.toLowerCase().replace(" only", "")) ? " selected" : ""}>${label}</option>`;
+  const opt = (v, label) => `<option value="${v}"${cur === (v === "" ? "" : LINK_STATUS_MODE[v]) ? " selected" : ""}>${label}</option>`;
   return `<select id="pic-f-status" aria-label="On-Going status">
-      ${opt("", "Normal (listed in Our Links)")}
+      ${opt("", "None: Normal (listed in Our Links)")}
       ${opt("Master", "Master: On Going (shown to everyone who signs in)")}
-      ${opt("PIC Only", "PIC Only: On Going (PICs of this section and the sections in Other PIC Visibility)")}
+      ${opt("PIC Only", "PIC Only: On Going (PICs of this section only)")}
+      ${opt("PIC + Others", "PIC + Others: On Going (PICs of this section + the sections in Other PIC Visibility)")}
+      ${opt("PIC + Partner", "PIC + Partner: On Going (PICs of this section + their Task Partners)")}
+      ${opt("Other PIC Only", "Other PIC Only: On Going (only PICs of the sections in Other PIC Visibility)")}
+      ${opt("Partner Only", "Partner Only: On Going (only Task Partners of this section's PICs)")}
       ${opt("Public", "Public: On Going (staff incl. Contact Center)")}
       ${opt("Staff", "Staff: On Going (staff excl. Contact Center)")}
     </select>`;
@@ -4010,7 +4020,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: displayUrlFor(f.url), gallery: galleryIdsOf(f.url), note: noteIdOf(f.url), doc: docPartsOf(f.url), qr: qrUrlOf(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status && !addSc.scheduled, pinMode: addSc.scheduled ? "" : (({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || ""), pinModeStored: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only" && !addSc.scheduled, expiresOn: addSc.end, startsOn: addSc.start, ogScheduled: addSc.scheduled, ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? f.only.split(/[\s,;]+/).filter(Boolean) : [], partnerShare: f.share === "Yes"
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status && !addSc.scheduled, pinMode: addSc.scheduled ? "" : (LINK_STATUS_MODE[f.status] || ""), pinModeStored: LINK_STATUS_MODE[f.status] || "", picOnly: f.status === "PIC Only" && !addSc.scheduled, expiresOn: addSc.end, startsOn: addSc.start, ogScheduled: addSc.scheduled, ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? f.only.split(/[\s,;]+/).filter(Boolean) : [], partnerShare: f.share === "Yes"
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -4053,7 +4063,7 @@ async function editPicLink(){
       link.staffVisible = f.staff === "Yes";
       link.category = f.cat;
       const editSc = picSchedLocal(f, link);
-      const newMode = ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "";
+      const newMode = LINK_STATUS_MODE[f.status] || "";
       link.pinned = !!f.status && !editSc.scheduled;
       link.pinMode = editSc.scheduled ? "" : newMode;
       link.pinModeStored = newMode;

@@ -1890,6 +1890,9 @@ const LEADER_TITLES = ["section head","manager","senior manager"];
 // Leader yang TIDAK masuk daftar task bernomor. Section Head sengaja tidak dimasukkan di sini, jadi Section Head
 // tampil di daftar task (staff bisa langsung email Section Head), tetapi di Our Team tetap di blok "Person In Charge".
 const TASK_LIST_HIDDEN_TITLES = ["manager","senior manager"];
+// Contact Center: daftar task hanya berisi PIC (semua leader, termasuk Section Head, disembunyikan dari daftar task).
+// Our Team tetap memakai LEADERS_VISIBLE_BY_ROLE.
+const taskListHiddenFor = (role) => role === "cc" ? LEADER_TITLES : TASK_LIST_HIDDEN_TITLES;
 // Leader yang ditampilkan di Our Team ("Person In Charge") menurut role penonton: Contact Center hanya Section Head;
 // BSP dan Staff / Other Unit: Section Head + Manager; role lain (PIC, Task Partner, Dosen, pimpinan): semua leader.
 // Server juga menyaring data yang dikirim; ini lapisan kedua di tampilan.
@@ -1983,7 +1986,7 @@ function buildSection(idx, sheetKey, header, subheader, members, career){
   // Section Head ikut masuk daftar task (lihat TASK_LIST_HIDDEN_TITLES); Manager dan Senior Manager tidak.
   const regularIdx = [];
   members.forEach((m,i) => {
-    if (!TASK_LIST_HIDDEN_TITLES.includes(normJabatan(m.jabatan))) regularIdx.push(i);
+    if (!taskListHiddenFor(teamViewRole).includes(normJabatan(m.jabatan))) regularIdx.push(i);
   });
 
   const taskLinks = regularIdx.map((i, displayPos) => {

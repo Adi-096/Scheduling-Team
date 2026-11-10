@@ -782,6 +782,17 @@
     transition:border-color .15s ease;
   }
   .pic-form input:focus,.pic-form select:focus{ border-color:var(--accent); }
+  /* Only shown to: pilih lebih dari satu PIC */
+  .pic-multi details{ border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink); }
+  .pic-multi summary{ cursor:pointer;padding:11px 13px;font-size:14px;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px; }
+  .pic-multi summary::-webkit-details-marker{ display:none; }
+  .pic-multi summary::after{ content:"\25BE";color:var(--muted,#8a94a6); }
+  .pic-multi details[open] summary{ border-bottom:1px solid var(--line); }
+  .pic-multi-list{ max-height:220px;overflow-y:auto;padding:6px 8px; }
+  .pic-multi-item{ display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;cursor:pointer;text-align:left; }
+  .pic-multi-item input{ width:auto;margin:0;flex:none; }
+  .pic-multi-item span{ min-width:0;overflow-wrap:anywhere; }
+  .pic-multi-hint{ padding:6px 12px 10px;font-size:11px;opacity:.7;text-align:left; }
   .pic-actions{ display:flex;flex-wrap:wrap;gap:10px;margin-top:18px; }
   .pic-actions .pic-btn{ flex:1 1 120px; }
   .pic-btn{
@@ -2567,15 +2578,31 @@ function staffSelectHtml(link){
 function onlyShownSelectHtml(idx, link){
   const pics = (sectionMeta[idx] && sectionMeta[idx].pics) || [];
   if (!pics.length) return "";
-  const cur = (link && link.onlyFor) || [];
-  const multi = cur.length > 1;
-  const sel = cur.length === 1 ? cur[0] : "";
-  return `<select id="pic-f-only" aria-label="Only shown to PIC">
-      <option value=""${!multi && !sel ? " selected" : ""}>Shown to everyone who can see this menu</option>
-      ${multi ? `<option value="__keep__" selected>Keep current (${cur.length} PICs)</option>` : ""}
-      ${pics.map(e => `<option value="${escapeHtml(e)}"${sel === e ? " selected" : ""}>Only shown to: ${escapeHtml(e)}</option>`).join("")}
-    </select>`;
+  const cur = ((link && link.onlyFor) || []).map(e => String(e).toLowerCase());
+  // PIC yang sudah tercatat di link tetapi tidak ada di daftar section tetap ditampilkan (tercentang) agar tidak hilang diam-diam.
+  const all = pics.concat(cur.filter(e => !pics.some(p => String(p).toLowerCase() === e)));
+  return `<div id="pic-f-only" class="pic-multi" aria-label="Only shown to PIC">
+      <details>
+        <summary data-multi-sum>${picMultiSummary(cur)}</summary>
+        <div class="pic-multi-list">
+          ${all.map(e => `<label class="pic-multi-item"><input type="checkbox" value="${escapeHtml(e)}"${cur.includes(String(e).toLowerCase()) ? " checked" : ""}> <span>${escapeHtml(e)}</span></label>`).join("")}
+        </div>
+        <div class="pic-multi-hint">Tick one or more PICs. Tick none = shown to everyone who can see this menu.</div>
+      </details>
+    </div>`;
 }
+function picMultiSummary(list){
+  if (!list.length) return "Shown to everyone who can see this menu";
+  if (list.length === 1) return "Only shown to: " + escapeHtml(list[0]);
+  return "Only shown to: " + list.length + " PICs (" + escapeHtml(list.slice(0, 2).join(", ")) + (list.length > 2 ? ", ..." : "") + ")";
+}
+document.addEventListener("change", (e) => {
+  const box = e.target && e.target.closest && e.target.closest("#pic-f-only");
+  if (!box) return;
+  const list = Array.from(box.querySelectorAll("input[type=checkbox]:checked")).map(c => c.value);
+  const sum = box.querySelector("[data-multi-sum]");
+  if (sum) sum.innerHTML = picMultiSummary(list);
+});
 
 // Pilihan "Share with Task Partner": Yes = menu juga tampil untuk Task Partner PIC yang dituju
 // (PIC di "Only shown to"; kalau kosong = Task Partner semua PIC di section ini). Berlaku untuk menu Normal maupun On Going.
@@ -2583,7 +2610,7 @@ function partnerShareSelectHtml(link, own){
   const on = !!(link && link.partnerShare);
   return `<select id="pic-f-share" aria-label="Share with Task Partner">
       <option value=""${on ? "" : " selected"}>Task Partner: not shared</option>
-      <option value="Yes"${on ? " selected" : ""}>${own ? "Task Partner: also show to my Task Partner(s)" : "Task Partner: also show to the Task Partner(s) of the PIC (the one in \"Only shown to\", or every PIC of this section)"}</option>
+      <option value="Yes"${on ? " selected" : ""}>${own ? "Task Partner: also show to my Task Partner(s)" : "Task Partner: also show to the Task Partner(s) of the PIC(s) in \"Only shown to\" (or every PIC of this section)"}</option>
     </select>`;
 }
 
@@ -3922,7 +3949,8 @@ function readPicForm(){
   const vis  = visEl ? visEl.value : "";
   const staff = document.getElementById("pic-f-staff") ? document.getElementById("pic-f-staff").value : "";
   const status = document.getElementById("pic-f-status") ? document.getElementById("pic-f-status").value : "";
-  const only = document.getElementById("pic-f-only") ? document.getElementById("pic-f-only").value : "";
+  const onlyBox = document.getElementById("pic-f-only");
+  const only = onlyBox ? Array.from(onlyBox.querySelectorAll("input[type=checkbox]:checked")).map(c => c.value).join(", ") : "";
   const share = document.getElementById("pic-f-share") ? document.getElementById("pic-f-share").value : "";
   let og = document.getElementById("pic-f-ogscope") ? document.getElementById("pic-f-ogscope").value : "None";
   // Jadwal On Going: ogStart "" = sekarang | "yyyy-MM-dd HH:mm" | "__keep__"; ogDur "never" | 1..60 | "__keep__" + ogUnit
@@ -3986,7 +4014,7 @@ async function addPicLink(){
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
         url: displayUrlFor(f.url), gallery: galleryIdsOf(f.url), note: noteIdOf(f.url), doc: docPartsOf(f.url), qr: qrUrlOf(f.url), rawUrl: f.url, desc: f.desc,
-        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status && !addSc.scheduled, pinMode: addSc.scheduled ? "" : (({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || ""), pinModeStored: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only" && !addSc.scheduled, expiresOn: addSc.end, startsOn: addSc.start, ogScheduled: addSc.scheduled, ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? [f.only] : [], partnerShare: f.share === "Yes"
+        visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status && !addSc.scheduled, pinMode: addSc.scheduled ? "" : (({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || ""), pinModeStored: ({ "Master": "master", "PIC Only": "pic", "Public": "public", "Staff": "staff" })[f.status] || "", picOnly: f.status === "PIC Only" && !addSc.scheduled, expiresOn: addSc.end, startsOn: addSc.start, ogScheduled: addSc.scheduled, ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? f.only.split(/[\s,;]+/).filter(Boolean) : [], partnerShare: f.share === "Yes"
       });
       picMode = "view";
       refreshPicLocal(idx, { type: "ok", text: "Menu added and saved to the spreadsheet." }, { present: [{ name: f.name, url: f.url }] });
@@ -4041,7 +4069,7 @@ async function editPicLink(){
       link.startsOn = editSc.start;
       link.ogScheduled = editSc.scheduled;
       link.ogExpired = false;
-      if (f.only !== "__keep__") link.onlyFor = f.only ? [f.only] : [];
+      if (f.only !== "__keep__") link.onlyFor = f.only ? f.only.split(/[\s,;]+/).filter(Boolean) : [];
       if (f.vis !== "__keep__"){
         const v = parseVisibleSheets(f.vis, knownSheetsGlobal);
         link.visibleAll = v.all; link.visibleTo = v.list;

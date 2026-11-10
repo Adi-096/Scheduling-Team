@@ -4875,6 +4875,8 @@ document.addEventListener("click", (e) => {
      jawaban atas request yang masuk, dan (Authorized PIC / Leader) pengaturan pekan Off / Non-off.
    ========================================================================= */
 let profileOff = null;        // jawaban server (offInfo)
+let offCalPage = 0;           // halaman daftar Sabtu di tab My Off (6 Sabtu per halaman)
+const OFF_CAL_PER_PAGE = 6;
 let offFormOpen = false;      // formulir tukar Off terbuka
 let offManageOpen = false;    // formulir pengaturan pekan Off terbuka
 let offManageKey = "";        // Career yang sedang diatur
@@ -5126,8 +5128,19 @@ function profileOffPaneHtml(){
       h += `<div class="profile-lbl">Next Saturday</div><div class="off-line">${offChip(first.nonOff ? "nonoff" : first.status)}<span>${line}</span></div>`;
       if (first.swapWith) h += `<div class="profile-hint">Swapped with ${escapeHtml(first.swapWith)} (approved).</div>`;
     }
-    h += `<div class="profile-lbl">Coming Saturdays</div><div class="off-list">${sats.slice(0, 6).map(s =>
+    const cal = (d.calendar && d.calendar.length) ? d.calendar : sats;
+    const pages = Math.max(1, Math.ceil(cal.length / OFF_CAL_PER_PAGE));
+    offCalPage = Math.min(Math.max(0, offCalPage), pages - 1);
+    const pageSats = cal.slice(offCalPage * OFF_CAL_PER_PAGE, (offCalPage + 1) * OFF_CAL_PER_PAGE);
+    h += `<div class="profile-lbl">Coming Saturdays</div><div class="off-list">${pageSats.map(s =>
       `<div class="off-row"><span>${escapeHtml(String(s.label).replace(/^Saturday,\s*/, ""))}${s.swapWith ? " (swapped)" : ""}</span>${offChip(s.nonOff ? "nonoff" : s.status)}</div>`).join("")}</div>`;
+    if (pages > 1){
+      h += `<div class="off-btns" style="justify-content:space-between;align-items:center;margin-top:8px">
+        <button type="button" class="profile-mini" data-off-act="cal-prev"${offCalPage <= 0 ? " disabled" : ""}>&lsaquo; Previous</button>
+        <span class="profile-hint" style="margin:0">${escapeHtml(String(pageSats[0].label).replace(/^Saturday,\s*/, "").replace(/\s\d{4}$/, ""))} &ndash; ${escapeHtml(String(pageSats[pageSats.length - 1].label).replace(/^Saturday,\s*/, "").replace(/\s\d{4}$/, ""))}</span>
+        <button type="button" class="profile-mini" data-off-act="cal-next"${offCalPage >= pages - 1 ? " disabled" : ""}>Next &rsaquo;</button>
+      </div>`;
+    }
     if (own && d.canRequest){
       h += offFormOpen ? offSwapFormHtml(d)
         : `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="open">Request to swap my Off</button></div>`;
@@ -5873,7 +5886,7 @@ async function offCall(payload, btn, busyText, okText, after){
     if (!d || !d.ok) throw new Error((d && d.error) || "Something went wrong.");
     profileBusy = false;
     if (after) after(d);
-    offFormOpen = false; offManageOpen = false; shiftFormOpen = false;
+    offFormOpen = false; offManageOpen = false; shiftFormOpen = false; offCalPage = 0;
     renderProfile();
     setProfileStatus("ok", okText(d));
     loadProfileShift();
@@ -5889,7 +5902,8 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest && e.target.closest("[data-off-act]");
   if (!b) return;
   const act = b.dataset.offAct;
-  if (act === "open"){ offFormOpen = true; offManageOpen = false; renderProfile(); }
+  if (act === "cal-prev" || act === "cal-next"){ offCalPage += act === "cal-next" ? 1 : -1; renderProfile(); }
+  else if (act === "open"){ offFormOpen = true; offManageOpen = false; renderProfile(); }
   else if (act === "cancel"){ offFormOpen = false; offManageOpen = false; renderProfile(); }
   else if (act === "send"){
     const date = (document.getElementById("off-date") || {}).value || "";
@@ -6646,7 +6660,7 @@ document.addEventListener("keydown", (e) => {
 
 function openProfile(){
   profileEditField = ""; profileDescEdit = "";
-  offFormOpen = false; offManageOpen = false; shiftFormOpen = false;
+  offFormOpen = false; offManageOpen = false; shiftFormOpen = false; offCalPage = 0;
   profileTab = "profile";
   renderProfile();
   document.getElementById("profile-modal-overlay").classList.add("open");

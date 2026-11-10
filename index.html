@@ -429,14 +429,6 @@
   .acct-bar .acct-link:hover{ color:var(--ink); }
   #profile-modal-overlay .modal, #review-modal-overlay .modal, #sched-modal-overlay .modal{ margin:auto; }
   #sched-status{ margin-top:12px;width:100%;box-sizing:border-box; }
-  /* Jendela Off Schedule / Shift Schedule dilebarkan dan isinya disusun dua kolom, supaya tidak memanjang ke bawah (di HP tetap satu kolom). */
-  #sched-modal-overlay .modal{ max-width:min(980px,96vw); }
-  #sched-card-content .sub-pane, #sched-card-content .sec-card, #sched-card-content .profile-edit, #sched-card-content .profile-block{ width:100%;box-sizing:border-box; }
-  #sched-card-content .off-list{ display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px 16px; }
-  #sched-card-content .sched-head{ display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px 28px;align-items:start; }
-  #sched-card-content .sched-head > .full{ grid-column:1 / -1; }
-  #sched-card-content .sched-col{ display:flex;flex-direction:column;gap:8px; }
-  #sched-card-content .swr-grid{ display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:4px 28px;align-items:start; }
   .off-badge.shift-pagi{ background:#fff4d6;color:#8a5a00;border:1px solid #f0d58a; }
   .off-badge.shift-normal{ background:#e8f0fb;color:#1f4f8f;border:1px solid #b9cff0; }
   .off-badge.shift-siang{ background:#efe6fb;color:#5b2a99;border:1px solid #d3bff0; }
@@ -1255,6 +1247,24 @@
   .sub-tab[aria-selected="true"] .tab-st{ background:rgba(255,255,255,.9); }
   #app-toast{ position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(16px);background:#0A3D62;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;line-height:1.4;max-width:90vw;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:100000; }
   #app-toast.show{ opacity:1;transform:translateX(-50%); }
+  /* Off Schedule > Team of each PIC: kotak Team (drag & drop) */
+  .tm-board{ display:grid;grid-template-columns:repeat(var(--tm-cols,2),minmax(0,1fr));gap:10px;width:100%;margin-top:8px; }
+  .tm-none-board{ margin-top:10px; }
+  .tm-col{ border:1.5px dashed var(--line);border-radius:12px;padding:8px;min-height:90px;background:rgba(0,0,0,.015);transition:background .15s,border-color .15s;text-align:left; }
+  .tm-col.over{ border-color:#0f4c6e;background:rgba(15,76,110,.08); }
+  .tm-head{ display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;margin-bottom:6px; }
+  .tm-count{ font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:rgba(15,76,110,.12); }
+  .tm-drop{ display:flex;flex-direction:column;gap:5px;min-height:40px; }
+  .tm-chip{ display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:13px;cursor:grab;user-select:none; }
+  .tm-chip.dragging{ opacity:.45; }
+  .tm-chip.changed{ border-color:#0f4c6e;box-shadow:0 0 0 1px #0f4c6e inset; }
+  .tm-grip{ color:#9aa7b3;letter-spacing:-2px;font-size:12px; }
+  .tm-name{ flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .tm-move{ border:1px solid var(--line);background:transparent;border-radius:7px;font-size:14px;line-height:1;padding:3px 7px;cursor:pointer; }
+  @media (max-width:520px){ .tm-board:not(.tm-none-board){ grid-template-columns:1fr 1fr; } }
+  /* Shift Schedule: centang role */
+  .role-checks{ display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 12px; }
+  .role-chk{ display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer; }
   .sec-card{ width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;text-align:left; }
   .sec-head{ display:flex;justify-content:space-between;align-items:center;gap:10px; }
   .sec-name{ font-weight:600;font-size:14px; }
@@ -2028,6 +2038,20 @@ function memberCardHtml(m, canEdit, career){
     </div>`;
 }
 
+// Urutan kartu Our Team menurut Team Off: Team A dulu, lalu Team B, dst.; tanpa tim di paling akhir.
+// Urutan asli sheet dipertahankan di dalam tim yang sama. Tidak diurutkan bila sistem Off Career ini dimatikan.
+function sortByTeamOff(list, career){
+  const b = window.__offBoard, c = b && b.careers ? b.careers[normSheetName(career)] : null;
+  if (!b || !b.careers || (c && c.state === "disabled")) return list;
+  if (!list.some(m => normOffTeam(m.team))) return list;
+  return list.map((m, i) => ({ m, i, t: normOffTeam(m.team) }))
+    .sort((x, y) => {
+      if (!x.t !== !y.t) return x.t ? -1 : 1;
+      if (x.t !== y.t) return x.t < y.t ? -1 : 1;
+      return x.i - y.i;
+    }).map(o => o.m);
+}
+
 function openModal(header, sheetKey, members){
   lastTeamModal = { header: header, sheetKey: sheetKey, members: members };
   Activity.ctx.sheet = sheetKey;
@@ -2043,7 +2067,7 @@ function openModal(header, sheetKey, members){
   // Leader ditampilkan terpisah, di blok "Person In Charge" paling bawah,
   // urut sesuai hierarki: Section Head -> Manager -> Senior Manager.
   // Leader yang boleh tampil bergantung pada role penonton (CC: Section Head saja; BSP dan Staff: Section Head + Manager).
-  const regular = teamMembers.filter(m => !LEADER_TITLES.includes(normJabatan(m.jabatan)));
+  const regular = sortByTeamOff(teamMembers.filter(m => !LEADER_TITLES.includes(normJabatan(m.jabatan))), sectionCareer);
   const shownLeaderTitles = leadersVisibleFor(teamViewRole);
   const leaders = teamMembers
     .filter(m => shownLeaderTitles.includes(normJabatan(m.jabatan)))
@@ -5008,7 +5032,7 @@ function offHeaderHtml(list, cur, dr){
   // Tombol Save di bagian atas hanya muncul bila saklar berubah (supaya tidak ada dua tombol Save yang membingungkan).
   const dirty = dr.enabled !== (cur.enabled !== false) || secs.some(x => (dr.sections[x.key] !== false) !== (x.enabled !== false));
   const saveRow = dirty ? `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="head-save">Save</button><button type="button" class="pic-btn" data-off-act="sched-close">Close</button></div>` : "";
-  return `<div class="profile-edit sched-head"><div class="sched-col">${careerBlock}${applyBlock}</div>${secBlock ? `<div class="sched-col">${secBlock}</div>` : ""}${offHint ? `<div class="full">${offHint}</div>` : ""}${saveRow ? `<div class="full">${saveRow}</div>` : ""}</div>`;
+  return `<div class="profile-edit">${careerBlock}${applyBlock}${secBlock}${offHint}${saveRow}</div>`;
 }
 
 // Isi tab "This week" (hanya tampil saat sistem Off untuk Career itu ON).
@@ -5182,8 +5206,8 @@ function swapRulesHtml(){
   if (!swapRulesDraft) swapRulesDraft = JSON.parse(JSON.stringify(d.swapRules));
   return `<div class="profile-block" style="margin-top:14px"><div class="profile-sec">Swap rules (Administrator only)</div>
     <div class="profile-hint" style="margin:0 0 6px">Both PICs must be in the same Section and in different teams. The PIC who is asked to swap always has to approve.</div>
-    <div class="swr-grid"><div>${swapTableHtml("allow", "Who may request a swap with whom", "Read each row as: the requester (left) may swap with the checked roles (top).")}</div>
-    <div>${swapTableHtml("declare", "Agreement required", "When checked, the requester must tick an agreement box before the request can be sent (only for pairs allowed above).")}</div></div>
+    ${swapTableHtml("allow", "Who may request a swap with whom", "Read each row as: the requester (left) may swap with the checked roles (top).")}
+    ${swapTableHtml("declare", "Agreement required", "When checked, the requester must tick an agreement box before the request can be sent (only for pairs allowed above).")}
     <div class="profile-lbl" style="margin-top:8px">Agreement sentence</div>
     <div class="profile-hint" style="margin:0 0 4px">Shown beside the checkbox the requester must tick (max 300 characters).</div>
     <textarea id="swr-text" class="off-input" rows="3" maxlength="300">${escapeHtml(swapRulesDraft.text || "")}</textarea>
@@ -5308,6 +5332,21 @@ function sheetTabsHtml(sheets){
 function sheetPaneHtml(i, count, inner){
   return `<div class="sub-pane" data-sspane="${i}"${(count < 2 || i === schedSheet) ? "" : " hidden"}>${inner}</div>`;
 }
+// Kotak Team Off: Team A di kotak kiri, Team B di kotak kanan. PIC diseret (drag) ke kotak lain untuk menukar tim.
+// Tombol kecil di tiap kartu = cara lain untuk HP / layar sentuh (pindah ke tim berikutnya).
+function teamBoardHtml(s){
+  const teams = (s.teams && s.teams.length) ? s.teams : ["A", "B"];
+  // PIC dengan tim di luar daftar tim Career ini dianggap "No team" (tampil di kotak bawah).
+  const members = s.members.map(m => teams.includes(m.team) ? m : Object.assign({}, m, { team: "" }));
+  const chip = m => `<div class="tm-chip" draggable="true" data-tm-chip data-sheet="${escapeHtml(s.sheetKey)}" data-row="${m.row}" data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.team)}" data-team="${escapeHtml(m.team)}"><span class="tm-grip" aria-hidden="true">&#8942;&#8942;</span><span class="tm-name">${escapeHtml(m.name || m.email)}</span><button type="button" class="tm-move" data-tm-move title="Move to the other team" aria-label="Move ${escapeHtml(m.name || m.email)} to the other team">&#8644;</button></div>`;
+  const col = (t, label) => {
+    const list = members.filter(m => m.team === t);
+    return `<div class="tm-col${t === "" ? " none" : ""}" data-tm-team="${escapeHtml(t)}"><div class="tm-head"><span>${escapeHtml(label)}</span><span class="tm-count">${list.length}</span></div><div class="tm-drop">${list.map(chip).join("")}</div></div>`;
+  };
+  return `<div class="tm-board" data-tm-board="${escapeHtml(s.sheetKey)}" style="--tm-cols:${Math.min(teams.length, 4)}">${teams.map(t => col(t, "Team " + t)).join("")}</div>
+    <div class="tm-board tm-none-board" style="--tm-cols:1">${col("", "No team (drag a PIC here to clear)")}</div>
+    <div class="profile-hint" style="margin:6px 0 0">Drag a PIC into another box to swap teams, then click <b>Save teams</b>.</div>`;
+}
 function offRosterHtml(){
   const r = schedRoster;
   if (!r) return `<div class="profile-hint">Loading&hellip;</div>`;
@@ -5322,10 +5361,7 @@ function offRosterHtml(){
   const n = shown.length;
   return sheetTabsHtml(shown) + shown.map((s, i) => sheetPaneHtml(i, n, `${n > 1 ? "" : `<div class="profile-sec" style="margin-top:6px">${escapeHtml(s.sheetName)}</div>`}
     ${s.hasCol ? "" : `<div class="profile-hint" style="margin:0">This sheet has no <b>Team Off</b> column yet. It will be added when you save.</div>`}
-    <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
-      <select class="off-input" style="width:auto" data-off-roster data-sheet="${escapeHtml(s.sheetKey)}" data-row="${m.row}" data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.team)}">
-        <option value="">&mdash; none &mdash;</option>${(s.teams || ["A", "B"]).map(t => `<option value="${escapeHtml(t)}"${t === m.team ? " selected" : ""}>Team ${escapeHtml(t)}</option>`).join("")}
-      </select></div>`).join("")}</div>`)).join("")
+    ${teamBoardHtml(s)}`)).join("")
     + `<div class="profile-edit-actions"><button type="button" class="pic-btn primary" data-off-act="roster-save">Save teams</button></div>`;
 }
 function shiftRosterHtml(){
@@ -5348,6 +5384,8 @@ function shiftRosterHtml(){
       <div class="sec-head"><span class="sec-name">${escapeHtml(s.sheetName)}</span>
         <label class="sw"><input type="checkbox" data-shift-toggle data-sheet="${escapeHtml(s.sheetKey)}" data-orig="${on ? "1" : "0"}"${on ? " checked" : ""}><span class="sw-ui"></span><span class="sw-txt">${on ? "ON" : "OFF"}</span></label></div>
       <div class="sec-body"${on ? "" : " hidden"}>
+        ${(s.roles && s.roles.length) ? `<div class="profile-lbl">Show shift badge in Our Team for these roles</div>
+        <div class="role-checks">${s.roles.map(r => `<label class="role-chk"><input type="checkbox" data-shift-role data-sheet="${escapeHtml(s.sheetKey)}" data-role="${escapeHtml(r.key)}" data-orig="${r.enabled !== false ? "1" : "0"}"${r.enabled !== false ? " checked" : ""}> ${escapeHtml(r.label)}</label>`).join("")}</div>` : ""}
         <div class="profile-lbl">Default shift (used for weeks that are not scheduled below)</div>
         <div class="off-list">${s.members.map(m => `<div class="off-row"><span>${escapeHtml(m.name || m.email)}</span>
           <select class="off-input" style="width:auto" data-shift-roster data-email="${escapeHtml(m.email)}" data-orig="${escapeHtml(m.shift)}">
@@ -5543,9 +5581,68 @@ function schedSaveConfig(btn, toggleOnly){
       : mode === "nonoff" ? `Saved: ${n} Non-off period${n === 1 ? "" : "s"}.` : "Saved: Off week.";
   });
 }
+
+/* ---------- Off Schedule > Team of each PIC: drag & drop antar kotak Team ---------- */
+(function(){
+  let dragEl = null;
+  function refreshCounts(board){
+    document.querySelectorAll(".tm-col").forEach(c => {
+      const n = c.querySelectorAll("[data-tm-chip]").length, k = c.querySelector(".tm-count");
+      if (k) k.textContent = String(n);
+    });
+  }
+  function moveChip(chip, col){
+    if (!chip || !col) return;
+    const drop = col.querySelector(".tm-drop");
+    if (!drop || chip.parentNode === drop) return;
+    drop.appendChild(chip);
+    chip.dataset.team = col.dataset.tmTeam;
+    chip.classList.toggle("changed", chip.dataset.team !== chip.dataset.orig);
+    refreshCounts();
+  }
+  document.addEventListener("dragstart", (e) => {
+    const c = e.target.closest && e.target.closest("[data-tm-chip]");
+    if (!c) return;
+    dragEl = c; c.classList.add("dragging");
+    try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", c.dataset.email || ""); } catch (x){}
+  });
+  document.addEventListener("dragend", () => {
+    if (dragEl) dragEl.classList.remove("dragging");
+    dragEl = null;
+    document.querySelectorAll(".tm-col.over").forEach(c => c.classList.remove("over"));
+  });
+  document.addEventListener("dragover", (e) => {
+    const col = e.target.closest && e.target.closest(".tm-col");
+    if (!col || !dragEl || col.closest("[data-tm-board], .tm-none-board") == null) return;
+    // hanya antar kotak di Section yang sama
+    const same = col.closest(".sub-pane, .pic-card, body") === dragEl.closest(".sub-pane, .pic-card, body");
+    if (!same) return;
+    e.preventDefault();
+    document.querySelectorAll(".tm-col.over").forEach(c => { if (c !== col) c.classList.remove("over"); });
+    col.classList.add("over");
+  });
+  document.addEventListener("drop", (e) => {
+    const col = e.target.closest && e.target.closest(".tm-col");
+    if (!col || !dragEl) return;
+    e.preventDefault();
+    col.classList.remove("over");
+    moveChip(dragEl, col);
+  });
+  // Tombol kecil (HP): pindah ke tim berikutnya di Section yang sama.
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest && e.target.closest("[data-tm-move]");
+    if (!btn) return;
+    const chip = btn.closest("[data-tm-chip]"), pane = chip && chip.closest(".sub-pane, .pic-card, body");
+    if (!chip || !pane) return;
+    const cols = Array.from(pane.querySelectorAll(".tm-col:not(.none)"));
+    if (!cols.length) return;
+    const i = cols.findIndex(c => c.dataset.tmTeam === chip.dataset.team);
+    moveChip(chip, cols[(i + 1) % cols.length]);
+  });
+})();
 function schedSaveRoster(btn){
-  const changes = Array.from(document.querySelectorAll("[data-off-roster]")).filter(s => s.value !== s.dataset.orig)
-    .map(s => ({ sheet: s.dataset.sheet, row: Number(s.dataset.row), email: s.dataset.email, team: s.value }));
+  const changes = Array.from(document.querySelectorAll("[data-tm-chip]")).filter(c => c.dataset.team !== c.dataset.orig)
+    .map(c => ({ sheet: c.dataset.sheet, row: Number(c.dataset.row), email: c.dataset.email, team: c.dataset.team }));
   if (!changes.length){ setSchedStatus("err", "No changes to save."); return; }
   schedCall(btn, { action: "offTeamSave", changes }, "Saving...", d => {
     schedRoster = { sheets: d.sheets };
@@ -5561,13 +5658,19 @@ function schedSaveShift(btn){
     const card = x.closest("[data-shsec]"), sw = card && card.querySelector("[data-shift-toggle]");
     return x.value !== x.dataset.orig && (!sw || sw.checked);
   }).map(x => ({ email: x.dataset.email, shift: x.value }));
-  if (!changes.length && !toggles.length){ setSchedStatus("err", "No changes to save."); return; }
-  schedCall(btn, { action: "shiftSave", changes, toggles }, "Saving...", d => {
+  // Centang role: hanya dikirim untuk Section yang sedang ON dan yang berubah.
+  const roleToggles = Array.from(document.querySelectorAll("[data-shift-role]")).filter(c => {
+    const card = c.closest("[data-shsec]"), sw = card && card.querySelector("[data-shift-toggle]");
+    return c.checked !== (c.dataset.orig === "1") && (!sw || sw.checked);
+  }).map(c => ({ sheet: c.dataset.sheet, role: c.dataset.role, enabled: c.checked }));
+  if (!changes.length && !toggles.length && !roleToggles.length){ setSchedStatus("err", "No changes to save."); return; }
+  schedCall(btn, { action: "shiftSave", changes, toggles, roleToggles }, "Saving...", d => {
     schedShift = d;
     if (d.shiftBoard) window.__shiftBoard = d.shiftBoard;
     const parts = [];
     if (d.saved) parts.push(`${d.saved} PIC(s) updated`);
     if (d.toggled) parts.push(`${d.toggled} section(s) switched`);
+    if (d.roleToggled) parts.push(`${d.roleToggled} role setting(s) changed`);
     d._msg = "Saved: " + parts.join(", ") + ".";
   });
 }
@@ -7420,7 +7523,7 @@ let pendingEmail = "";
 // Parameter "extra" adalah isian Unit (untuk @binus.edu) atau Kode Dosen
 // (untuk @binus.ac.id) yang akan ditulis Apps Script ke Kolom D Sheet Logs.
 // ID acak per perangkat/browser (disimpan di localStorage). Dikirim ke sheet Logs
-// supaya "Hapus Login" bisa menghapus semua log akun yang sama DI PERANGKAT YANG SAMA
+// supaya "Hapus Login" hanya menghapus log aktivitas dengan Device ID DAN Session ID yang sama
 // (bukan di perangkat lain milik akun itu).
 function getDeviceId(){
   try {

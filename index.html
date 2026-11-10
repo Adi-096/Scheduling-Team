@@ -431,6 +431,7 @@
   #sched-status{ margin-top:12px;width:100%;box-sizing:border-box; }
   /* Popup Off Schedule / Shift Schedule: lebar (bukan 380px seperti kartu anggota), daftar PIC 2 kolom */
   #sched-modal-overlay .modal{ max-width:980px; }
+  #profile-modal-overlay .modal{ max-width:640px; }   /* View Profile: cukup lebar agar kalimat pendek tidak patah dua baris */
   #sched-modal-overlay .member-card{ align-items:stretch; }
   #sched-modal-overlay .off-list{ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
   @media (max-width:640px){ #sched-modal-overlay .off-list{ grid-template-columns:1fr; } }
@@ -5171,13 +5172,13 @@ function profileOffPaneHtml(){
     const pages = Math.max(1, Math.ceil(cal.length / OFF_CAL_PER_PAGE));
     offCalPage = Math.min(Math.max(0, offCalPage), pages - 1);
     const pageSats = cal.slice(offCalPage * OFF_CAL_PER_PAGE, (offCalPage + 1) * OFF_CAL_PER_PAGE);
-    h += `<div class="profile-lbl">Projected Off (if nothing changes)</div><div class="off-list">${pageSats.map(s =>
+    h += `<div class="profile-lbl">Projected Saturday Off (if nothing changes)</div><div class="off-list">${pageSats.map(s =>
       `<div class="off-row"><span>${escapeHtml(String(s.label).replace(/^Saturday,\s*/, ""))}${s.swapWith ? " (swapped)" : ""}</span>${offChip(s.nonOff ? "nonoff" : s.status)}</div>`).join("")}</div>`;
     if (pages > 1){
       h += `<div class="off-btns" style="justify-content:space-between;align-items:center;margin-top:8px">
         <button type="button" class="profile-mini" data-off-act="cal-prev"${offCalPage <= 0 ? " disabled" : ""}>&lsaquo; Previous</button>
         <span class="profile-hint" style="margin:0">${escapeHtml(String(pageSats[0].label).replace(/^Saturday,\s*/, "").replace(/\s\d{4}$/, ""))} &ndash; ${escapeHtml(String(pageSats[pageSats.length - 1].label).replace(/^Saturday,\s*/, "").replace(/\s\d{4}$/, ""))}</span>
-        <button type="button" class="profile-mini" data-off-act="cal-next"${offCalPage >= pages - 1 ? " disabled" : ""}>Next &rsaquo;</button>
+        ${offCalPage >= pages - 1 ? "<span></span>" : `<button type="button" class="profile-mini" data-off-act="cal-next">Next &rsaquo;</button>`}
       </div>`;
     }
     if (d.viewEnded){

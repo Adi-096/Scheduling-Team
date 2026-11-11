@@ -2060,11 +2060,16 @@ function memberCardHtml(m, canEdit, career){
     </div>`;
 }
 
-// Urutan kartu Our Team: urut ABJAD menurut nama PIC (tanpa mengelompokkan menurut Team Off).
+// Urutan kartu Our Team: (1) Authorized PIC dulu (Editor Menu penuh), (2) lalu PIC lain -- Registered PIC dan
+// Authorized PIC (Limited) -- tercampur; di dalam tiap kelompok urut ABJAD menurut nama PIC.
+window.__authorizedPics = window.__authorizedPics || new Set();
 function sortByTeamOff(list){
+  const auth = window.__authorizedPics;
+  const isAuth = m => auth.size > 0 && splitEmails(m.email).some(e => auth.has(String(e).toLowerCase()));
   const name = m => String(m.pic || "").trim();
-  return list.map((m, i) => ({ m, i, n: name(m) }))
+  return list.map((m, i) => ({ m, i, a: isAuth(m) ? 0 : 1, n: name(m) }))
     .sort((x, y) => {
+      if (x.a !== y.a) return x.a - y.a;
       if (!x.n !== !y.n) return x.n ? -1 : 1;
       const c = x.n.localeCompare(y.n, "id", { sensitivity: "base", numeric: true });
       return c || x.i - y.i;
@@ -7128,6 +7133,7 @@ document.addEventListener("click", (e) => {
 // Bentuk data pendamping dari server (link, Role Policy, hak per sheet).
 function extraFromServer(d){
   if (d && d.shiftBoard !== undefined) window.__shiftBoard = d.shiftBoard;
+  if (d && Array.isArray(d.authorizedPics)) window.__authorizedPics = new Set(d.authorizedPics.map(e => String(e).toLowerCase()));
   if (d && d.offBoard !== undefined) window.__offBoard = d.offBoard;   // papan badge Team Off (null untuk role non-PIC)
   return {
     links: d.links || {}, editorFor: d.editorFor || [],

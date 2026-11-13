@@ -7348,7 +7348,9 @@ const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kala
 
 // opts: { realRole, baseRole, title, job, card (Login Card View milik role yang AKTIF), canSwitch, viewAs, careers, simCareer, simSec, secOptions, asPic, picList, devUi, uiViewAs/uiCareer/uiSec, canSignOut }
 // ---------- Notifikasi pengajuan Task Description untuk reviewer ----------
-let reviewReqs = [];          // usulan yang menunggu keputusan akun ini (dari server)
+let reviewReqs = [];          // usulan Task Description yang menunggu keputusan akun ini (dari server)
+let reviewSwaps = [];         // pengajuan tukar Off / shift yang menunggu jawaban akun ini (dari server)
+const reviewTotal = () => reviewReqs.length + reviewSwaps.length;   // angka pada badge Requests
 let lastLoginOpts = null;     // opsi terakhir renderLoginInfo, untuk menggambar ulang login card
 let reviewBusy = false;
 let reviewTimer = null;
@@ -7356,7 +7358,7 @@ const REVIEW_POLL_MS = 60000;
 
 function reviewBadgeSync(){
   const el = document.getElementById("acct-review");
-  const n = reviewReqs.length;
+  const n = reviewTotal();
   const shown = !!el;
   if ((n > 0) !== shown){ if (lastLoginOpts) renderLoginInfo(lastLoginOpts); return; }   // muncul / hilang -> gambar ulang
   const b = document.getElementById("acct-review-n");
@@ -7369,9 +7371,10 @@ async function refreshReviewRequests(){
   try {
     const d = await picApi({ action: "listReviewRequests", actor: email });
     if (!d || !d.ok) return;
-    const sig = (arr) => arr.map(x => x.id + ":" + (x.stage || 1)).join("|");
-    const changed = sig(d.requests || []) !== sig(reviewReqs);
+    const sig = (arr) => arr.map(x => (x.kind || "desc") + x.id + ":" + (x.stage || 1)).join("|");
+    const changed = sig((d.requests || []).concat(d.swaps || [])) !== sig(reviewReqs.concat(reviewSwaps));
     reviewReqs = d.requests || [];
+    reviewSwaps = d.swaps || [];
     if (changed){
       reviewBadgeSync();
       if (document.getElementById("review-modal-overlay").classList.contains("open") && !reviewBusy) renderReviewModal();
@@ -7429,9 +7432,32 @@ function renderReviewModal(){
         </div>
       </div>
     </div>`).join("");
-  box.innerHTML = `<h3 class="review-title">Task Description requests</h3>
+  const swapItems = reviewSwaps.map(q => {
+    const isOff = q.kind === "off";
+    const title = isOff
+      ? `Saturday Off swap: ${escapeHtml(q.reqName || q.reqEmail)}${q.reqTeam ? " (Team " + escapeHtml(q.reqTeam) + ")" : ""} &harr; you${q.withTeam ? " (Team " + escapeHtml(q.withTeam) + ")" : ""}`
+      : `Shift swap: ${escapeHtml(q.reqName || q.reqEmail)} (${escapeHtml(shiftLabelUi(q.reqShift))}) &harr; you (${escapeHtml(shiftLabelUi(q.withShift))})`;
+    const when = isOff
+      ? `Saturday to swap: ${escapeHtml(q.dateLabel || q.date)}${q.paybackLabel ? "\nPayback Saturday: " + escapeHtml(q.paybackLabel) : ""}`
+      : `${escapeHtml(q.rangeLabel)}${q.paybackLabel ? "\nPayback: " + escapeHtml(q.paybackLabel) : ""}`;
+    return `<div class="review-item swap-item" data-swap-kind="${escapeHtml(q.kind)}" data-swap-id="${escapeHtml(q.id)}">
+      <div class="profile-sec">${isOff ? "Saturday Off swap" : "Shift swap"} &middot; waiting for your answer</div>
+      <div class="who">${title}</div>
+      <div class="txt" style="margin-top:8px">${when}</div>
+      <div class="profile-lbl">Reason</div>
+      <div class="txt">${escapeHtml(q.reason || "-")}</div>
+      <input type="text" maxlength="300" placeholder="Note to the requester (optional)" data-swap-note aria-label="Note">
+      <div class="review-actions">
+        <button type="button" class="pic-btn primary" data-swap-act="approve" data-kind="${escapeHtml(q.kind)}" data-id="${escapeHtml(q.id)}">I agree</button>
+        <button type="button" class="pic-btn reject" data-swap-act="reject" data-kind="${escapeHtml(q.kind)}" data-id="${escapeHtml(q.id)}">Decline</button>
+      </div>
+    </div>`;
+  }).join("");
+  box.innerHTML = `<h3 class="review-title">Requests</h3>
     <div class="pic-status" id="review-status" style="margin-top:10px"></div>
-    ${items || `<div class="review-empty">No requests are waiting for your review.</div>`}`;
+    ${swapItems ? `<div class="profile-lbl" style="margin-top:12px">Swap requests</div>${swapItems}` : ""}
+    ${items ? `${swapItems ? `<div class="profile-lbl" style="margin-top:16px">Task Description requests</div>` : ""}${items}` : ""}
+    ${(items || swapItems) ? "" : `<div class="review-empty">No requests are waiting for your answer.</div>`}`;
 }
 
 async function decideReview(id, decision, btn){
@@ -7465,6 +7491,36 @@ async function decideReview(id, decision, btn){
   }
 }
 
+async function decideSwap(kind, id, decision, btn){
+  if (reviewBusy) return;
+  const item = Array.from(document.querySelectorAll(".swap-item")).find(el => el.dataset.swapId === id && el.dataset.swapKind === kind);
+  const note = item ? (item.querySelector("[data-swap-note]").value || "").trim() : "";
+  if (decision === "reject" && !confirm("Decline this swap request?")) return;
+  reviewBusy = true;
+  const restoreBtn = btnLoading(btn, decision === "approve" ? "Saving..." : "Declining...");
+  try {
+    const d = await picApi({ action: kind === "off" ? "offSwapRespond" : "shiftSwapRespond", actor: getRealEmail(), id, decision, note });
+    if (!d || !d.ok){
+      const msg = (d && (d.message || d.error)) || "Failed to save your answer.";
+      setReviewStatus("err", msg);
+      if (/already|no longer|not waiting|non-off/i.test(msg)){ reviewSwaps = reviewSwaps.filter(x => !(x.id === id && x.kind === kind)); reviewBusy = false; renderReviewModal(); setReviewStatus("err", msg); reviewBadgeSync(); }
+      return;
+    }
+    reviewSwaps = reviewSwaps.filter(x => !(x.id === id && x.kind === kind));
+    lastDataSignature = null;   // badge Off / shift di Our Team ikut diperbarui pada penyegaran berikutnya
+    reviewBusy = false;
+    renderReviewModal();
+    setReviewStatus("ok", d.message || "Saved.");
+    reviewBadgeSync();
+    try { loadProfileOff(); loadProfileShift(); } catch (e){ /* tab View Profile hanya tambahan */ }
+  } catch (err){
+    setReviewStatus("err", "Could not reach the server: " + err.message);
+  } finally {
+    reviewBusy = false;
+    restoreBtn();
+  }
+}
+
 function openReviewModal(){
   renderReviewModal();
   document.getElementById("review-modal-overlay").classList.add("open");
@@ -7480,6 +7536,8 @@ document.getElementById("review-modal-overlay").addEventListener("click", (e) =>
 document.addEventListener("click", (e) => {
   if (e.target.closest && e.target.closest("#acct-review")){ openReviewModal(); return; }
   const b = e.target.closest && e.target.closest("[data-review-act]");
+  const sb = e.target.closest && e.target.closest("[data-swap-act]");
+  if (sb){ decideSwap(sb.dataset.kind, sb.dataset.id, sb.dataset.swapAct, sb); return; }
   if (b && b.dataset.reviewAct === "reset"){
     const q = reviewReqs.find(x => x.id === b.dataset.id), it = b.closest(".review-item"), ta = it && it.querySelector("[data-review-desc]");
     if (q && ta) ta.value = q.orig || q.desc;   // kembali ke usulan asli pengaju
@@ -7585,7 +7643,7 @@ function renderLoginInfo(opts){
   }
   // Notifikasi persetujuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
   lastLoginOpts = opts;
-  if (reviewReqs.length && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests<span class="notif-badge" id="acct-review-n">${reviewReqs.length > 99 ? "99+" : reviewReqs.length}</span></button>`);
+  if (reviewTotal() && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests<span class="notif-badge" id="acct-review-n">${reviewTotal() > 99 ? "99+" : reviewTotal()}</span></button>`);
   if (hasProfile){
     parts.push(`<button type="button" class="acct-link" id="acct-profile">View Profile</button>`);
   }

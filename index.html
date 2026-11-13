@@ -460,6 +460,19 @@
   .review-actions .pic-btn{ flex:1 1 110px; }
   .review-actions .reject{ color:#B3401F;border-color:#B3401F; }
   .review-actions .reject:hover{ background:#B3401F;color:#fff; }
+  /* Popup penerima pengajuan: lebar, dua kolom (kiri = data pengajuan, kanan = teks usulan yang bisa disunting) */
+  #review-modal-overlay .modal{ max-width:1120px; }
+  .review-item .rv-grid{ display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:20px;align-items:start;margin-top:8px; }
+  @media (max-width:760px){ .review-item .rv-grid{ grid-template-columns:1fr; } }
+  .review-item textarea{
+    width:100%;box-sizing:border-box;min-height:160px;resize:vertical;font-family:'Work Sans',sans-serif;font-size:13.5px;line-height:1.55;
+    padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);outline:none;margin-top:4px;
+  }
+  .review-item textarea:focus{ border-color:var(--accent); }
+  .review-item .rv-hint{ font-size:12px;line-height:1.5;opacity:.75;margin:6px 0 8px; }
+  .review-item .rv-keep{ font-size:12.5px;line-height:1.5;background:var(--surface-soft);border-radius:8px;padding:8px 10px;margin:4px 0 8px; }
+  .req-keep{ display:flex;align-items:flex-start;gap:8px;font-size:13.5px;margin:12px 0 4px;cursor:pointer; }
+  .req-keep input{ margin-top:3px; }
   .review-empty{ text-align:center;color:var(--ink-faint);font-size:13.5px;margin:18px 0 6px; }
   .profile-lbl{
     font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
@@ -710,6 +723,7 @@
   .note-tip{ font-size:11.5px;opacity:.75;margin:6px 0 0; }
   .pic-guide-box{ display:flex;flex-direction:column;gap:8px; }
   .pic-guide-box[hidden]{ display:none; }
+  .pic-btn[hidden],.gal-close[hidden]{ display:none !important; }
   @media print{
     body.guide-printing > *:not(#guide-modal-overlay){ display:none !important; }
     body.guide-printing #guide-modal-overlay{ position:static !important;display:block !important;background:none !important;padding:0 !important;overflow:visible !important; }
@@ -1567,7 +1581,7 @@
   <div class="modal">
     <button class="modal-close" id="note-modal-close" type="button">Tutup ✕</button>
     <h3 id="note-modal-title"></h3>
-    <div class="note-actions"><button type="button" class="pic-btn" id="note-copy">Copy text</button></div>
+    <div class="note-actions" style="gap:8px"><button type="button" class="pic-btn" id="note-edit" data-menu-edit="note" hidden>Edit this menu</button><button type="button" class="pic-btn" id="note-copy">Copy text</button></div>
     <div class="note-body" id="note-body"></div>
   </div>
 </div>
@@ -1577,6 +1591,7 @@
     <button class="modal-close" id="guide-modal-close" type="button">Tutup ✕</button>
     <h3 id="guide-modal-title"></h3>
     <div class="guide-actions">
+      <button type="button" class="pic-btn" id="guide-edit" data-menu-edit="guide" hidden>Edit this menu</button>
       <button type="button" class="pic-btn" id="guide-pdf">Save as PDF</button>
       <button type="button" class="pic-btn" id="guide-dl">Download .md</button>
     </div>
@@ -1588,6 +1603,7 @@
   <div class="modal">
     <button class="modal-close" id="doc-modal-close" type="button">Tutup ✕</button>
     <h3 id="doc-modal-title"></h3>
+    <div class="note-actions" style="justify-content:center"><button type="button" class="pic-btn" id="doc-edit" data-menu-edit="doc" hidden>Edit this menu</button></div>
     <div class="doc-sub" id="doc-modal-sub"></div>
     <div class="doc-desc" id="doc-modal-desc" hidden></div>
     <div id="doc-modal-body"></div>
@@ -1598,6 +1614,7 @@
   <div class="modal">
     <button class="modal-close" id="qr-modal-close" type="button">Tutup ✕</button>
     <h3 id="qr-modal-title"></h3>
+    <div class="note-actions" style="justify-content:center"><button type="button" class="pic-btn" id="qr-edit" data-menu-edit="qr" hidden>Edit this menu</button></div>
     <div class="doc-desc" id="qr-modal-desc" hidden></div>
     <canvas id="qr-canvas" width="300" height="300" role="img" aria-label="QR code"></canvas>
     <div class="qr-url" id="qr-url"></div>
@@ -1613,6 +1630,7 @@
   <div class="gal-top">
     <div class="gal-title" id="gal-title"></div>
     <div class="gal-count" id="gal-count"></div>
+    <button type="button" class="gal-close" id="gal-edit" data-menu-edit="gallery" hidden>Edit this menu</button>
     <button type="button" class="gal-close" id="gal-close">Tutup ✕</button>
   </div>
   <div class="gal-stage" id="gal-stage">
@@ -2987,6 +3005,47 @@ function applyPicGuideFields(on){
   applyPicOg();
 }
 
+
+
+// ---------- Edit langsung dari pembaca menu (catatan, gambar, dokumen, QR, panduan) ----------
+// Pengguna yang berhak mengubah menu melihat tombol "Edit this menu" di pembaca; menekannya menutup pembaca dan
+// langsung membuka form Edit Menu untuk menu itu di Our Links (tanpa mencari lagi).
+function findMenuLinkFor(kind, key){
+  const test = {
+    note: l => l.note === key, gallery: l => l.gallery && l.gallery[0] === key, doc: l => l.doc && l.doc.id === key,
+    guide: l => l.guide && l.guide.id === key, qr: l => l.qr === key
+  }[kind];
+  if (!test) return null;
+  for (let idx = 0; idx < sectionMeta.length; idx++){
+    const list = picVisible[idx] || [];
+    const i = list.findIndex(test);
+    if (i >= 0) return { idx, i, l: list[i] };
+  }
+  return null;
+}
+function canEditMenuLink(f){
+  if (!f || !picCreateMap[f.idx]) return false;
+  if (picOwnCreateMap[f.idx] && !isOwnLink(f.l)) return false;   // hak "Own Only": hanya link pribadi
+  if (f.l.guide && !viewPerms.isAdmin) return false;             // panduan Markdown: hanya Administrator
+  return true;
+}
+function setViewerEdit(btnId, kind, key){
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const f = findMenuLinkFor(kind, key);
+  btn.dataset.editKey = key || "";
+  btn.hidden = !canEditMenuLink(f);
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest && e.target.closest("[data-menu-edit]");
+  if (!b || b.hidden) return;
+  const f = findMenuLinkFor(b.dataset.menuEdit, b.dataset.editKey);
+  if (!canEditMenuLink(f)) return;
+  e.preventDefault();
+  [NoteViewer, GuideViewer, DocViewer, QrViewer, Gallery].forEach(v => { try { v.close(); } catch (x){} });
+  openPicMenu(f.idx);
+  startPicEdit(f.i);
+});
 
 // ---------- Catatan: tombol gaya teks (disisipkan sebagai Markdown ke dalam teks catatan) ----------
 function refreshPicNotePreview(){
@@ -4726,31 +4785,37 @@ document.addEventListener("click", (e) => {
   const g = e.target.closest && e.target.closest("[data-gallery-ids]");
   if (g){
     e.preventDefault();
-    Gallery.open(g.dataset.galleryTitle || "", String(g.dataset.galleryIds || "").split(",").filter(Boolean));
+    const galIds = String(g.dataset.galleryIds || "").split(",").filter(Boolean);
+    Gallery.open(g.dataset.galleryTitle || "", galIds);
+    setViewerEdit("gal-edit", "gallery", galIds[0]);
     return;
   }
   const nt = e.target.closest && e.target.closest("[data-note-id]");
   if (nt){
     e.preventDefault();
     NoteViewer.open(nt.dataset.noteTitle || "", nt.dataset.noteId);
+    setViewerEdit("note-edit", "note", nt.dataset.noteId);
     return;
   }
   const gd = e.target.closest && e.target.closest("[data-guide-id]");
   if (gd){
     e.preventDefault();
     GuideViewer.open(gd.dataset.guideTitle || "", gd.dataset.guideId);
+    setViewerEdit("guide-edit", "guide", gd.dataset.guideId);
     return;
   }
   const dc = e.target.closest && e.target.closest("[data-doc-id]");
   if (dc){
     e.preventDefault();
     DocViewer.open(dc.dataset.docTitle || "", dc.dataset.docId, dc.dataset.docExt || "", dc.dataset.docDesc || "");
+    setViewerEdit("doc-edit", "doc", dc.dataset.docId);
     return;
   }
   const qc = e.target.closest && e.target.closest("[data-qr-url]");
   if (qc){
     e.preventDefault();
     QrViewer.open(qc.dataset.qrTitle || "", qc.dataset.qrUrl, qc.dataset.qrDesc || "");
+    setViewerEdit("qr-edit", "qr", qc.dataset.qrUrl);
     return;
   }
   const nf = e.target.closest && e.target.closest("[data-note-fmt]");
@@ -5021,7 +5086,8 @@ const profileIsLeaderRow = (r) => LEADER_TITLES.includes(normJabatan(r.m.jabatan
 
 // ---- Formulir "Request to change": deskripsi baru, alasan, dan pekerjaan yang direkomendasikan (tag dipisah koma) ----
 const REQ_REASON_MIN = 10, REQ_JOBS_MAX = 10, REQ_JOB_LEN = 60;
-let profileJobs = [];   // tag pekerjaan yang direkomendasikan pada formulir yang sedang terbuka
+let profileJobs = [];
+let profileKeep = false;   // pengaju memilih "Use my previous Task Description" (tanpa pekerjaan baru)   // tag pekerjaan yang direkomendasikan pada formulir yang sedang terbuka
 
 function cleanJobTag(t){
   return String(t == null ? "" : t).replace(/[\u0000-\u001f]+/g, " ").replace(/^[#\s]+/, "").replace(/\s+/g, " ").trim().slice(0, REQ_JOB_LEN);
@@ -5050,9 +5116,10 @@ function descItemSet(desc){
 }
 // Apa saja yang masih kurang sebelum tombol Send request bisa diklik.
 // (Deskripsi saat ini hanya ditampilkan; yang diajukan adalah alasan + pekerjaan baru yang akan ditambahkan.)
-function reqMissing(curDesc, reason, jobs){
+function reqMissing(curDesc, reason, jobs, keep){
   const m = [];
   if (reason.trim().length < REQ_REASON_MIN) m.push("the reason (at least " + REQ_REASON_MIN + " characters)");
+  if (keep) return m;   // memakai deskripsi sebelumnya: cukup alasan
   if (!jobs.length) m.push("at least one recommended job");
   else {
     const have = descItemSet(curDesc);
@@ -5071,7 +5138,7 @@ function updateReqSendState(){
   const inp = document.getElementById("profile-job-in");
   const pendingTag = inp ? cleanJobTag(inp.value) : "";   // teks yang belum dikonfirmasi koma / Enter tetap dihitung
   const row = currentReqRow();
-  const missing = reqMissing(row ? row.m.desc : "", rs.value, pendingTag ? profileJobs.concat([pendingTag]) : profileJobs);
+  const missing = reqMissing(row ? row.m.desc : "", rs.value, pendingTag ? profileJobs.concat([pendingTag]) : profileJobs, profileKeep);
   btn.disabled = missing.length > 0;
   if (hint) hint.textContent = missing.length ? "Still needed: " + missing.join(", ") + "." : "";
 }
@@ -5083,19 +5150,23 @@ function profileDescBlockHtml(r, own){
   const pending = req && (req.status === "Pending" || awaitingFinal);
   if (own && profileDescEdit === key){
     const reasonStart = pending ? (req.reason || "") : "";
-    const missing0 = reqMissing(r.m.desc, reasonStart, profileJobs);
+    const missing0 = reqMissing(r.m.desc, reasonStart, profileJobs, profileKeep);
     return `<div class="profile-lbl">Task Description (detail)</div>
       <div class="profile-edit">
         <div class="task-desc task-desc-ro" id="profile-desc-view" aria-readonly="true">${escapeHtml(r.m.desc || "-")}</div>
         <div class="profile-hint" style="margin:0">This is your current Task Description (view only). It is not edited here: the jobs you recommend below are added to it after approval.</div>
         <label class="profile-lbl" for="profile-reason-ta">Reason for the request</label>
         <textarea id="profile-reason-ta" maxlength="500" rows="3" placeholder="Why do you want to change this task description?" aria-label="Reason for the request">${escapeHtml(reasonStart)}</textarea>
+        <label class="req-keep"><input type="checkbox" id="profile-keep-cb"${profileKeep ? " checked" : ""}> <span>Use my previous Task Description (I have no job to add)</span></label>
+        <div class="profile-hint" style="margin:0">The proposed description stays exactly as it is now. Tick this when you only want to ask or discuss something; your Section Head or Manager can edit the description for you.</div>
+        <div id="profile-job-wrap"${profileKeep ? ' style="display:none"' : ""}>
         <label class="profile-lbl" for="profile-job-in">Recommended jobs you can take on</label>
         <div class="job-tags" id="profile-job-box">
           <span class="job-chips" id="profile-job-chips">${jobChipsHtml()}</span>
           <input type="text" id="profile-job-in" maxlength="${REQ_JOB_LEN}" placeholder="Type a job, then press comma or Enter" autocomplete="off" aria-label="Recommended jobs">
         </div>
         <div class="profile-hint" style="margin:0">Separate jobs with commas, like hashtags (up to ${REQ_JOBS_MAX}). These are the jobs you propose to work on.</div>
+        </div>
         <div class="profile-hint" style="margin:0">Your Section Head reviews this first, then your Manager gives the final approval. The description changes only after both approve.</div>
         <div class="profile-hint req-missing" id="profile-req-missing" style="margin:0">${missing0.length ? "Still needed: " + escapeHtml(missing0.join(", ")) + "." : ""}</div>
         <div class="profile-edit-actions">
@@ -5108,7 +5179,9 @@ function profileDescBlockHtml(r, own){
   const hideBtn = (req && req.id) ? `<button type="button" class="profile-mini" data-profile-act="req-hide" data-key="${escapeHtml(key)}" data-id="${escapeHtml(req.id)}">Hide this history</button>` : "";
   if (pending){
     const extra = (req.reason ? `<span class="txt">Reason: ${escapeHtml(req.reason)}</span>` : "")
-      + ((req.jobs && req.jobs.length) ? `<span class="txt">Recommended jobs: ${req.jobs.map(j => "#" + escapeHtml(j)).join(" ")}</span>` : "");
+      + ((req.jobs && req.jobs.length) ? `<span class="txt">Recommended jobs: ${req.jobs.map(j => "#" + escapeHtml(j)).join(" ")}</span>` : "")
+      + (req.keep ? `<span class="txt">You kept your current description (no jobs added). Your reviewers may edit it.</span>` : "")
+      + (req.edBy ? `<span class="txt">Edited by: ${escapeHtml(req.edBy)}</span>` : "");
     note = awaitingFinal
       ? `<div class="profile-req"><b>Approved by Section Head${req.shBy ? " (" + escapeHtml(req.shBy) + ")" : ""} &mdash; waiting for final approval by the Manager</b>${req.shNote ? `<span class="txt">Section Head note: ${escapeHtml(req.shNote)}</span>` : ""}<span class="txt">New description: ${escapeHtml(req.desc)}</span>${extra}</div>`
       : `<div class="profile-req"><b>Change requested &mdash; waiting for Section Head review</b><span class="txt">New description: ${escapeHtml(req.desc)}</span>${extra}</div>`;
@@ -5252,18 +5325,20 @@ async function sendDescRequest(key, sheetKey, btn){
   const reason = rs ? rs.value.trim() : "";
   if (inp && inp.value.trim()){ addJobTags(inp.value); inp.value = ""; renderJobChips(); }   // teks terakhir yang belum diberi koma
   const row = profileRowsFor(profileCtx.email).find(r => normSheetName(r.sheetKey) === key);
-  const missing = reqMissing(row ? row.m.desc : "", reason, profileJobs);
+  const missing = reqMissing(row ? row.m.desc : "", reason, profileJobs, profileKeep);
   if (missing.length){ setProfileStatus("err", "Still needed: " + missing.join(", ") + "."); updateReqSendState(); return; }
-  const jobs = profileJobs.slice();
+  const keep = profileKeep;
+  const jobs = keep ? [] : profileJobs.slice();
   profileBusy = true;
   setProfileStatus("", "");
   const restore = btnLoading(btn, "Sending...");
   try {
-    const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, reason: reason, jobs: jobs });
+    const data = await picApi({ action: "requestDescChange", actor: getRealEmail(), sheet: sheetKey, reason: reason, jobs: jobs, keepCurrent: keep });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to send the request."); return; }
-    profileReqs[key] = { id: data.id, status: data.stage === 2 ? "Awaiting Final" : "Pending", desc: data.desc || "", reason: reason, jobs: Array.isArray(data.added) && data.added.length ? data.added : jobs, sheet: sheetKey, note: "", by: "" };
+    profileReqs[key] = { id: data.id, status: data.stage === 2 ? "Awaiting Final" : "Pending", desc: data.desc || "", reason: reason, jobs: Array.isArray(data.added) && data.added.length ? data.added : jobs, sheet: sheetKey, note: "", by: "", keep: keep, orig: "", edBy: "" };
     profileDescEdit = "";
     profileJobs = [];
+    profileKeep = false;
     renderProfile();
     setProfileStatus(data.emailed ? "ok" : "err", data.emailed
       ? "Request sent to " + data.emailed + (data.stage === 2 ? " Manager" : " Section Head") + (data.emailed > 1 ? "s" : "") + ". " + (data.stage === 2 ? "There is no Section Head in this section, so the Manager gives the final approval." : "After the Section Head approves, it goes to the Manager for the final approval.") + " The description changes only after the final approval." + (data.skipped && data.skipped.length ? " Left out because they are already in your Task Description: " + data.skipped.join(", ") + "." : "")
@@ -5307,11 +5382,12 @@ document.addEventListener("click", (e) => {
   else if (act === "req-open"){
     const pr = profileReqs[b.dataset.key];
     const isPending = pr && (pr.status === "Pending" || pr.status === "Awaiting Final");
-    profileJobs = isPending && Array.isArray(pr.jobs) ? pr.jobs.slice() : [];   // mengubah request yang sedang berjalan: isian lama dibawa
+    profileJobs = isPending && Array.isArray(pr.jobs) ? pr.jobs.slice() : [];
+    profileKeep = !!(isPending && pr.keep);   // mengubah request yang sedang berjalan: isian lama dibawa
     profileDescEdit = b.dataset.key; profileEditField = ""; renderProfile();
     const ta = document.getElementById("profile-reason-ta"); if (ta) ta.focus();
   }
-  else if (act === "req-cancel"){ profileDescEdit = ""; profileJobs = []; renderProfile(); }
+  else if (act === "req-cancel"){ profileDescEdit = ""; profileJobs = []; profileKeep = false; renderProfile(); }
   else if (act === "req-send") sendDescRequest(b.dataset.key, b.dataset.sheet, b);
   else if (act === "req-cancel-pending"){ if (confirm("Cancel this request? The reviewers will no longer see it.")) profileReqCall("cancelDescRequest", b.dataset.key, b.dataset.id, "Request cancelled. The reviewers were notified by email.", b, "Cancelling..."); }
   else if (act === "req-hide") profileReqCall("hideDescRequest", b.dataset.key, b.dataset.id, "History hidden.", b, "Hiding...");
@@ -5329,6 +5405,14 @@ document.addEventListener("input", (e) => {
   } else if (t.id === "profile-reason-ta"){
     updateReqSendState();
   }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!t || t.id !== "profile-keep-cb") return;
+  profileKeep = t.checked;
+  const wrap = document.getElementById("profile-job-wrap");
+  if (wrap) wrap.style.display = profileKeep ? "none" : "";
+  updateReqSendState();
 });
 document.addEventListener("keydown", (e) => {
   const t = e.target;
@@ -7316,20 +7400,33 @@ function renderReviewModal(){
     <div class="review-item" data-review-id="${escapeHtml(q.id)}">
       <div class="profile-sec">${escapeHtml(q.sheet)} &middot; ${q.stage === 2 ? "Step 2 of 2: final approval" : "Step 1 of 2: Section Head review"}</div>
       <div class="who">${escapeHtml(q.name || q.email)} <a href="mailto:${encodeURIComponent(q.email)}">${escapeHtml(q.email)}</a></div>
-      <div class="profile-lbl" style="margin-top:10px">Task</div>
-      <div class="txt">${escapeHtml(q.task || "-")}</div>
-      <div class="profile-lbl">Current description</div>
-      <div class="txt">${escapeHtml(q.cur || "-")}</div>
-      <div class="profile-lbl">Proposed description</div>
-      <div class="txt new">${escapeHtml(q.desc)}</div>
-      ${q.reason ? `<div class="profile-lbl">Reason for the request</div><div class="txt">${escapeHtml(q.reason)}</div>` : ""}
-      ${(q.jobs && q.jobs.length) ? `<div class="profile-lbl">Recommended jobs</div><div class="txt">${q.jobs.map(j => `<span class="job-chip ro">#${escapeHtml(j)}</span>`).join(" ")}</div>` : ""}
-      ${q.stage === 2 ? `<div class="profile-lbl">Approved by Section Head${q.shBy ? ": " + escapeHtml(q.shBy) : ""}</div>
-      <div class="txt">${escapeHtml(q.shNote || "(no note)")}</div>` : ""}
-      <input type="text" maxlength="300" placeholder="${q.stage === 2 ? "Note to the requester (optional)" : "Your note (shown to the Manager and the requester)"}" data-review-note aria-label="Note">
-      <div class="review-actions">
-        <button type="button" class="pic-btn primary" data-review-act="approve" data-id="${escapeHtml(q.id)}">${q.stage === 2 ? "Final approve" : "Approve and send to Manager"}</button>
-        <button type="button" class="pic-btn reject" data-review-act="reject" data-id="${escapeHtml(q.id)}">Reject</button>
+      <div class="rv-grid">
+        <div class="rv-col">
+          <div class="profile-lbl">Task</div>
+          <div class="txt">${escapeHtml(q.task || "-")}</div>
+          <div class="profile-lbl">Current description</div>
+          <div class="txt">${escapeHtml(q.cur || "-")}</div>
+          ${q.reason ? `<div class="profile-lbl">Reason for the request</div><div class="txt">${escapeHtml(q.reason)}</div>` : ""}
+          ${(q.jobs && q.jobs.length) ? `<div class="profile-lbl">Recommended jobs</div><div class="txt">${q.jobs.map(j => `<span class="job-chip ro">#${escapeHtml(j)}</span>`).join(" ")}</div>` : ""}
+          ${q.keep ? `<div class="rv-keep">The requester kept the current description and added no jobs. If a change is needed, edit the proposed description on the right.</div>` : ""}
+          ${q.stage === 2 ? `<div class="profile-lbl">Approved by Section Head${q.shBy ? ": " + escapeHtml(q.shBy) : ""}</div>
+          <div class="txt">${escapeHtml(q.shNote || "(no note)")}</div>` : ""}
+          ${q.orig ? `<div class="profile-lbl">Original proposal (before it was edited)</div><div class="txt">${escapeHtml(q.orig)}</div>
+          <div class="profile-lbl">Edited by</div><div class="txt">${escapeHtml(q.edBy || "-")}</div>` : ""}
+        </div>
+        <div class="rv-col">
+          <div class="profile-lbl">Proposed description (you can edit this text)</div>
+          <textarea data-review-desc maxlength="1000" rows="9" aria-label="Proposed description">${escapeHtml(q.desc)}</textarea>
+          <div class="rv-hint">${q.stage === 2
+            ? "This is the text that will be saved as the Task Description when you give the final approval."
+            : "If you change this text, the Manager sees your version together with the requester's original proposal."}</div>
+          <button type="button" class="profile-mini" data-review-act="reset" data-id="${escapeHtml(q.id)}">Reset to the requester's version</button>
+          <input type="text" maxlength="300" placeholder="${q.stage === 2 ? "Note to the requester (optional)" : "Your note (shown to the Manager and the requester)"}" data-review-note aria-label="Note">
+          <div class="review-actions">
+            <button type="button" class="pic-btn primary" data-review-act="approve" data-id="${escapeHtml(q.id)}">${q.stage === 2 ? "Final approve" : "Approve and send to Manager"}</button>
+            <button type="button" class="pic-btn reject" data-review-act="reject" data-id="${escapeHtml(q.id)}">Reject</button>
+          </div>
+        </div>
       </div>
     </div>`).join("");
   box.innerHTML = `<h3 class="review-title">Task Description requests</h3>
@@ -7341,11 +7438,14 @@ async function decideReview(id, decision, btn){
   if (reviewBusy) return;
   const item = document.querySelector('.review-item[data-review-id="' + id.replace(/"/g, "") + '"]');
   const note = item ? (item.querySelector("[data-review-note]").value || "").trim() : "";
+  const ta = item ? item.querySelector("[data-review-desc]") : null;
+  const newDesc = (decision === "approve" && ta) ? ta.value.trim() : null;   // teks usulan (boleh sudah disunting reviewer)
+  if (decision === "approve" && ta && !newDesc){ setReviewStatus("err", "The proposed description cannot be empty."); return; }
   if (decision === "reject" && !confirm("Reject this request?")) return;
   reviewBusy = true;
   const restoreBtn = btnLoading(btn, decision === "approve" ? "Approving..." : "Rejecting...");
   try {
-    const d = await picApi({ action: "decideDescRequest", actor: getRealEmail(), id, decision, note });
+    const d = await picApi({ action: "decideDescRequest", actor: getRealEmail(), id, decision, note, newDesc });
     if (!d || !d.ok){
       setReviewStatus("err", (d && (d.message || d.error)) || "Failed to save the decision.");
       if (d && /already/i.test(d.message || "")) { reviewReqs = reviewReqs.filter(x => x.id !== id); reviewBusy = false; renderReviewModal(); setReviewStatus("err", d.message); reviewBadgeSync(); }
@@ -7380,6 +7480,11 @@ document.getElementById("review-modal-overlay").addEventListener("click", (e) =>
 document.addEventListener("click", (e) => {
   if (e.target.closest && e.target.closest("#acct-review")){ openReviewModal(); return; }
   const b = e.target.closest && e.target.closest("[data-review-act]");
+  if (b && b.dataset.reviewAct === "reset"){
+    const q = reviewReqs.find(x => x.id === b.dataset.id), it = b.closest(".review-item"), ta = it && it.querySelector("[data-review-desc]");
+    if (q && ta) ta.value = q.orig || q.desc;   // kembali ke usulan asli pengaju
+    return;
+  }
   if (b) decideReview(b.dataset.id, b.dataset.reviewAct, b);
 });
 

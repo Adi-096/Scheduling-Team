@@ -2975,13 +2975,15 @@ function applyPicGuideFields(on){
   const st = document.getElementById("pic-f-status");
   if (!st) return;
   if (on){
-    const yes = (document.getElementById("pic-guide-og") || {}).value === "yes";
-    st.hidden = !yes;
-    if (!yes) st.value = "";
-    else if (!st.value) st.value = "Master";
-  } else {
-    st.hidden = false;
+    // Panduan: pertanyaan berhenti di Description. Status / cakupan / jadwal On Going tidak ditanyakan;
+    // audiens = pilihan "For" (dijaga server), On Going langsung berlaku tanpa tanggal berakhir.
+    st.hidden = true;
+    st.value = "";
+    applyPicOg();
+    ["pic-f-ogscope", "pic-f-ogsched"].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = true; });
+    return;
   }
+  st.hidden = false;
   applyPicOg();
 }
 
@@ -3989,7 +3991,7 @@ function picFormHtml(idx, formId, link, submitLabel){
         </select>
         <select id="pic-guide-og" aria-label="Show as On Going">
           <option value="no"${(link && link.guide && (link.pinned || link.ogScheduled)) ? "" : " selected"}>On Going: No (listed in Our Links under "${GUIDE_CATEGORY}", at the top)</option>
-          <option value="yes"${(link && link.guide && (link.pinned || link.ogScheduled)) ? " selected" : ""}>On Going: Yes (shown on the page; choose below who sees it)</option>
+          <option value="yes"${(link && link.guide && (link.pinned || link.ogScheduled)) ? " selected" : ""}>On Going: Yes (shown on the page to the audience above, starts now, no end date)</option>
         </select>
         <p class="pic-hint">The .md file is read directly in the site (nothing is converted). Readers can also save it as a PDF from the reader. Only the Administrator can add, edit or delete these menus.</p>
       </div>
@@ -4381,7 +4383,15 @@ function readPicForm(){
   // Panduan Markdown: audiens ditentukan role (Leader / + Authorized PIC); tanpa visibilitas, staff, Only shown, partner.
   const guideAud = (document.getElementById("pic-guide-aud") || {}).value === "authpic" ? "authpic" : "leader";
   const guideOg = isGuide && (document.getElementById("pic-guide-og") || {}).value === "yes";
-  if (isGuide){ vis = ""; staff = ""; only = ""; share = ""; if (!guideOg) status = ""; }
+  let guideSched = null;
+  if (isGuide){
+    vis = ""; staff = ""; only = ""; share = "";
+    status = guideOg ? "Master" : "";   // audiens sebenarnya = role di pilihan "For" (dijaga server)
+    // Edit panduan yang sudah On Going: pertahankan jadwal lama; baru: mulai sekarang, tanpa tanggal berakhir.
+    const old = (typeof picEditLink !== "undefined" && picEditLink && picEditLink.guide) ? picEditLink : null;
+    const wasOg = !!(old && (old.pinned || old.ogScheduled));
+    guideSched = { og: "None", ogStart: wasOg ? "__keep__" : "", ogDur: wasOg ? (old.expiresOn ? "__keep__" : "never") : "never", ogUnit: "day" };
+  }
   let og = document.getElementById("pic-f-ogscope") ? document.getElementById("pic-f-ogscope").value : "None";
   // Jadwal On Going: ogStart "" = sekarang | "yyyy-MM-dd HH:mm" | "__keep__"; ogDur "never" | 1..60 | "__keep__" + ogUnit
   let ogStart = "__keep__", ogDur = "never", ogUnit = "day";
@@ -4393,6 +4403,7 @@ function readPicForm(){
   }
   if (nEl){ ogDur = nEl.value; if (uEl) ogUnit = uEl.value; }
   if (!status){ og = "None"; ogStart = ""; ogDur = "never"; ogUnit = "day"; }   // Normal: pilihan On Going tidak berlaku
+  if (isGuide && guideSched){ og = guideSched.og; ogStart = guideSched.ogStart; ogDur = guideSched.ogDur; ogUnit = guideSched.ogUnit; if (!status){ ogStart = ""; ogDur = "never"; } }
   if (status && stEl && stEl.value === "at" && !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(ogStart)){
     setPicStatus("err", "Please choose the date and time when On Going starts."); return null;
   }
@@ -4401,7 +4412,6 @@ function readPicForm(){
   if (!name){ setPicStatus("err", "Menu name cannot be empty."); return null; }
   if (isGuide){
     if (!picGuideState.file && !picGuideState.origRaw){ setPicStatus("err", "Please choose a Markdown (.md) file."); return null; }
-    if (guideOg && !status){ setPicStatus("err", "Choose who sees the On Going menu."); return null; }
   } else if (isImg){
     if (!picImgState.length){ setPicStatus("err", "Please add at least one image."); return null; }
   } else if (isNote){

@@ -473,6 +473,12 @@
   .review-item .rv-keep{ font-size:12.5px;line-height:1.5;background:var(--surface-soft);border-radius:8px;padding:8px 10px;margin:4px 0 8px; }
   .req-keep{ display:flex;align-items:flex-start;gap:8px;font-size:13.5px;margin:12px 0 4px;cursor:pointer; }
   .req-keep input{ margin-top:3px; }
+  .result-item{ border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0;text-align:left; }
+  .result-item .result-head{ display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px; }
+  .result-item .txt{ white-space:pre-line;font-size:13px;line-height:1.5; }
+  .result-chip{ font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 9px;border-radius:999px; }
+  .result-chip.approved{ background:#E4F5E9;color:#1F7A3F; }
+  .result-chip.declined, .result-chip.cancelled{ background:#FDE8E4;color:#B3401F; }
   .review-empty{ text-align:center;color:var(--ink-faint);font-size:13.5px;margin:18px 0 6px; }
   .profile-lbl{
     font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
@@ -2839,8 +2845,16 @@ function picOwnFormHtml(formId, link, submitLabel){
   const pic = linkEffMode(link) === "pic";
   return `
     <form id="${formId}" class="pic-form" autocomplete="off">
-      <input type="text" id="pic-f-name" placeholder="Link name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
-      <input type="url" id="pic-f-url" placeholder="https://..." required value="${link ? escapeHtml(link.rawUrl || link.url) : ""}">
+      <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
+      <select id="pic-f-type" aria-label="Menu type">
+        <option value="link"${picKindOf(link) === "link" ? " selected" : ""}>Type: Link (opens in a new tab)</option>
+        <option value="images"${picKindOf(link) === "images" ? " selected" : ""}>Type: Images (carousel inside the site)</option>
+        <option value="notes"${picKindOf(link) === "notes" ? " selected" : ""}>Type: Note (text or .txt file shown in the site)</option>
+        <option value="doc"${picKindOf(link) === "doc" ? " selected" : ""}>Type: Document (PDF, PowerPoint, Excel, Word)</option>
+      </select>
+      <input type="url" id="pic-f-url" placeholder="https://..." ${picKindOf(link) === "link" ? "required" : "disabled hidden"} value="${link && picKindOf(link) === "link" ? escapeHtml(link.rawUrl || link.url) : ""}">
+      ${picDocBoxHtml(link)}
+      ${picNoteImgBoxHtml(link)}
       <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
       <select id="pic-f-status" aria-label="On-Going status">
         <option value=""${pic ? "" : " selected"}>Normal (listed in my Our Links)</option>
@@ -4015,21 +4029,9 @@ const Gallery = (() => {
   return { open, close };
 })();
 
-function picFormHtml(idx, formId, link, submitLabel){
-  if (picOwnCreate) return picOwnFormHtml(formId, link, submitLabel);
+// Kotak isian file (dokumen / catatan / gambar), dipakai form lengkap dan form link pribadi (Registered PIC).
+function picDocBoxHtml(link){
   return `
-    <form id="${formId}" class="pic-form" autocomplete="off">
-      <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
-      <select id="pic-f-type" aria-label="Menu type">
-        <option value="link"${picKindOf(link) === "link" ? " selected" : ""}>Type: Link (opens in a new tab)</option>
-        <option value="images"${picKindOf(link) === "images" ? " selected" : ""}>Type: Images (carousel inside the site)</option>
-        <option value="notes"${picKindOf(link) === "notes" ? " selected" : ""}>Type: Note (text or .txt file shown in the site)</option>
-        <option value="doc"${picKindOf(link) === "doc" ? " selected" : ""}>Type: Document (PDF, PowerPoint, Excel, Word)</option>
-        <option value="qr"${picKindOf(link) === "qr" ? " selected" : ""}>Type: QR code (made from a link)</option>
-        ${(viewPerms.isAdmin || picKindOf(link) === "guide") ? `<option value="guide"${picKindOf(link) === "guide" ? " selected" : ""}>Type: Guideline (Markdown .md) - Administrator only</option>` : ""}
-      </select>
-      <input type="url" id="pic-f-url" placeholder="https://..." ${(picKindOf(link) === "link" || picKindOf(link) === "qr") ? "required" : "disabled hidden"} value="${link ? escapeHtml(link.qr || link.rawUrl || link.url) : ""}">
-      <p class="pic-hint" id="pic-qr-hint"${picKindOf(link) === "qr" ? "" : " hidden"}>A QR code is generated from this link. Users scan it from the site, or open and download it.</p>
       <div class="pic-doc-box" id="pic-doc-box"${picKindOf(link) === "doc" ? "" : " hidden"}>
         <input type="file" id="pic-doc-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv" hidden>
         <div class="pic-note-row">
@@ -4038,22 +4040,10 @@ function picFormHtml(idx, formId, link, submitLabel){
         </div>
         <p class="pic-hint">PDF, Word, Excel, PowerPoint or CSV, up to 10 MB. Users open it straight from the menu: a PDF opens in the browser, Office files download and open in their own app. For bigger files use a Link menu.</p>
       </div>
-      <div class="pic-guide-box" id="pic-guide-box"${picKindOf(link) === "guide" ? "" : " hidden"}>
-        <input type="file" id="pic-guide-input" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
-        <div class="pic-note-row">
-          <button type="button" class="pic-btn" id="pic-guide-pick">Choose .md file</button>
-          <span class="pic-note-meta" id="pic-guide-meta"></span>
-        </div>
-        <select id="pic-guide-aud" aria-label="Who is this guideline for">
-          <option value="leader"${(link && link.guide && link.guide.aud === "authpic") ? "" : " selected"}>For: Leaders only (Section Head, Manager, Senior Manager)</option>
-          <option value="authpic"${(link && link.guide && link.guide.aud === "authpic") ? " selected" : ""}>For: Leaders + Authorized PIC</option>
-        </select>
-        <select id="pic-guide-og" aria-label="Show as On Going">
-          <option value="no"${(link && link.guide && (link.pinned || link.ogScheduled)) ? "" : " selected"}>On Going: No (listed in Our Links under "${GUIDE_CATEGORY}", at the top)</option>
-          <option value="yes"${(link && link.guide && (link.pinned || link.ogScheduled)) ? " selected" : ""}>On Going: Yes (shown on the page to the audience above, starts now, no end date)</option>
-        </select>
-        <p class="pic-hint">The .md file is read directly in the site (nothing is converted). Readers can also save it as a PDF from the reader. Only the Administrator can add, edit or delete these menus.</p>
-      </div>
+`;
+}
+function picNoteImgBoxHtml(link){
+  return `
       <div class="pic-note-box" id="pic-note-box"${picKindOf(link) === "notes" ? "" : " hidden"}>
         <div class="note-tools" role="toolbar" aria-label="Text style">
           <button type="button" class="note-tool" data-note-fmt="bold" title="Bold"><b>B</b></button>
@@ -4092,6 +4082,42 @@ function picFormHtml(idx, formId, link, submitLabel){
         <button type="button" class="pic-btn" id="pic-img-add">+ Add images</button>
         <p class="pic-hint">Up to ${PIC_IMG_MAX} images per menu. Photos are resized automatically in your browser. Users see them as a carousel without leaving the site.</p>
       </div>
+`;
+}
+
+function picFormHtml(idx, formId, link, submitLabel){
+  if (picOwnCreate) return picOwnFormHtml(formId, link, submitLabel);
+  return `
+    <form id="${formId}" class="pic-form" autocomplete="off">
+      <input type="text" id="pic-f-name" placeholder="Menu name" maxlength="120" required value="${link ? escapeHtml(link.rawName || link.name) : ""}">
+      <select id="pic-f-type" aria-label="Menu type">
+        <option value="link"${picKindOf(link) === "link" ? " selected" : ""}>Type: Link (opens in a new tab)</option>
+        <option value="images"${picKindOf(link) === "images" ? " selected" : ""}>Type: Images (carousel inside the site)</option>
+        <option value="notes"${picKindOf(link) === "notes" ? " selected" : ""}>Type: Note (text or .txt file shown in the site)</option>
+        <option value="doc"${picKindOf(link) === "doc" ? " selected" : ""}>Type: Document (PDF, PowerPoint, Excel, Word)</option>
+        <option value="qr"${picKindOf(link) === "qr" ? " selected" : ""}>Type: QR code (made from a link)</option>
+        ${(viewPerms.isAdmin || picKindOf(link) === "guide") ? `<option value="guide"${picKindOf(link) === "guide" ? " selected" : ""}>Type: Guideline (Markdown .md) - Administrator only</option>` : ""}
+      </select>
+      <input type="url" id="pic-f-url" placeholder="https://..." ${(picKindOf(link) === "link" || picKindOf(link) === "qr") ? "required" : "disabled hidden"} value="${link ? escapeHtml(link.qr || link.rawUrl || link.url) : ""}">
+      <p class="pic-hint" id="pic-qr-hint"${picKindOf(link) === "qr" ? "" : " hidden"}>A QR code is generated from this link. Users scan it from the site, or open and download it.</p>
+      ${picDocBoxHtml(link)}
+      <div class="pic-guide-box" id="pic-guide-box"${picKindOf(link) === "guide" ? "" : " hidden"}>
+        <input type="file" id="pic-guide-input" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
+        <div class="pic-note-row">
+          <button type="button" class="pic-btn" id="pic-guide-pick">Choose .md file</button>
+          <span class="pic-note-meta" id="pic-guide-meta"></span>
+        </div>
+        <select id="pic-guide-aud" aria-label="Who is this guideline for">
+          <option value="leader"${(link && link.guide && link.guide.aud === "authpic") ? "" : " selected"}>For: Leaders only (Section Head, Manager, Senior Manager)</option>
+          <option value="authpic"${(link && link.guide && link.guide.aud === "authpic") ? " selected" : ""}>For: Leaders + Authorized PIC</option>
+        </select>
+        <select id="pic-guide-og" aria-label="Show as On Going">
+          <option value="no"${(link && link.guide && (link.pinned || link.ogScheduled)) ? "" : " selected"}>On Going: No (listed in Our Links under "${GUIDE_CATEGORY}", at the top)</option>
+          <option value="yes"${(link && link.guide && (link.pinned || link.ogScheduled)) ? " selected" : ""}>On Going: Yes (shown on the page to the audience above, starts now, no end date)</option>
+        </select>
+        <p class="pic-hint">The .md file is read directly in the site (nothing is converted). Readers can also save it as a PDF from the reader. Only the Administrator can add, edit or delete these menus.</p>
+      </div>
+      ${picNoteImgBoxHtml(link)}
       <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
       ${categoryFieldHtml(idx, link)}
       ${visSelectHtml(idx, link)}
@@ -4486,7 +4512,7 @@ function readPicForm(){
   if (isQr && url.length > 300){ setPicStatus("err", "The link is too long for a QR code (max 300 characters)."); return null; }
   if (picOwnCreate){   // link pribadi: server memaksa isian lain; tampilan lokal mengikuti
     const me = getCurrentUserEmail();
-    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None", ogStart: status === "PIC Only" ? ogStart : "", ogDur: status === "PIC Only" ? ogDur : "never", ogUnit, share };
+    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None", ogStart: status === "PIC Only" ? ogStart : "", ogDur: status === "PIC Only" ? ogDur : "never", ogUnit, share, images: isImg, notes: isNote, doc: isDoc, qr: false, guide: false, guideAud: "leader" };
   }
   return { name, url: isQr ? "qr://" + url : url, desc, vis, staff, cat, status, only, share, og, ogStart, ogDur, ogUnit, images: isImg, notes: isNote, doc: isDoc, qr: isQr, guide: isGuide, guideAud };
 }
@@ -5523,14 +5549,15 @@ function offSwapFormHtml(d){
   // Tukar berpasangan: "Saturday to swap" (tanggal tukar) + "Payback Saturday" (tanggal pengganti).
   // requesterOffFirst = true : pengaju OFF pada tanggal tukar (timnya kerja) dan KERJA pada Sabtu pengganti (timnya off).
   const first = d.requesterOffFirst !== false;
-  const free = (d.saturdays || []).filter(s => !s.nonOff);
+  const calList = (Array.isArray(d.calendar) && d.calendar.length) ? d.calendar : (d.saturdays || []);   // sama dengan daftar Projected Saturday Off
+  const free = calList.filter(s => !s.nonOff);
   const known = !!d.scheduleKnown;
   const dateSats = free.filter(s => !known || s.status === (first ? "work" : "off"));
   const paySats = free.filter(s => !known || s.status === (first ? "off" : "work"));
   const cands = d.candidates || [];
   const closeBtn = `<div class="profile-edit-actions"><button type="button" class="pic-btn" data-off-act="cancel">Close</button></div>`;
   if (!dateSats.length || !paySats.length){
-    return `<div class="profile-req"><b>No Saturday to swap</b><span class="txt">A swap needs two Saturdays in the coming 8 weeks: one when your team is ${first ? "working" : "off"} and one when your team is ${first ? "off" : "working"} (Non-off weeks do not count).</span></div>${closeBtn}`;
+    return `<div class="profile-req"><b>No Saturday to swap</b><span class="txt">A swap needs two Saturdays in your Projected Saturday Off list: one when your team is ${first ? "working" : "off"} and one when your team is ${first ? "off" : "working"} (Non-off weeks do not count).</span></div>${closeBtn}`;
   }
   const opts = list => list.map(s => `<option value="${escapeHtml(s.date)}">${escapeHtml(s.label)}</option>`).join("");
   return `<div class="profile-edit">
@@ -5709,7 +5736,7 @@ function profileOffPaneHtml(){
       `<div class="off-row"><span>${escapeHtml(String(s.label).replace(/^Saturday,\s*/, ""))}${s.swapWith ? " (swapped)" : ""}</span>${offChip(s.nonOff ? "nonoff" : s.status)}</div>`).join("")}</div>`;
     if (pages > 1){
       h += `<div class="off-btns" style="justify-content:space-between;align-items:center;margin-top:8px">
-        <button type="button" class="profile-mini" data-off-act="cal-prev"${offCalPage <= 0 ? " disabled" : ""}>&lsaquo; Previous</button>
+        ${offCalPage <= 0 ? "<span></span>" : `<button type="button" class="profile-mini" data-off-act="cal-prev">&lsaquo; Previous</button>`}
         <span class="profile-hint" style="margin:0">${escapeHtml(String(pageSats[0].label).replace(/^Saturday,\s*/, "").replace(/\s\d{4}$/, ""))} &ndash; ${escapeHtml(String(pageSats[pageSats.length - 1].label).replace(/^Saturday,\s*/, "").replace(/\s\d{4}$/, ""))}</span>
         ${offCalPage >= pages - 1 ? "<span></span>" : `<button type="button" class="profile-mini" data-off-act="cal-next">Next &rsaquo;</button>`}
       </div>`;
@@ -7350,7 +7377,21 @@ const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kala
 // ---------- Notifikasi pengajuan Task Description untuk reviewer ----------
 let reviewReqs = [];          // usulan Task Description yang menunggu keputusan akun ini (dari server)
 let reviewSwaps = [];         // pengajuan tukar Off / shift yang menunggu jawaban akun ini (dari server)
-const reviewTotal = () => reviewReqs.length + reviewSwaps.length;   // angka pada badge Requests
+let reviewResults = [];       // hasil pengajuan milik akun ini (disetujui / ditolak / dibatalkan), dari server
+const RESULTS_SEEN_PREFIX = "srscSeenResults:";
+function resultsSeenSet(){
+  try { return new Set(JSON.parse(localStorage.getItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase()) || "[]")); } catch (e){ return new Set(); }
+}
+function resultsUnseen(){ const seen = resultsSeenSet(); return reviewResults.filter(r => !seen.has(r.key)); }
+function markResultsSeen(){
+  if (!reviewResults.length) return;
+  try {
+    const seen = resultsSeenSet();
+    reviewResults.forEach(r => seen.add(r.key));
+    localStorage.setItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase(), JSON.stringify(Array.from(seen).slice(-300)));
+  } catch (e){ /* penyimpanan browser dimatikan: pemberitahuan muncul lagi, tidak berbahaya */ }
+}
+const reviewTotal = () => reviewReqs.length + reviewSwaps.length + resultsUnseen().length;   // angka pada badge Requests
 let lastLoginOpts = null;     // opsi terakhir renderLoginInfo, untuk menggambar ulang login card
 let reviewBusy = false;
 let reviewTimer = null;
@@ -7372,9 +7413,11 @@ async function refreshReviewRequests(){
     const d = await picApi({ action: "listReviewRequests", actor: email });
     if (!d || !d.ok) return;
     const sig = (arr) => arr.map(x => (x.kind || "desc") + x.id + ":" + (x.stage || 1)).join("|");
-    const changed = sig((d.requests || []).concat(d.swaps || [])) !== sig(reviewReqs.concat(reviewSwaps));
+    const rsig = (arr) => arr.map(x => x.key).join("|");
+    const changed = sig((d.requests || []).concat(d.swaps || [])) !== sig(reviewReqs.concat(reviewSwaps)) || rsig(d.results || []) !== rsig(reviewResults);
     reviewReqs = d.requests || [];
     reviewSwaps = d.swaps || [];
+    reviewResults = d.results || [];
     if (changed){
       reviewBadgeSync();
       if (document.getElementById("review-modal-overlay").classList.contains("open") && !reviewBusy) renderReviewModal();
@@ -7432,6 +7475,21 @@ function renderReviewModal(){
         </div>
       </div>
     </div>`).join("");
+  const resultItems = resultsUnseen().map(r => {
+    const what = r.kind === "off" ? "Saturday Off swap" + (r.with ? " with " + escapeHtml(r.with) : "")
+      : r.kind === "shift" ? "Shift swap" + (r.with ? " with " + escapeHtml(r.with) : "") : "Task Description change";
+    const label = r.status === "cancelled" ? "Cancelled by Section Head" : (r.statusLabel === "Rejected" ? "Rejected" : r.status === "declined" ? "Declined" : "Approved");
+    const extra = r.kind === "desc" && r.status === "approved"
+      ? (r.edited ? "Your Task Description was updated with the text below (edited by your reviewer)." : "Your Task Description was updated.")
+      : "";
+    return `<div class="result-item ${escapeHtml(r.status)}">
+      <div class="result-head"><span class="result-chip ${escapeHtml(r.status)}">${escapeHtml(label)}</span><b>${what}</b></div>
+      ${extra ? `<div class="txt">${escapeHtml(extra)}</div>` : ""}
+      ${r.when ? `<div class="txt">${escapeHtml(r.when)}</div>` : ""}
+      ${r.by && r.status !== "approved" ? `<div class="txt">By: ${escapeHtml(r.by)}</div>` : ""}
+      ${r.note ? `<div class="txt">Note: ${escapeHtml(r.note)}</div>` : ""}
+    </div>`;
+  }).join("");
   const swapItems = reviewSwaps.map(q => {
     const isOff = q.kind === "off";
     const title = isOff
@@ -7455,9 +7513,10 @@ function renderReviewModal(){
   }).join("");
   box.innerHTML = `<h3 class="review-title">Requests</h3>
     <div class="pic-status" id="review-status" style="margin-top:10px"></div>
-    ${swapItems ? `<div class="profile-lbl" style="margin-top:12px">Swap requests</div>${swapItems}` : ""}
+    ${resultItems ? `<div class="profile-lbl" style="margin-top:12px">Updates on your requests</div>${resultItems}<div class="off-btns"><button type="button" class="profile-mini" data-results-act="read">Got it</button></div>` : ""}
+    ${swapItems ? `<div class="profile-lbl" style="margin-top:12px">Swap requests waiting for your answer</div>${swapItems}` : ""}
     ${items ? `${swapItems ? `<div class="profile-lbl" style="margin-top:16px">Task Description requests</div>` : ""}${items}` : ""}
-    ${(items || swapItems) ? "" : `<div class="review-empty">No requests are waiting for your answer.</div>`}`;
+    ${(items || swapItems || resultItems) ? "" : `<div class="review-empty">No requests are waiting for your answer.</div>`}`;
 }
 
 async function decideReview(id, decision, btn){
@@ -7528,6 +7587,7 @@ function openReviewModal(){
 }
 function closeReviewModal(){
   document.getElementById("review-modal-overlay").classList.remove("open");
+  if (resultsUnseen().length){ markResultsSeen(); reviewBadgeSync(); }   // hasil pengajuan yang sudah dilihat tidak muncul lagi
 }
 document.getElementById("review-modal-close").addEventListener("click", closeReviewModal);
 document.getElementById("review-modal-overlay").addEventListener("click", (e) => {
@@ -7536,6 +7596,8 @@ document.getElementById("review-modal-overlay").addEventListener("click", (e) =>
 document.addEventListener("click", (e) => {
   if (e.target.closest && e.target.closest("#acct-review")){ openReviewModal(); return; }
   const b = e.target.closest && e.target.closest("[data-review-act]");
+  const rb = e.target.closest && e.target.closest("[data-results-act]");
+  if (rb){ markResultsSeen(); renderReviewModal(); reviewBadgeSync(); return; }
   const sb = e.target.closest && e.target.closest("[data-swap-act]");
   if (sb){ decideSwap(sb.dataset.kind, sb.dataset.id, sb.dataset.swapAct, sb); return; }
   if (b && b.dataset.reviewAct === "reset"){

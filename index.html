@@ -479,6 +479,15 @@
   .result-chip{ font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 9px;border-radius:999px; }
   .result-chip.approved{ background:#E4F5E9;color:#1F7A3F; }
   .result-chip.declined, .result-chip.cancelled{ background:#FDE8E4;color:#B3401F; }
+  /* Jendela penyesuaian foto profil */
+  .crop-modal{ max-width:420px;text-align:center;margin:auto; }
+  .crop-stage{ position:relative;width:min(320px,76vw);aspect-ratio:1/1;margin:14px auto 12px;border-radius:10px;overflow:hidden;background:#E9EDF3;touch-action:none;cursor:grab;outline:none;user-select:none; }
+  .crop-stage:focus-visible{ box-shadow:0 0 0 3px rgba(31,111,235,.35); }
+  .crop-stage.dragging{ cursor:grabbing; }
+  .crop-stage canvas{ width:100%;height:100%;display:block; }
+  .crop-ring{ position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 999px rgba(255,255,255,.72);border:2px solid #fff;pointer-events:none; }
+  .crop-zoom{ width:min(320px,76vw);accent-color:var(--accent); }
+  .crop-actions{ display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px; }
   .review-empty{ text-align:center;color:var(--ink-faint);font-size:13.5px;margin:18px 0 6px; }
   .profile-lbl{
     font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
@@ -1506,6 +1515,23 @@
   <div class="modal member-modal">
     <button class="modal-close" id="member-modal-close">Tutup ✕</button>
     <div class="member-card" id="member-card-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="photo-crop-overlay" style="z-index:3000">
+  <div class="modal crop-modal" role="dialog" aria-modal="true" aria-label="Adjust your photo">
+    <h3 class="review-title">Adjust your photo</h3>
+    <p class="profile-hint" style="margin:6px 0 0">Drag the photo to move it. Use the slider or the mouse wheel to zoom. The circle shows how it will look.</p>
+    <div class="crop-stage" id="crop-stage" tabindex="0" aria-label="Photo position. Use the arrow keys to move and + or - to zoom.">
+      <canvas id="crop-canvas" width="320" height="320"></canvas>
+      <div class="crop-ring"></div>
+    </div>
+    <input type="range" id="crop-zoom" class="crop-zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+    <div class="crop-actions">
+      <button type="button" class="pic-btn" id="crop-cancel">Cancel</button>
+      <button type="button" class="pic-btn" id="crop-reset">Reset</button>
+      <button type="button" class="pic-btn primary" id="crop-ok">Use this photo</button>
+    </div>
   </div>
 </div>
 
@@ -7283,7 +7309,112 @@ document.getElementById("profile-modal-overlay").addEventListener("click", (e) =
   if (e.target.id === "profile-modal-overlay") closeProfile();
 });
 
-// Foto profil: potong persegi dari tengah, 360 x 360 px, JPEG (biasanya 20-50 KB).
+// Penyesuai foto profil: PIC menggeser dan memperbesar foto di dalam lingkaran sebelum diunggah.
+// PhotoCropper.open(file) -> Blob JPEG 360 x 360 (hasil potongan), atau null bila dibatalkan. Gagal dibaca -> melempar Error.
+const PhotoCropper = (() => {
+  const SIZE = 320, OUT = 360, ZMAX = 4;
+  let img = null, w = 0, h = 0, base = 1, z = 1, ox = 0, oy = 0, resolveFn = null, drag = null;
+  const $ = (id) => document.getElementById(id);
+  const clamp = () => { const s = base * z; ox = Math.min(0, Math.max(SIZE - w * s, ox)); oy = Math.min(0, Math.max(SIZE - h * s, oy)); };
+  function draw(){
+    const c = $("crop-canvas"); if (!c || !img) return;
+    const ctx = c.getContext("2d"), s = base * z;
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.drawImage(img, ox, oy, w * s, h * s);
+  }
+  function setZoom(nz, cx, cy){   // (cx, cy) = titik di kanvas yang tetap di tempatnya saat zoom
+    nz = Math.min(ZMAX, Math.max(1, nz));
+    const s0 = base * z, s1 = base * nz, px = (cx - ox) / s0, py = (cy - oy) / s0;
+    z = nz; ox = cx - px * s1; oy = cy - py * s1; clamp();
+    $("crop-zoom").value = String(z); draw();
+  }
+  function reset(){ z = 1; ox = (SIZE - w * base) / 2; oy = (SIZE - h * base) / 2; clamp(); $("crop-zoom").value = "1"; draw(); }
+  function finish(blob){
+    $("photo-crop-overlay").classList.remove("open");
+    if (img && img.close) { try { img.close(); } catch (e){} }
+    img = null; drag = null;
+    const r = resolveFn; resolveFn = null;
+    if (r) r(blob);
+  }
+  async function decode(file){
+    if (window.createImageBitmap){ const bm = await createImageBitmap(file); return { src: bm, w: bm.width, h: bm.height }; }
+    const im = await new Promise((resolve, reject) => {
+      const el = new Image(), u = URL.createObjectURL(file);
+      el.onload = () => { URL.revokeObjectURL(u); resolve(el); };
+      el.onerror = () => { URL.revokeObjectURL(u); reject(new Error("decode failed")); };
+      el.src = u;
+    });
+    return { src: im, w: im.naturalWidth, h: im.naturalHeight };
+  }
+  async function exportBlob(){
+    const k = OUT / SIZE, s = base * z * k;
+    const canvas = document.createElement("canvas"); canvas.width = OUT; canvas.height = OUT;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, OUT, OUT);
+    ctx.drawImage(img, ox * k, oy * k, w * s, h * s);
+    let q = 0.88, blob = await canvasToBlob(canvas, "image/jpeg", q);
+    while (blob.size > 200 * 1024 && q > 0.5){ q -= 0.1; blob = await canvasToBlob(canvas, "image/jpeg", q); }
+    return blob;
+  }
+  async function open(file){
+    if (resolveFn) return null;
+    const d = await decode(file);
+    if (!d.w || !d.h) throw new Error("empty image");
+    img = d.src; w = d.w; h = d.h; base = Math.max(SIZE / w, SIZE / h);
+    reset();
+    $("photo-crop-overlay").classList.add("open");
+    const st = $("crop-stage"); if (st) st.focus({ preventScroll: true });
+    return new Promise(res => { resolveFn = res; });
+  }
+
+  const stage = $("crop-stage");
+  stage.addEventListener("pointerdown", (e) => {
+    if (!img) return;
+    drag = { x: e.clientX, y: e.clientY, ox, oy };
+    try { stage.setPointerCapture(e.pointerId); } catch (err){}
+    stage.classList.add("dragging");
+  });
+  stage.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const k = SIZE / stage.getBoundingClientRect().width;
+    ox = drag.ox + (e.clientX - drag.x) * k; oy = drag.oy + (e.clientY - drag.y) * k;
+    clamp(); draw();
+  });
+  const endDrag = () => { drag = null; stage.classList.remove("dragging"); };
+  stage.addEventListener("pointerup", endDrag);
+  stage.addEventListener("pointercancel", endDrag);
+  stage.addEventListener("wheel", (e) => {
+    if (!img) return;
+    e.preventDefault();
+    const r = stage.getBoundingClientRect(), k = SIZE / r.width;
+    setZoom(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08), (e.clientX - r.left) * k, (e.clientY - r.top) * k);
+  }, { passive: false });
+  stage.addEventListener("keydown", (e) => {
+    if (!img) return;
+    const step = 12;
+    if (e.key === "ArrowLeft") ox += step; else if (e.key === "ArrowRight") ox -= step;
+    else if (e.key === "ArrowUp") oy += step; else if (e.key === "ArrowDown") oy -= step;
+    else if (e.key === "+" || e.key === "=") { setZoom(z * 1.08, SIZE / 2, SIZE / 2); e.preventDefault(); return; }
+    else if (e.key === "-") { setZoom(z / 1.08, SIZE / 2, SIZE / 2); e.preventDefault(); return; }
+    else return;
+    e.preventDefault(); clamp(); draw();
+  });
+  $("crop-zoom").addEventListener("input", (e) => { if (img) setZoom(parseFloat(e.target.value) || 1, SIZE / 2, SIZE / 2); });
+  $("crop-reset").addEventListener("click", () => { if (img) reset(); });
+  $("crop-cancel").addEventListener("click", () => finish(null));
+  $("crop-ok").addEventListener("click", async () => {
+    if (!img) return;
+    const b = $("crop-ok"); b.disabled = true;
+    try { finish(await exportBlob()); } catch (err){ finish(null); } finally { b.disabled = false; }
+  });
+  $("photo-crop-overlay").addEventListener("click", (e) => { if (e.target.id === "photo-crop-overlay") finish(null); });
+  document.addEventListener("keydown", (e) => {   // Esc menutup hanya jendela ini (bukan View Profile di belakangnya)
+    if (e.key === "Escape" && $("photo-crop-overlay").classList.contains("open")){ e.stopImmediatePropagation(); e.preventDefault(); finish(null); }
+  }, true);
+  return { open };
+})();
+
+// Foto profil: potong persegi dari tengah, 360 x 360 px, JPEG (biasanya 20-50 KB). Dipakai sebagai cadangan; unggahan lewat PhotoCropper.
 async function squarePhotoBlob(file){
   let src, w, h;
   if (window.createImageBitmap){
@@ -7320,15 +7451,16 @@ function applyProfilePhotoLocally(email, dp){
 
 async function uploadProfilePhoto(file){
   if (profileBusy || !file) return;
+  let cropped;
+  try { cropped = await PhotoCropper.open(file); }   // PIC mengatur posisi foto dulu
+  catch (e){ setProfileStatus("err", "Could not read that image. Please use a JPG, PNG or WebP photo."); return; }
+  if (!cropped) return;                              // dibatalkan
   profileBusy = true;
   const btn = document.getElementById("profile-photo-btn");
   if (btn){ btn.disabled = true; btn.textContent = "Uploading..."; }
   setProfileStatus("", "");
   try {
-    let blob;
-    try { blob = await squarePhotoBlob(file); }
-    catch (e){ setProfileStatus("err", "Could not read that image. Please use a JPG, PNG or WebP photo."); return; }
-    const b64 = await blobToBase64(blob);
+    const b64 = await blobToBase64(cropped);
     const data = await picApi({ action: "uploadProfilePhoto", actor: getRealEmail(), mime: "image/jpeg", data: b64 });
     if (!data || !data.ok){ setProfileStatus("err", (data && data.error) || "Failed to upload the photo."); return; }
     memberPhotoCache.set(data.id, "data:image/jpeg;base64," + b64);
@@ -8714,13 +8846,16 @@ document.getElementById("tedit-photo-input").addEventListener("change", async (e
   const file = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!file) return;
+  let cropped;
+  try { cropped = await PhotoCropper.open(file); }   // atur posisi foto dulu
+  catch (err){ setTeditStatus("err", "Could not read that image. Please use a JPG, PNG or WebP photo."); return; }
+  if (!cropped) return;                              // dibatalkan
   const btn = document.getElementById("tedit-photo-btn");
   const old = btn.textContent;
   btn.disabled = true; btn.innerHTML = `<span class="btn-spin" aria-hidden="true"></span>Reading...`;
   setTeditStatus("", "");
   try {
-    const blob = await squarePhotoBlob(file);
-    teamEditPhoto = { mode: "new", b64: await blobToBase64(blob) };
+    teamEditPhoto = { mode: "new", b64: await blobToBase64(cropped) };
   } catch (err){
     setTeditStatus("err", "Could not read that image. Please use a JPG, PNG or WebP photo.");
   } finally {

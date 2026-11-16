@@ -479,6 +479,7 @@
   .result-chip{ font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 9px;border-radius:999px; }
   .result-chip.approved{ background:#E4F5E9;color:#1F7A3F; }
   .result-chip.declined, .result-chip.cancelled{ background:#FDE8E4;color:#B3401F; }
+  .result-chip.info{ background:#E1F2FB;color:#0B6FA4; }
   /* Jendela penyesuaian foto profil */
   .crop-modal{ max-width:420px;text-align:center;margin:auto; }
   .crop-stage{ position:relative;width:min(320px,76vw);aspect-ratio:1/1;margin:14px auto 12px;border-radius:10px;overflow:hidden;background:#E9EDF3;touch-action:none;cursor:grab;outline:none;user-select:none; }
@@ -5299,7 +5300,6 @@ function renderProfile(){
     ${own ? `<div class="profile-photo-actions">
         <button type="button" class="pic-btn" id="profile-photo-btn">${dpRow.m.dp ? "Change photo" : "Upload photo"}</button>
         ${dpRow.m.dp ? `<button type="button" class="pic-btn" id="profile-photo-remove">Remove photo</button>` : ""}
-        <input type="file" id="profile-photo-input" accept="image/*" hidden>
       </div>` : ""}
     <hr>
     <div class="pic-name">${escapeHtml(name)}</div>
@@ -7494,13 +7494,28 @@ async function removeProfilePhoto(){
   }
 }
 
+// Kolom pilih file dibuat SEKALI dan ditaruh di luar View Profile. View Profile digambar ulang setiap kali data dari server
+// selesai dimuat; bila kolom pilih file ikut digambar ulang saat dialog "pilih file" terbuka, file yang dipilih hilang
+// (tidak ada respons sama sekali). Karena itu kolomnya dipisah dari bagian yang digambar ulang.
+let profilePhotoPicker = null;
+function pickProfilePhoto(){
+  if (!profilePhotoPicker){
+    profilePhotoPicker = document.createElement("input");
+    profilePhotoPicker.type = "file";
+    profilePhotoPicker.accept = "image/*";
+    profilePhotoPicker.hidden = true;
+    profilePhotoPicker.addEventListener("change", () => {
+      const f = profilePhotoPicker.files && profilePhotoPicker.files[0];
+      profilePhotoPicker.value = "";   // file yang sama boleh dipilih lagi
+      if (f) uploadProfilePhoto(f);
+    });
+    document.body.appendChild(profilePhotoPicker);
+  }
+  profilePhotoPicker.click();
+}
 document.addEventListener("click", (e) => {
-  if (e.target.closest && e.target.closest("#profile-photo-btn")){ const f = document.getElementById("profile-photo-input"); if (f) f.click(); return; }
+  if (e.target.closest && e.target.closest("#profile-photo-btn")){ pickProfilePhoto(); return; }
   if (e.target.closest && e.target.closest("#profile-photo-remove")){ removeProfilePhoto(); }
-});
-document.addEventListener("change", (e) => {
-  const t = e.target;
-  if (t && t.id === "profile-photo-input"){ uploadProfilePhoto(t.files && t.files[0]).then(() => { t.value = ""; }); }
 });
 
 const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kalau server belum mengirim kolom ini
@@ -7510,20 +7525,23 @@ const LOGIN_CARD_FALLBACK = ["email", "role", "code", "unit"];   // dipakai kala
 let reviewReqs = [];          // usulan Task Description yang menunggu keputusan akun ini (dari server)
 let reviewSwaps = [];         // pengajuan tukar Off / shift yang menunggu jawaban akun ini (dari server)
 let reviewResults = [];       // hasil pengajuan milik akun ini (disetujui / ditolak / dibatalkan), dari server
+let reviewInfo = [];          // pemberitahuan hanya-lihat (Authorized PIC / Section Head), dari server
 const RESULTS_SEEN_PREFIX = "srscSeenResults:";
 function resultsSeenSet(){
   try { return new Set(JSON.parse(localStorage.getItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase()) || "[]")); } catch (e){ return new Set(); }
 }
 function resultsUnseen(){ const seen = resultsSeenSet(); return reviewResults.filter(r => !seen.has(r.key)); }
+function infoUnseen(){ const seen = resultsSeenSet(); return reviewInfo.filter(r => !seen.has(r.key)); }
 function markResultsSeen(){
-  if (!reviewResults.length) return;
+  if (!reviewResults.length && !reviewInfo.length) return;
   try {
     const seen = resultsSeenSet();
     reviewResults.forEach(r => seen.add(r.key));
+    reviewInfo.forEach(r => seen.add(r.key));
     localStorage.setItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase(), JSON.stringify(Array.from(seen).slice(-300)));
   } catch (e){ /* penyimpanan browser dimatikan: pemberitahuan muncul lagi, tidak berbahaya */ }
 }
-const reviewTotal = () => reviewReqs.length + reviewSwaps.length + resultsUnseen().length;   // angka pada badge Requests
+const reviewTotal = () => reviewReqs.length + reviewSwaps.length + resultsUnseen().length + infoUnseen().length;   // angka pada badge Requests
 let lastLoginOpts = null;     // opsi terakhir renderLoginInfo, untuk menggambar ulang login card
 let reviewBusy = false;
 let reviewTimer = null;
@@ -7546,10 +7564,11 @@ async function refreshReviewRequests(){
     if (!d || !d.ok) return;
     const sig = (arr) => arr.map(x => (x.kind || "desc") + x.id + ":" + (x.stage || 1)).join("|");
     const rsig = (arr) => arr.map(x => x.key).join("|");
-    const changed = sig((d.requests || []).concat(d.swaps || [])) !== sig(reviewReqs.concat(reviewSwaps)) || rsig(d.results || []) !== rsig(reviewResults);
+    const changed = sig((d.requests || []).concat(d.swaps || [])) !== sig(reviewReqs.concat(reviewSwaps)) || rsig(d.results || []) !== rsig(reviewResults) || rsig(d.info || []) !== rsig(reviewInfo);
     reviewReqs = d.requests || [];
     reviewSwaps = d.swaps || [];
     reviewResults = d.results || [];
+    reviewInfo = d.info || [];
     if (changed){
       reviewBadgeSync();
       if (document.getElementById("review-modal-overlay").classList.contains("open") && !reviewBusy) renderReviewModal();
@@ -7622,6 +7641,19 @@ function renderReviewModal(){
       ${r.note ? `<div class="txt">Note: ${escapeHtml(r.note)}</div>` : ""}
     </div>`;
   }).join("");
+  const infoItems = infoUnseen().map(r => {
+    const what = r.kind === "off" ? "Saturday Off swap" : r.kind === "shift" ? "Shift swap" : "Task Description change";
+    const label = r.status === "pending" ? "In progress" : r.status === "cancelled" ? "Cancelled" : (r.statusLabel === "Rejected" ? "Rejected" : r.status === "declined" ? "Declined" : "Approved");
+    const trim = (t) => { t = String(t || ""); return t.length > 260 ? t.slice(0, 260) + "..." : t; };
+    return `<div class="result-item ${escapeHtml(r.status === "pending" ? "info" : r.status)}">
+      <div class="result-head"><span class="result-chip ${escapeHtml(r.status === "pending" ? "info" : r.status)}">${escapeHtml(label)}</span><b>${what}</b></div>
+      <div class="txt">${escapeHtml(r.who)}${r.with ? " \u2194 " + escapeHtml(r.with) : ""}${r.sheet ? " (" + escapeHtml(r.sheet) + ")" : ""}</div>
+      ${r.stage ? `<div class="txt">${escapeHtml(r.stage)}</div>` : ""}
+      ${r.when ? `<div class="txt">${escapeHtml(r.when)}</div>` : ""}
+      ${r.kind === "desc" && r.desc ? `<div class="txt">Proposed description: ${escapeHtml(trim(r.desc))}</div>` : ""}
+      ${r.reason ? `<div class="txt">Reason: ${escapeHtml(trim(r.reason))}</div>` : ""}
+    </div>`;
+  }).join("");
   const swapItems = reviewSwaps.map(q => {
     const isOff = q.kind === "off";
     const title = isOff
@@ -7647,8 +7679,9 @@ function renderReviewModal(){
     <div class="pic-status" id="review-status" style="margin-top:10px"></div>
     ${resultItems ? `<div class="profile-lbl" style="margin-top:12px">Updates on your requests</div>${resultItems}<div class="off-btns"><button type="button" class="profile-mini" data-results-act="read">Got it</button></div>` : ""}
     ${swapItems ? `<div class="profile-lbl" style="margin-top:12px">Swap requests waiting for your answer</div>${swapItems}` : ""}
+    ${infoItems ? `<div class="profile-lbl" style="margin-top:16px">For your information (view only)</div>${infoItems}<div class="off-btns"><button type="button" class="profile-mini" data-results-act="read">Got it</button></div>` : ""}
     ${items ? `${swapItems ? `<div class="profile-lbl" style="margin-top:16px">Task Description requests</div>` : ""}${items}` : ""}
-    ${(items || swapItems || resultItems) ? "" : `<div class="review-empty">No requests are waiting for your answer.</div>`}`;
+    ${(items || swapItems || resultItems || infoItems) ? "" : `<div class="review-empty">No requests are waiting for your answer.</div>`}`;
 }
 
 async function decideReview(id, decision, btn){
@@ -7719,7 +7752,7 @@ function openReviewModal(){
 }
 function closeReviewModal(){
   document.getElementById("review-modal-overlay").classList.remove("open");
-  if (resultsUnseen().length){ markResultsSeen(); reviewBadgeSync(); }   // hasil pengajuan yang sudah dilihat tidak muncul lagi
+  if (resultsUnseen().length || infoUnseen().length){ markResultsSeen(); reviewBadgeSync(); }   // hasil pengajuan yang sudah dilihat tidak muncul lagi
 }
 document.getElementById("review-modal-close").addEventListener("click", closeReviewModal);
 document.getElementById("review-modal-overlay").addEventListener("click", (e) => {

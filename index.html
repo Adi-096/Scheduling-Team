@@ -7530,8 +7530,12 @@ const RESULTS_SEEN_PREFIX = "srscSeenResults:";
 function resultsSeenSet(){
   try { return new Set(JSON.parse(localStorage.getItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase()) || "[]")); } catch (e){ return new Set(); }
 }
-function resultsUnseen(){ const seen = resultsSeenSet(); return reviewResults.filter(r => !seen.has(r.key)); }
-function infoUnseen(){ const seen = resultsSeenSet(); return reviewInfo.filter(r => !seen.has(r.key)); }
+function resultFresh(r){   // pemberitahuan lebih dari 7 hari tidak dihitung "baru" (langsung masuk Riwayat)
+  const t = Date.parse(String(r.at || "").replace(" ", "T"));
+  return !t || (Date.now() - t) < 7 * 864e5;
+}
+function resultsUnseen(){ const seen = resultsSeenSet(); return reviewResults.filter(r => !seen.has(r.key) && resultFresh(r)); }
+function infoUnseen(){ const seen = resultsSeenSet(); return reviewInfo.filter(r => !seen.has(r.key) && resultFresh(r)); }
 function markResultsSeen(){
   if (!reviewResults.length && !reviewInfo.length) return;
   try {
@@ -7545,14 +7549,14 @@ const reviewTotal = () => reviewReqs.length + reviewSwaps.length + resultsUnseen
 let lastLoginOpts = null;     // opsi terakhir renderLoginInfo, untuk menggambar ulang login card
 let reviewBusy = false;
 let reviewTimer = null;
+let reviewEnabled = false;   // akun ini penerima pengajuan / pemberitahuan: tombol Requests selalu tampil
 const REVIEW_POLL_MS = 60000;
 
 function reviewBadgeSync(){
-  const el = document.getElementById("acct-review");
+  if (!lastLoginOpts || lastLoginOpts.asPic) return;
   const n = reviewTotal();
-  const shown = !!el;
-  if ((n > 0) !== shown){ if (lastLoginOpts) renderLoginInfo(lastLoginOpts); return; }   // muncul / hilang -> gambar ulang
   const b = document.getElementById("acct-review-n");
+  if ((reviewEnabled && !document.getElementById("acct-review")) || ((n > 0) !== !!b)){ renderLoginInfo(lastLoginOpts); return; }   // tombol / badge muncul atau hilang -> gambar ulang
   if (b) b.textContent = n > 99 ? "99+" : String(n);
 }
 
@@ -7577,6 +7581,7 @@ async function refreshReviewRequests(){
 }
 
 function startReviewPolling(){
+  reviewEnabled = true;
   if (reviewTimer) return;
   refreshReviewRequests();
   reviewTimer = setInterval(() => { if (!document.hidden) refreshReviewRequests(); }, REVIEW_POLL_MS);
@@ -7626,7 +7631,7 @@ function renderReviewModal(){
         </div>
       </div>
     </div>`).join("");
-  const resultItems = resultsUnseen().map(r => {
+  const resultCard = (r, hist) => {
     const what = r.kind === "off" ? "Saturday Off swap" + (r.with ? " with " + escapeHtml(r.with) : "")
       : r.kind === "shift" ? "Shift swap" + (r.with ? " with " + escapeHtml(r.with) : "") : "Task Description change";
     const label = r.status === "cancelled" ? "Cancelled by Section Head" : (r.statusLabel === "Rejected" ? "Rejected" : r.status === "declined" ? "Declined" : "Approved");
@@ -7634,26 +7639,31 @@ function renderReviewModal(){
       ? (r.edited ? "Your Task Description was updated with the text below (edited by your reviewer)." : "Your Task Description was updated.")
       : "";
     return `<div class="result-item ${escapeHtml(r.status)}">
-      <div class="result-head"><span class="result-chip ${escapeHtml(r.status)}">${escapeHtml(label)}</span><b>${what}</b></div>
+      <div class="result-head"><span class="result-chip ${escapeHtml(r.status)}">${escapeHtml(label)}</span><b>${what}</b>${hist ? `<span class="txt" style="margin-left:auto;opacity:.65">${escapeHtml(String(r.at || "").slice(0, 10))}</span>` : ""}</div>
       ${extra ? `<div class="txt">${escapeHtml(extra)}</div>` : ""}
       ${r.when ? `<div class="txt">${escapeHtml(r.when)}</div>` : ""}
       ${r.by && r.status !== "approved" ? `<div class="txt">By: ${escapeHtml(r.by)}</div>` : ""}
       ${r.note ? `<div class="txt">Note: ${escapeHtml(r.note)}</div>` : ""}
     </div>`;
-  }).join("");
-  const infoItems = infoUnseen().map(r => {
+  };
+  const infoCard = (r, hist) => {
     const what = r.kind === "off" ? "Saturday Off swap" : r.kind === "shift" ? "Shift swap" : "Task Description change";
     const label = r.status === "pending" ? "In progress" : r.status === "cancelled" ? "Cancelled" : (r.statusLabel === "Rejected" ? "Rejected" : r.status === "declined" ? "Declined" : "Approved");
     const trim = (t) => { t = String(t || ""); return t.length > 260 ? t.slice(0, 260) + "..." : t; };
     return `<div class="result-item ${escapeHtml(r.status === "pending" ? "info" : r.status)}">
-      <div class="result-head"><span class="result-chip ${escapeHtml(r.status === "pending" ? "info" : r.status)}">${escapeHtml(label)}</span><b>${what}</b></div>
+      <div class="result-head"><span class="result-chip ${escapeHtml(r.status === "pending" ? "info" : r.status)}">${escapeHtml(label)}</span><b>${what}</b>${hist ? `<span class="txt" style="margin-left:auto;opacity:.65">${escapeHtml(String(r.at || "").slice(0, 10))}</span>` : ""}</div>
       <div class="txt">${escapeHtml(r.who)}${r.with ? " \u2194 " + escapeHtml(r.with) : ""}${r.sheet ? " (" + escapeHtml(r.sheet) + ")" : ""}</div>
       ${r.stage ? `<div class="txt">${escapeHtml(r.stage)}</div>` : ""}
       ${r.when ? `<div class="txt">${escapeHtml(r.when)}</div>` : ""}
       ${r.kind === "desc" && r.desc ? `<div class="txt">Proposed description: ${escapeHtml(trim(r.desc))}</div>` : ""}
       ${r.reason ? `<div class="txt">Reason: ${escapeHtml(trim(r.reason))}</div>` : ""}
     </div>`;
-  }).join("");
+  };
+  const resultItems = resultsUnseen().map(r => resultCard(r, false)).join("");
+  const infoItems = infoUnseen().map(r => infoCard(r, false)).join("");
+  const newKeys = new Set(resultsUnseen().concat(infoUnseen()).map(r => r.key));
+  const histItems = [].concat(reviewResults.filter(r => !newKeys.has(r.key)).map(r => ({ r, f: resultCard })), reviewInfo.filter(r => !newKeys.has(r.key)).map(r => ({ r, f: infoCard })))
+    .sort((x, y) => String(y.r.at || "").localeCompare(String(x.r.at || ""))).slice(0, 40).map(x => x.f(x.r, true)).join("");
   const swapItems = reviewSwaps.map(q => {
     const isOff = q.kind === "off";
     const title = isOff
@@ -7680,8 +7690,9 @@ function renderReviewModal(){
     ${resultItems ? `<div class="profile-lbl" style="margin-top:12px">Updates on your requests</div>${resultItems}<div class="off-btns"><button type="button" class="profile-mini" data-results-act="read">Got it</button></div>` : ""}
     ${swapItems ? `<div class="profile-lbl" style="margin-top:12px">Swap requests waiting for your answer</div>${swapItems}` : ""}
     ${infoItems ? `<div class="profile-lbl" style="margin-top:16px">For your information (view only)</div>${infoItems}<div class="off-btns"><button type="button" class="profile-mini" data-results-act="read">Got it</button></div>` : ""}
+    ${histItems ? `<div class="profile-lbl" style="margin-top:18px">History (last 30 days)</div>${histItems}` : ""}
     ${items ? `${swapItems ? `<div class="profile-lbl" style="margin-top:16px">Task Description requests</div>` : ""}${items}` : ""}
-    ${(items || swapItems || resultItems || infoItems) ? "" : `<div class="review-empty">No requests are waiting for your answer.</div>`}`;
+    ${(items || swapItems || resultItems || infoItems || histItems) ? "" : `<div class="review-empty">Nothing here yet. New requests and updates will appear here.</div>`}`;
 }
 
 async function decideReview(id, decision, btn){
@@ -7870,7 +7881,7 @@ function renderLoginInfo(opts){
   }
   // Notifikasi persetujuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.
   lastLoginOpts = opts;
-  if (reviewTotal() && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests<span class="notif-badge" id="acct-review-n">${reviewTotal() > 99 ? "99+" : reviewTotal()}</span></button>`);
+  if (reviewEnabled && !opts.asPic) parts.push(`<button type="button" class="acct-link" id="acct-review">Requests${reviewTotal() > 0 ? `<span class="notif-badge" id="acct-review-n">${reviewTotal() > 99 ? "99+" : reviewTotal()}</span>` : ""}</button>`);
   if (hasProfile){
     parts.push(`<button type="button" class="acct-link" id="acct-profile">View Profile</button>`);
   }

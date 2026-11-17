@@ -698,6 +698,15 @@
   #doc-modal-overlay.big .doc-actions{ margin-top:10px; }
   #doc-modal-overlay.big .doc-frame{ flex:1;min-height:0;height:auto;margin-top:10px; }
   #doc-modal-overlay.big .doc-loading{ margin:auto; }
+  #video-modal-overlay{ z-index:60; }
+  #video-modal-overlay .modal{ margin:auto;max-width:860px;text-align:center; }
+  #video-modal-overlay .modal h3{ text-align:center;padding:0 72px; }
+  .video-stage{ margin:14px auto 0; }
+  .video-stage.ratio{ position:relative;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden; }
+  .video-stage.ratio iframe{ position:absolute;inset:0;width:100%;height:100%;border:0; }
+  .video-stage video{ display:block;width:100%;max-height:70vh;background:#000;border-radius:10px; }
+  .video-note{ font-size:13.5px;line-height:1.55;padding:24px 12px;color:var(--ink-soft); }
+  #pic-video-hint[hidden]{ display:none; }
   #qr-canvas{ display:block;max-width:100%;height:auto;margin:14px auto 0;border:1px solid var(--line);border-radius:10px;background:#fff; }
   .qr-url{ font-size:12.5px;color:var(--ink-soft);word-break:break-all;margin-top:12px; }
   .pic-doc-box{ display:flex;flex-direction:column;gap:8px; }
@@ -1659,6 +1668,20 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="video-modal-overlay">
+  <div class="modal">
+    <button class="modal-close" id="video-modal-close" type="button">Tutup ✕</button>
+    <h3 id="video-modal-title"></h3>
+    <div class="note-actions" style="justify-content:center"><button type="button" class="pic-btn" id="video-edit" data-menu-edit="video" hidden>Edit this menu</button></div>
+    <div class="doc-desc" id="video-modal-desc" hidden></div>
+    <div class="video-stage" id="video-stage"></div>
+    <div class="qr-actions">
+      <a class="pic-btn primary" id="video-open" href="#" target="_blank" rel="noopener">Open video</a>
+      <button type="button" class="pic-btn" id="video-copy">Copy link</button>
+    </div>
+  </div>
+</div>
+
 <div class="gal-overlay" id="gal-overlay" role="dialog" aria-modal="true" aria-label="Image viewer">
   <div class="gal-top">
     <div class="gal-title" id="gal-title"></div>
@@ -2386,13 +2409,36 @@ function qrUrlOf(u){
   const m = /^qr:\/\/(https?:\/\/[^\s]+)$/i.exec(String(u || "").trim());
   return (m && m[1].length <= 300) ? m[1] : "";
 }
+// Menu Video: kolom link berisi  video://https://alamat-video  (tanpa file; diputar langsung di website bila didukung)
+function videoUrlOf(u){
+  const m = /^video:\/\/(https?:\/\/[^\s]+)$/i.exec(String(u || "").trim());
+  return (m && m[1].length <= 500) ? m[1] : "";
+}
+// Alamat video -> cara memutarnya: iframe (YouTube, Google Drive, Vimeo), file (.mp4 / .webm / .ogv / .m4v), atau link (dibuka di tab baru)
+function videoEmbedOf(u){
+  let x; try { x = new URL(u); } catch (e){ return { mode: "link", src: String(u || "") }; }
+  if (!/^https?:$/.test(x.protocol)) return { mode: "link", src: "" };
+  const host = x.hostname.replace(/^www\./, "").toLowerCase(), path = x.pathname;
+  const secs = (t) => { const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(String(t || "")); return m ? (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0)) : 0; };
+  const yt = (id) => { const st = secs(x.searchParams.get("t") || x.searchParams.get("start")); return { mode: "iframe", src: "https://www.youtube-nocookie.com/embed/" + id + "?rel=0" + (st ? "&start=" + st : "") }; };
+  let m;
+  if (host === "youtu.be" && (m = /^\/([\w-]{11})(?:$|\/)/.exec(path))) return yt(m[1]);
+  if (host === "youtube.com" || host === "m.youtube.com" || host === "youtube-nocookie.com"){
+    const id = x.searchParams.get("v") || ((m = /^\/(?:embed|shorts|live)\/([\w-]{11})/.exec(path)) ? m[1] : "");
+    if (/^[\w-]{11}$/.test(id)) return yt(id);
+  }
+  if (host === "drive.google.com" && (m = /^\/file\/d\/([\w-]+)/.exec(path))) return { mode: "iframe", src: "https://drive.google.com/file/d/" + m[1] + "/preview" };
+  if (host === "vimeo.com" && (m = /^\/(?:video\/)?(\d+)/.exec(path))) return { mode: "iframe", src: "https://player.vimeo.com/video/" + m[1] };
+  if (/\.(mp4|webm|ogv|m4v)$/i.test(path)) return { mode: "file", src: x.href };
+  return { mode: "link", src: x.href };
+}
 // Menu panduan Markdown (khusus Administrator): guide://leader/FILEID (Leader) atau guide://authpic/FILEID (Leader + Authorized PIC)
 function guideOf(u){
   const m = /^guide:\/\/(leader|authpic)\/([A-Za-z0-9_-]{10,})$/.exec(String(u || "").trim());
   return m ? { aud: m[1], id: m[2] } : null;
 }
 const GUIDE_CATEGORY = "Guideline";
-function displayUrlFor(u){ return (galleryIdsOf(u).length || noteIdOf(u) || docPartsOf(u) || qrUrlOf(u) || guideOf(u)) ? String(u).trim() : safeHttpUrl(u); }
+function displayUrlFor(u){ return (galleryIdsOf(u).length || noteIdOf(u) || docPartsOf(u) || qrUrlOf(u) || videoUrlOf(u) || guideOf(u)) ? String(u).trim() : safeHttpUrl(u); }
 
 // Atribut <a> untuk sebuah menu: link biasa (tab baru), carousel gambar, atau catatan.
 function menuLinkAttrs(l){
@@ -2400,6 +2446,7 @@ function menuLinkAttrs(l){
   if (l.guide) return `href="#" data-guide-id="${escapeHtml(l.guide.id)}" data-guide-title="${escapeHtml(l.name)}"`;
   if (l.note) return `href="#" data-note-id="${escapeHtml(l.note)}" data-note-title="${escapeHtml(l.name)}"`;
   if (l.doc) return `href="#" data-doc-id="${escapeHtml(l.doc.id)}" data-doc-ext="${escapeHtml(l.doc.ext)}" data-doc-title="${escapeHtml(l.name)}" data-doc-desc="${escapeHtml(l.desc || "")}"`;
+  if (l.video) return `href="#" data-video-url="${escapeHtml(l.video)}" data-video-title="${escapeHtml(l.name)}" data-video-desc="${escapeHtml(l.desc || "")}"`;
   if (l.qr) return `href="#" data-qr-url="${escapeHtml(l.qr)}" data-qr-title="${escapeHtml(l.name)}" data-qr-desc="${escapeHtml(l.desc || "")}"`;
   return `href="${escapeHtml(l.url)}" target="_blank" rel="noopener"`;
 }
@@ -2408,6 +2455,7 @@ function menuLinkBadge(l){
   if (l.guide) return `<span class="pic-img-badge">guide</span>`;
   if (l.note) return `<span class="pic-img-badge">note</span>`;
   if (l.doc) return `<span class="pic-img-badge">${escapeHtml(l.doc.ext)}</span>`;
+  if (l.video) return `<span class="pic-img-badge">video</span>`;
   if (l.qr) return `<span class="pic-img-badge">QR</span>`;
   return "";
 }
@@ -2452,6 +2500,7 @@ function mapServerLinks(arr){
     note: noteIdOf(l.rawUrl),          // menu catatan -> tampil sebagai teks
     doc: docPartsOf(l.rawUrl),         // menu dokumen -> dibuka langsung dari menu
     qr: qrUrlOf(l.rawUrl),             // menu QR -> tampil sebagai kode QR
+    video: videoUrlOf(l.rawUrl),       // menu Video -> diputar di website
     guide: guideOf(l.rawUrl),          // panduan Markdown (Administrator) -> dibaca di website
     rawUrl: l.rawUrl || "",
     desc: l.desc || "",
@@ -2878,8 +2927,10 @@ function picOwnFormHtml(formId, link, submitLabel){
         <option value="images"${picKindOf(link) === "images" ? " selected" : ""}>Type: Images (carousel inside the site)</option>
         <option value="notes"${picKindOf(link) === "notes" ? " selected" : ""}>Type: Note (text or .txt file shown in the site)</option>
         <option value="doc"${picKindOf(link) === "doc" ? " selected" : ""}>Type: Document (PDF, PowerPoint, Excel, Word)</option>
+        <option value="video"${picKindOf(link) === "video" ? " selected" : ""}>Type: Video (YouTube, Google Drive, Vimeo, or a video file link)</option>
       </select>
-      <input type="url" id="pic-f-url" placeholder="https://..." ${picKindOf(link) === "link" ? "required" : "disabled hidden"} value="${link && picKindOf(link) === "link" ? escapeHtml(link.rawUrl || link.url) : ""}">
+      <input type="url" id="pic-f-url" placeholder="https://..." ${(picKindOf(link) === "link" || picKindOf(link) === "video") ? "required" : "disabled hidden"} value="${link && (picKindOf(link) === "link" || picKindOf(link) === "video") ? escapeHtml(link.video || link.rawUrl || link.url) : ""}">
+      <p class="pic-hint" id="pic-video-hint"${picKindOf(link) === "video" ? "" : " hidden"}>Paste a YouTube, Google Drive, or Vimeo link, or a link to a video file (.mp4 / .webm). It plays inside the site.</p>
       ${picDocBoxHtml(link)}
       ${picNoteImgBoxHtml(link)}
       <input type="text" id="pic-f-desc" placeholder="Description (optional)" maxlength="300" value="${link ? escapeHtml(link.desc || "") : ""}">
@@ -2905,6 +2956,7 @@ function picKindOf(link){
   if (link && link.guide) return "guide";
   if (link && link.note) return "notes";
   if (link && link.doc) return "doc";
+  if (link && link.video) return "video";
   if (link && link.qr) return "qr";
   return "link";
 }
@@ -3054,7 +3106,7 @@ function applyPicGuideFields(on){
 function findMenuLinkFor(kind, key){
   const test = {
     note: l => l.note === key, gallery: l => l.gallery && l.gallery[0] === key, doc: l => l.doc && l.doc.id === key,
-    guide: l => l.guide && l.guide.id === key, qr: l => l.qr === key
+    guide: l => l.guide && l.guide.id === key, qr: l => l.qr === key, video: l => l.video === key
   }[kind];
   if (!test) return null;
   for (let idx = 0; idx < sectionMeta.length; idx++){
@@ -3083,7 +3135,7 @@ document.addEventListener("click", (e) => {
   const f = findMenuLinkFor(b.dataset.menuEdit, b.dataset.editKey);
   if (!canEditMenuLink(f)) return;
   e.preventDefault();
-  [NoteViewer, GuideViewer, DocViewer, QrViewer, Gallery].forEach(v => { try { v.close(); } catch (x){} });
+  [NoteViewer, GuideViewer, DocViewer, QrViewer, VideoViewer, Gallery].forEach(v => { try { v.close(); } catch (x){} });
   openPicMenu(f.idx);
   startPicEdit(f.i);
 });
@@ -3144,12 +3196,15 @@ function applyPicType(){
   if (!t) return;
   const k = t.value;
   const img = k === "images", note = k === "notes", doc = k === "doc", qr = k === "qr", guide = k === "guide";
-  const needsUrl = k === "link" || qr;
+  const video = k === "video";
+  const needsUrl = k === "link" || qr || video;
   const url = document.getElementById("pic-f-url");
   const box = document.getElementById("pic-img-box");
   const nbox = document.getElementById("pic-note-box");
   const dbox = document.getElementById("pic-doc-box");
   const qhint = document.getElementById("pic-qr-hint");
+  const vhint = document.getElementById("pic-video-hint");
+  if (vhint) vhint.hidden = !video;
   if (box) box.hidden = !img;
   if (nbox) nbox.hidden = !note;
   if (dbox) dbox.hidden = !doc;
@@ -3159,7 +3214,7 @@ function applyPicType(){
   if (url){
     url.hidden = !needsUrl; url.disabled = !needsUrl; url.required = needsUrl;
     if (/^(gallery|note|doc|guide):\/\//.test(url.value)) url.value = "";
-    if (qr) url.value = url.value.replace(/^qr:\/\//, "");
+    if (needsUrl) url.value = url.value.replace(/^(qr|video):\/\//, "");
   }
   if (img) renderPicImgList();
   if (note) initPicNoteUi();
@@ -3977,6 +4032,50 @@ const QrViewer = (() => {
   return { open, close };
 })();
 
+// Menu Video: diputar di dalam website (YouTube, Google Drive, Vimeo, berkas video). Alamat lain: tombol "Open video" membuka tab baru.
+const VideoViewer = (() => {
+  let curUrl = "";
+  const $ = (id) => document.getElementById(id);
+  function open(title, url, desc){
+    curUrl = url;
+    $("video-modal-title").textContent = title || "Video";
+    const d = $("video-modal-desc"); d.textContent = desc || ""; d.hidden = !desc;
+    const v = videoEmbedOf(url), stage = $("video-stage");
+    stage.innerHTML = ""; stage.className = "video-stage";
+    if (v.mode === "iframe"){
+      stage.classList.add("ratio");
+      const f = document.createElement("iframe");
+      f.src = v.src; f.title = title || "Video"; f.loading = "lazy"; f.allowFullscreen = true;
+      f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+      f.referrerPolicy = "strict-origin-when-cross-origin";
+      stage.appendChild(f);
+    } else if (v.mode === "file"){
+      const el = document.createElement("video");
+      el.src = v.src; el.controls = true; el.preload = "metadata"; el.playsInline = true;
+      el.addEventListener("error", () => { stage.innerHTML = '<p class="video-note">This video cannot be played inside the site. Please use "Open video".</p>'; });
+      stage.appendChild(el);
+    } else {
+      stage.innerHTML = '<p class="video-note">This video link cannot be played inside the site. Please use "Open video" to watch it in a new tab.</p>';
+    }
+    $("video-open").href = safeHttpUrl(url) || "#";
+    $("video-copy").textContent = "Copy link";
+    $("video-modal-overlay").classList.add("open");
+  }
+  function close(){ $("video-modal-overlay").classList.remove("open"); $("video-stage").innerHTML = ""; }   // mengosongkan pemutar = video berhenti
+  const isOpen = () => $("video-modal-overlay").classList.contains("open");
+  document.addEventListener("click", (e) => {
+    if (!isOpen()) return;
+    if (e.target.closest("#video-modal-close") || e.target.id === "video-modal-overlay"){ close(); return; }
+    if (e.target.closest("#video-copy")){
+      const b = $("video-copy");
+      const done = () => { b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy link"; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(curUrl).then(done).catch(() => {});
+    }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && isOpen()) close(); });
+  return { open, close };
+})();
+
 const Gallery = (() => {
   let ids = [], idx = 0, token = 0, zoomed = false, startX = null;
   const $ = (id) => document.getElementById(id);
@@ -4122,11 +4221,13 @@ function picFormHtml(idx, formId, link, submitLabel){
         <option value="images"${picKindOf(link) === "images" ? " selected" : ""}>Type: Images (carousel inside the site)</option>
         <option value="notes"${picKindOf(link) === "notes" ? " selected" : ""}>Type: Note (text or .txt file shown in the site)</option>
         <option value="doc"${picKindOf(link) === "doc" ? " selected" : ""}>Type: Document (PDF, PowerPoint, Excel, Word)</option>
+        <option value="video"${picKindOf(link) === "video" ? " selected" : ""}>Type: Video (YouTube, Google Drive, Vimeo, or a video file link)</option>
         <option value="qr"${picKindOf(link) === "qr" ? " selected" : ""}>Type: QR code (made from a link)</option>
         ${(viewPerms.isAdmin || picKindOf(link) === "guide") ? `<option value="guide"${picKindOf(link) === "guide" ? " selected" : ""}>Type: Guideline (Markdown .md) - Administrator only</option>` : ""}
       </select>
-      <input type="url" id="pic-f-url" placeholder="https://..." ${(picKindOf(link) === "link" || picKindOf(link) === "qr") ? "required" : "disabled hidden"} value="${link ? escapeHtml(link.qr || link.rawUrl || link.url) : ""}">
+      <input type="url" id="pic-f-url" placeholder="https://..." ${(picKindOf(link) === "link" || picKindOf(link) === "qr" || picKindOf(link) === "video") ? "required" : "disabled hidden"} value="${link ? escapeHtml(link.qr || link.video || link.rawUrl || link.url) : ""}">
       <p class="pic-hint" id="pic-qr-hint"${picKindOf(link) === "qr" ? "" : " hidden"}>A QR code is generated from this link. Users scan it from the site, or open and download it.</p>
+      <p class="pic-hint" id="pic-video-hint"${picKindOf(link) === "video" ? "" : " hidden"}>Paste a YouTube, Google Drive, or Vimeo link, or a link to a video file (.mp4 / .webm). It plays inside the site; other links open in a new tab. Google Drive videos must be shared with the viewers.</p>
       ${picDocBoxHtml(link)}
       <div class="pic-guide-box" id="pic-guide-box"${picKindOf(link) === "guide" ? "" : " hidden"}>
         <input type="file" id="pic-guide-input" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden>
@@ -4483,6 +4584,7 @@ function readPicForm(){
   const isNote = !!typeEl && typeEl.value === "notes";
   const isDoc = !!typeEl && typeEl.value === "doc";
   const isQr = !!typeEl && typeEl.value === "qr";
+  const isVideo = !!typeEl && typeEl.value === "video";
   const url  = (isImg || isNote || isDoc || isGuide) ? "" : document.getElementById("pic-f-url").value.trim();
   const desc = document.getElementById("pic-f-desc").value.trim();
   const visEl = document.getElementById("pic-f-vis");
@@ -4536,12 +4638,13 @@ function readPicForm(){
     setPicStatus("err", "Please enter a valid URL starting with https://");
     return null;
   }
+  if (isVideo && url.length > 500){ setPicStatus("err", "The video link is too long (max 500 characters)."); return null; }
   if (isQr && url.length > 300){ setPicStatus("err", "The link is too long for a QR code (max 300 characters)."); return null; }
   if (picOwnCreate){   // link pribadi: server memaksa isian lain; tampilan lokal mengikuti
     const me = getCurrentUserEmail();
-    return { name, url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None", ogStart: status === "PIC Only" ? ogStart : "", ogDur: status === "PIC Only" ? ogDur : "never", ogUnit, share, images: isImg, notes: isNote, doc: isDoc, qr: false, guide: false, guideAud: "leader" };
+    return { name, url: isVideo ? "video://" + url : url, desc, vis: "", staff: "", cat: "My Links", status: status === "PIC Only" ? "PIC Only" : "", only: me, og: "None", ogStart: status === "PIC Only" ? ogStart : "", ogDur: status === "PIC Only" ? ogDur : "never", ogUnit, share, images: isImg, notes: isNote, doc: isDoc, qr: false, video: isVideo, guide: false, guideAud: "leader" };
   }
-  return { name, url: isQr ? "qr://" + url : url, desc, vis, staff, cat, status, only, share, og, ogStart, ogDur, ogUnit, images: isImg, notes: isNote, doc: isDoc, qr: isQr, guide: isGuide, guideAud };
+  return { name, url: isQr ? "qr://" + url : (isVideo ? "video://" + url : url), desc, vis, staff, cat, status, only, share, og, ogStart, ogDur, ogUnit, images: isImg, notes: isNote, doc: isDoc, qr: isQr, video: isVideo, guide: isGuide, guideAud };
 }
 
 async function addPicLink(){
@@ -4570,7 +4673,7 @@ async function addPicLink(){
       const addSc = picSchedLocal(f, null);
       meta.links.push({
         owner: normSheetName(meta.sheetKey), name: f.name, rawName: f.name,
-        url: displayUrlFor(f.url), gallery: galleryIdsOf(f.url), note: noteIdOf(f.url), doc: docPartsOf(f.url), qr: qrUrlOf(f.url), guide: guideOf(f.url), rawUrl: f.url, desc: f.desc,
+        url: displayUrlFor(f.url), gallery: galleryIdsOf(f.url), note: noteIdOf(f.url), doc: docPartsOf(f.url), qr: qrUrlOf(f.url), video: videoUrlOf(f.url), guide: guideOf(f.url), rawUrl: f.url, desc: f.desc,
         visibleAll: v.all, visibleTo: v.list, staffVisible: f.staff === "Yes", category: f.cat, pinned: !!f.status && !addSc.scheduled, pinMode: addSc.scheduled ? "" : (LINK_STATUS_MODE[f.status] || ""), pinModeStored: LINK_STATUS_MODE[f.status] || "", picOnly: f.status === "PIC Only" && !addSc.scheduled, expiresOn: addSc.end, startsOn: addSc.start, ogScheduled: addSc.scheduled, ogExpired: false, ogScope: ({ "None": "none", "Section Only": "only", "All Section": "section", "All Career": "career" })[f.og] || "none", onGoing: true, onlyFor: f.only && f.only !== "__keep__" ? f.only.split(/[\s,;]+/).filter(Boolean) : [], partnerShare: f.share === "Yes"
       });
       picMode = "view";
@@ -4610,7 +4713,7 @@ async function editPicLink(){
       setPicStatus("err", (data && data.error) || "Failed to update menu.");
     } else {
       link.name = f.name; link.rawName = f.name;
-      link.url = displayUrlFor(f.url); link.rawUrl = f.url; link.gallery = galleryIdsOf(f.url); link.note = noteIdOf(f.url); link.doc = docPartsOf(f.url); link.qr = qrUrlOf(f.url); link.guide = guideOf(f.url);
+      link.url = displayUrlFor(f.url); link.rawUrl = f.url; link.gallery = galleryIdsOf(f.url); link.note = noteIdOf(f.url); link.doc = docPartsOf(f.url); link.qr = qrUrlOf(f.url); link.video = videoUrlOf(f.url); link.guide = guideOf(f.url);
       link.desc = f.desc;
       link.staffVisible = f.staff === "Yes";
       link.category = f.cat;
@@ -4862,6 +4965,13 @@ document.addEventListener("click", (e) => {
     e.preventDefault();
     DocViewer.open(dc.dataset.docTitle || "", dc.dataset.docId, dc.dataset.docExt || "", dc.dataset.docDesc || "");
     setViewerEdit("doc-edit", "doc", dc.dataset.docId);
+    return;
+  }
+  const vc = e.target.closest && e.target.closest("[data-video-url]");
+  if (vc){
+    e.preventDefault();
+    VideoViewer.open(vc.dataset.videoTitle || "", vc.dataset.videoUrl, vc.dataset.videoDesc || "");
+    setViewerEdit("video-edit", "video", vc.dataset.videoUrl);
     return;
   }
   const qc = e.target.closest && e.target.closest("[data-qr-url]");

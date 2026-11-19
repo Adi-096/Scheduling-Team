@@ -2430,6 +2430,14 @@ function videoEmbedOf(u){
   if (host === "drive.google.com" && (m = /^\/file\/d\/([\w-]+)/.exec(path))) return { mode: "iframe", src: "https://drive.google.com/file/d/" + m[1] + "/preview" };
   if (host === "vimeo.com" && (m = /^\/(?:video\/)?(\d+)/.exec(path))) return { mode: "iframe", src: "https://player.vimeo.com/video/" + m[1] };
   if (/\.(mp4|webm|ogv|m4v)$/i.test(path)) return { mode: "file", src: x.href };
+  if (host.endsWith(".sharepoint.com")){
+    // Kode "Embed" dari Stream / SharePoint (embed.aspx) memang dibuat untuk disematkan di situs lain.
+    if (/\/_layouts\/15\/embed\.aspx$/i.test(path)) return { mode: "iframe", src: x.href };
+    // Link berbagi SharePoint mengarah ke halaman penampil (tidak boleh disematkan). Dicoba diputar langsung sebagai berkas
+    // lewat download=1; bila SharePoint menolak, pemutar otomatis memberi tombol "Open video" (tab baru).
+    const d = new URL(x.href); d.searchParams.set("download", "1");
+    return { mode: "file", src: d.href, tryOnly: true };
+  }
   return { mode: "link", src: x.href };
 }
 // Menu panduan Markdown (khusus Administrator): guide://leader/FILEID (Leader) atau guide://authpic/FILEID (Leader + Authorized PIC)
@@ -4052,7 +4060,12 @@ const VideoViewer = (() => {
     } else if (v.mode === "file"){
       const el = document.createElement("video");
       el.src = v.src; el.controls = true; el.preload = "metadata"; el.playsInline = true;
-      el.addEventListener("error", () => { stage.innerHTML = '<p class="video-note">This video cannot be played inside the site. Please use "Open video".</p>'; });
+      const giveUp = () => { if (stage.contains(el)) stage.innerHTML = '<p class="video-note">This video cannot be played inside the site. Please use "Open video" to watch it in a new tab.</p>'; };
+      el.addEventListener("error", giveUp);
+      if (v.tryOnly){   // link SharePoint: bila tidak ada data video dalam 12 detik, anggap tidak bisa diputar di sini
+        const timer = setTimeout(() => { if (el.readyState === 0) giveUp(); }, 12000);
+        el.addEventListener("loadedmetadata", () => clearTimeout(timer));
+      }
       stage.appendChild(el);
     } else {
       stage.innerHTML = '<p class="video-note">This video link cannot be played inside the site. Please use "Open video" to watch it in a new tab.</p>';

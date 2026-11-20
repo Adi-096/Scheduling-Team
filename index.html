@@ -489,6 +489,9 @@
   .st-tabs{ display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 8px;border-bottom:1px solid var(--line);padding-bottom:10px; }
   .st-tabs button{ font:inherit;font-size:13px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer; }
   .st-tabs button.on{ background:#0B3556;border-color:#0B3556;color:#fff; }
+  .st-tabs button.st-launch{ border-style:dashed; }
+  .st-tabs .st-ext{ font-size:11px;opacity:.6;margin-left:4px; }
+  .st-sep{ width:1px;align-self:stretch;background:var(--line);margin:0 4px; }
   .st-scroll{ overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin-top:8px; }
   .st-table{ border-collapse:collapse;width:100%;min-width:1100px;font-size:12.5px; }
   .st-table th, .st-table td{ padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle;text-align:left; }
@@ -6025,7 +6028,7 @@ function swapRulesHtml(){
   const d = schedOff;
   if (!d || !d.swapRules) return "";   // hanya dikirim server untuk Administrator
   if (!swapRulesDraft) swapRulesDraft = JSON.parse(JSON.stringify(d.swapRules));
-  return `<div class="profile-block" style="margin-top:14px"><div class="profile-sec">Swap rules (Administrator only)</div>
+  return `<div class="profile-block" id="swap-rules-block" style="margin-top:14px"><div class="profile-sec">Swap rules (Administrator only)</div>
     <div class="profile-hint" style="margin:0 0 6px">Both PICs must be in the same Section and in different teams. The PIC who is asked to swap always has to approve.</div>
     ${swapTableHtml("allow", "Who may request a swap with whom", "Read each row as: the requester (left) may swap with the checked roles (top).")}
     ${swapTableHtml("declare", "Agreement required", "When checked, the requester must tick an agreement box before the request can be sent (only for pairs allowed above).")}
@@ -6980,8 +6983,10 @@ const AdminSettings = (() => {
   const SCOPE = { all: "All", career: "Own Career", assigned: "Assigned Section", own: "Own Only", none: "None" };
   const HOME = { all: "All Sections", career: "Career + All Sub-Sections", single: "Single Section" };
   const LOGIN = [["email", "Email"], ["role", "Role"], ["job", "Job"], ["code", "Code"], ["unit", "Unit"]];
-  const TABS = [["tools", "Tools"], ["policy", "Role Policy"], ["master", "Master"], ["dosen", "Data Dosen"]];
-  let data = null, tab = "tools", busy = false, orig = {};
+  // Tab "launch" membuka jendela alat yang sudah ada (Settings ditutup dulu); tab lain tampil di halaman Settings ini.
+  const TABS = [["off", "Off Schedule", 1], ["shift", "Shift Schedule", 1], ["partners", "Task Partners", 1], ["swap", "Swap rules", 1], ["intro", "Welcome Tour", 1],
+                ["policy", "Role Policy"], ["master", "Master"], ["dosen", "Data Dosen"]];
+  let data = null, tab = "policy", busy = false, orig = {};
 
   function setStatus(kind, msg){ const el = $("st-status"); if (!el) return; el.className = "pic-status" + (kind ? " " + kind : ""); el.textContent = msg || ""; }
   const esc = (t) => escapeHtml(String(t == null ? "" : t));
@@ -7093,26 +7098,6 @@ const AdminSettings = (() => {
   }
 
   // ---- lainnya ----
-  function toolsHtml(){
-    const o = lastLoginOpts || {};
-    const canOff = !!o.canManageOff && !o.asPic, canShift = !!o.canManageShift && !o.asPic, canPartner = !!o.canAddPartner;
-    const tool = (title, text, act, ok, label, why) => `<div class="st-card"><h4>${title}</h4><p class="st-note">${text}</p>
-      <div class="st-actions">${ok ? `<button type="button" class="pic-btn primary" data-st-act="${act}">${label}</button>` : `<span class="st-note">${why}</span>`}</div></div>`;
-    const sim = "Not available while a PIC is being simulated (As PIC).";
-    return `<p class="st-note">Everyday tools (they used to be in the top bar), plus the editors for the Welcome Tour and the swap rules. The simulation selectors (Career, Section, As PIC) still apply.</p>
-      <div class="st-grid">
-      ${tool("Off Schedule", "Saturday Off and Non-off weeks, the team of each PIC, and how long PICs can see their Saturday Off.", "open-off", canOff, "Open Off Schedule", sim)}
-      ${tool("Shift Schedule", "Morning, Normal, and Afternoon shifts, and the weekly rotation for each section.", "open-shift", canShift, "Open Shift Schedule", sim)}
-      ${tool("Task Partners", "Add or manage the Task Partners of a PIC.", "open-partners", canPartner, "Open Task Partners", "Not available for the current account or simulation.")}
-      ${tool("Welcome Tour and role introductions", "Turn the popup on or off, choose who receives it, edit every step, and choose which roles see each step. This is where each role's introduction is written.", "open-intro", true, "Open the Welcome Tour editor", "")}
-      ${tool("Swap rules", "Who may swap a Saturday Off with whom, which pairs must tick the agreement, and the agreement sentence. It is at the bottom of the Off Schedule window.", "open-swaprules", canOff, "Open Off Schedule", sim)}
-      <div class="st-card"><h4>Guideline menus</h4>
-        <p class="st-note">Markdown guides for leaders (or leaders and Authorized PICs): Our Links &gt; Add menu &gt; Type: Guideline.</p></div>
-      <div class="st-card"><h4>Logs and other sheets</h4>
-        <p class="st-note">Sign-in and activity logs, task requests, swap requests, and schedules stay in the spreadsheet.</p>
-        <div class="st-actions"><a class="pic-btn" href="${esc(safeHttpUrl(data.url) || "#")}" target="_blank" rel="noopener">Open spreadsheet</a></div></div>
-    </div>`;
-  }
   function dosenHtml(){
     return `<p class="st-note">Lecturer IDs that are allowed to sign in as a lecturer. One ID per line (letters, numbers, . _ - only). Duplicates are removed. <b id="st-dosen-n"></b></p>
       <textarea id="st-dosen" class="st-field" style="width:100%;box-sizing:border-box;min-height:300px;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)">${esc((data.dosen || []).join("\n"))}</textarea>
@@ -7122,8 +7107,10 @@ const AdminSettings = (() => {
   const dosenIds = () => (($("st-dosen") || {}).value || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
 
   function render(){
-    $("st-tabs").innerHTML = TABS.map(t => `<button type="button" role="tab" data-st-tab="${t[0]}" class="${t[0] === tab ? "on" : ""}">${t[1]}</button>`).join("");
-    $("st-body").innerHTML = tab === "policy" ? policyHtml() : tab === "master" ? masterHtml() : tab === "dosen" ? dosenHtml() : toolsHtml();
+    $("st-tabs").innerHTML = TABS.map((t, i) => (i > 0 && !t[2] && TABS[i - 1][2] ? `<span class="st-sep" aria-hidden="true"></span>` : "") + (t[2]
+      ? `<button type="button" class="st-launch" data-st-launch="${t[0]}" title="Opens in its own window">${t[1]}<span class="st-ext" aria-hidden="true">\u2197</span></button>`
+      : `<button type="button" role="tab" data-st-tab="${t[0]}" class="${t[0] === tab ? "on" : ""}">${t[1]}</button>`)).join("");
+    $("st-body").innerHTML = tab === "master" ? masterHtml() : tab === "dosen" ? dosenHtml() : policyHtml();
     if (tab === "policy") orig.policy = readPolicy();
     if (tab === "master") orig.master = readMaster();
     if (tab === "dosen") orig.dosen = dosenIds().join("\n");
@@ -7197,8 +7184,32 @@ const AdminSettings = (() => {
     await run("adminDosenSave", { ids: ids });
   }
 
+  const hasUnsaved = () => { const s = $("st-save"); return !!s && !s.disabled; };
+  function scrollToSwapRules(){   // panel Swap rules muncul setelah data Off Schedule dimuat
+    let n = 0;
+    const t = setInterval(() => {
+      const el = document.getElementById("swap-rules-block");
+      if (el){ clearInterval(t); el.scrollIntoView({ block: "start", behavior: "smooth" }); }
+      else if (++n > 40) clearInterval(t);
+    }, 250);
+  }
+  function launch(k){
+    const o = lastLoginOpts || {};
+    const sim = "Not available while a PIC is being simulated (As PIC).";
+    if ((k === "off" || k === "swap") && !(o.canManageOff && !o.asPic)){ setStatus("err", sim); return; }
+    if (k === "shift" && !(o.canManageShift && !o.asPic)){ setStatus("err", sim); return; }
+    if (k === "partners" && !o.canAddPartner){ setStatus("err", "Task Partners is not available for the current account or simulation."); return; }
+    if (hasUnsaved() && !confirm("You have unsaved changes on this tab. Leave without saving?")) return;
+    close();
+    if (k === "off") openSched("off");
+    else if (k === "shift") openSched("shift");
+    else if (k === "partners") openPartners();
+    else if (k === "intro") openIntroAdmin();
+    else if (k === "swap"){ openSched("off"); scrollToSwapRules(); }
+  }
+
   function open(){
-    tab = "tools"; data = null;
+    tab = "policy"; data = null;
     $("st-body").innerHTML = ""; $("st-tabs").innerHTML = "";
     $("settings-overlay").classList.add("open");
     load();
@@ -7210,6 +7221,8 @@ const AdminSettings = (() => {
     if (!isOpen()) return;
     if (e.target.id === "settings-overlay" || e.target.closest("#st-close")){ close(); return; }
     if (e.target.closest("#st-reload")){ location.reload(); return; }
+    const ln = e.target.closest("[data-st-launch]");
+    if (ln){ launch(ln.dataset.stLaunch); return; }
     const t = e.target.closest("[data-st-tab]");
     if (t){
       if (t.dataset.stTab !== tab && data){
@@ -7225,10 +7238,6 @@ const AdminSettings = (() => {
     else if (act === "save-master") saveMaster();
     else if (act === "save-dosen") saveDosen();
     else if (act === "discard"){ setStatus("", ""); render(); }
-    else if (act === "open-intro"){ close(); openIntroAdmin(); }
-    else if (act === "open-swaprules" || act === "open-off"){ close(); openSched("off"); }
-    else if (act === "open-shift"){ close(); openSched("shift"); }
-    else if (act === "open-partners"){ close(); openPartners(); }
   });
   const onEdit = (e) => { if (isOpen() && e.target.closest && e.target.closest("#st-body")) refreshDirty(); };
   document.addEventListener("input", onEdit);

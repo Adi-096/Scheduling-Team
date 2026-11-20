@@ -6980,8 +6980,8 @@ const AdminSettings = (() => {
   const SCOPE = { all: "All", career: "Own Career", assigned: "Assigned Section", own: "Own Only", none: "None" };
   const HOME = { all: "All Sections", career: "Career + All Sub-Sections", single: "Single Section" };
   const LOGIN = [["email", "Email"], ["role", "Role"], ["job", "Job"], ["code", "Code"], ["unit", "Unit"]];
-  const TABS = [["policy", "Role Policy"], ["master", "Master"], ["intro", "Welcome Tour & rules"], ["dosen", "Data Dosen"]];
-  let data = null, tab = "policy", busy = false, orig = {};
+  const TABS = [["tools", "Tools"], ["policy", "Role Policy"], ["master", "Master"], ["dosen", "Data Dosen"]];
+  let data = null, tab = "tools", busy = false, orig = {};
 
   function setStatus(kind, msg){ const el = $("st-status"); if (!el) return; el.className = "pic-status" + (kind ? " " + kind : ""); el.textContent = msg || ""; }
   const esc = (t) => escapeHtml(String(t == null ? "" : t));
@@ -7093,14 +7093,19 @@ const AdminSettings = (() => {
   }
 
   // ---- lainnya ----
-  function introHtml(){
-    return `<div class="st-grid">
-      <div class="st-card"><h4>Welcome Tour and role introductions</h4>
-        <p class="st-note">Turn the popup on or off, choose who receives it, edit every step, and choose which roles see each step. This is where each role's introduction is written.</p>
-        <div class="st-actions"><button type="button" class="pic-btn primary" data-st-act="open-intro">Open the Welcome Tour editor</button></div></div>
-      <div class="st-card"><h4>Swap rules</h4>
-        <p class="st-note">Who may swap a Saturday Off with whom, which pairs must tick the agreement, and the agreement sentence. It is at the bottom of the Off Schedule window.</p>
-        <div class="st-actions"><button type="button" class="pic-btn primary" data-st-act="open-swaprules">Open Off Schedule</button></div></div>
+  function toolsHtml(){
+    const o = lastLoginOpts || {};
+    const canOff = !!o.canManageOff && !o.asPic, canShift = !!o.canManageShift && !o.asPic, canPartner = !!o.canAddPartner;
+    const tool = (title, text, act, ok, label, why) => `<div class="st-card"><h4>${title}</h4><p class="st-note">${text}</p>
+      <div class="st-actions">${ok ? `<button type="button" class="pic-btn primary" data-st-act="${act}">${label}</button>` : `<span class="st-note">${why}</span>`}</div></div>`;
+    const sim = "Not available while a PIC is being simulated (As PIC).";
+    return `<p class="st-note">Everyday tools (they used to be in the top bar), plus the editors for the Welcome Tour and the swap rules. The simulation selectors (Career, Section, As PIC) still apply.</p>
+      <div class="st-grid">
+      ${tool("Off Schedule", "Saturday Off and Non-off weeks, the team of each PIC, and how long PICs can see their Saturday Off.", "open-off", canOff, "Open Off Schedule", sim)}
+      ${tool("Shift Schedule", "Morning, Normal, and Afternoon shifts, and the weekly rotation for each section.", "open-shift", canShift, "Open Shift Schedule", sim)}
+      ${tool("Task Partners", "Add or manage the Task Partners of a PIC.", "open-partners", canPartner, "Open Task Partners", "Not available for the current account or simulation.")}
+      ${tool("Welcome Tour and role introductions", "Turn the popup on or off, choose who receives it, edit every step, and choose which roles see each step. This is where each role's introduction is written.", "open-intro", true, "Open the Welcome Tour editor", "")}
+      ${tool("Swap rules", "Who may swap a Saturday Off with whom, which pairs must tick the agreement, and the agreement sentence. It is at the bottom of the Off Schedule window.", "open-swaprules", canOff, "Open Off Schedule", sim)}
       <div class="st-card"><h4>Guideline menus</h4>
         <p class="st-note">Markdown guides for leaders (or leaders and Authorized PICs): Our Links &gt; Add menu &gt; Type: Guideline.</p></div>
       <div class="st-card"><h4>Logs and other sheets</h4>
@@ -7118,7 +7123,7 @@ const AdminSettings = (() => {
 
   function render(){
     $("st-tabs").innerHTML = TABS.map(t => `<button type="button" role="tab" data-st-tab="${t[0]}" class="${t[0] === tab ? "on" : ""}">${t[1]}</button>`).join("");
-    $("st-body").innerHTML = tab === "policy" ? policyHtml() : tab === "master" ? masterHtml() : tab === "intro" ? introHtml() : dosenHtml();
+    $("st-body").innerHTML = tab === "policy" ? policyHtml() : tab === "master" ? masterHtml() : tab === "dosen" ? dosenHtml() : toolsHtml();
     if (tab === "policy") orig.policy = readPolicy();
     if (tab === "master") orig.master = readMaster();
     if (tab === "dosen") orig.dosen = dosenIds().join("\n");
@@ -7193,7 +7198,7 @@ const AdminSettings = (() => {
   }
 
   function open(){
-    tab = "policy"; data = null;
+    tab = "tools"; data = null;
     $("st-body").innerHTML = ""; $("st-tabs").innerHTML = "";
     $("settings-overlay").classList.add("open");
     load();
@@ -7221,7 +7226,9 @@ const AdminSettings = (() => {
     else if (act === "save-dosen") saveDosen();
     else if (act === "discard"){ setStatus("", ""); render(); }
     else if (act === "open-intro"){ close(); openIntroAdmin(); }
-    else if (act === "open-swaprules"){ close(); const b = $("acct-offsched"); if (b) b.click(); }
+    else if (act === "open-swaprules" || act === "open-off"){ close(); openSched("off"); }
+    else if (act === "open-shift"){ close(); openSched("shift"); }
+    else if (act === "open-partners"){ close(); openPartners(); }
   });
   const onEdit = (e) => { if (isOpen() && e.target.closest && e.target.closest("#st-body")) refreshDirty(); };
   document.addEventListener("input", onEdit);
@@ -8296,15 +8303,18 @@ function renderLoginInfo(opts){
     parts.push(`<button type="button" class="acct-link" id="acct-intro-admin">Edit Intro</button>`);
     parts.push(`<button type="button" class="acct-link" id="acct-settings">Settings</button>`);
   }
+  // Administrator (tanpa simulasi role): Task Partners, Off Schedule, dan Shift Schedule dibuka dari Settings > Tools.
+  // Saat Administrator memakai "View as" role lain, bar tampil seperti bar role itu.
+  const adminTools = !!opts.introAdmin && (!opts.viewAs || opts.viewAs === "developer");
   // Task Partners: Authorized PIC ke atas (pilih PIC utama), dan Registered PIC (untuk dirinya sendiri).
-  if (opts.canAddPartner){
+  if (opts.canAddPartner && !adminTools){
     parts.push(`<button type="button" class="acct-link" id="acct-partners">Task Partners</button>`);
   }
   // Off Schedule: Authorized PIC dan Leader mengatur pekan Off / Non-off (formulir terbuka di View Profile).
-  if (opts.canManageOff && !opts.asPic){
+  if (opts.canManageOff && !opts.asPic && !adminTools){
     parts.push(`<button type="button" class="acct-link" id="acct-offsched">Off Schedule</button>`);
   }
-  if (opts.canManageShift && !opts.asPic){
+  if (opts.canManageShift && !opts.asPic && !adminTools){
     parts.push(`<button type="button" class="acct-link" id="acct-shiftsched">Shift Schedule</button>`);
   }
   // Notifikasi persetujuan Task Description: hanya tampil untuk reviewer (server yang menentukan) dan bila ada yang menunggu.

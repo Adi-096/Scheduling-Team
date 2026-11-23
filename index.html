@@ -513,6 +513,14 @@
   .st-field input, .st-field select, .st-field textarea{ width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink); }
   .st-field textarea{ min-height:54px;resize:vertical; }
   .st-two{ display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+  .rv-filter{ display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0 4px; }
+  .rv-filter select{ font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink); }
+  .rv-filter .txt{ font-size:12.5px;opacity:.75; }
+  details.rv-career{ border:1px solid var(--line);border-radius:12px;margin:10px 0;padding:6px 14px;background:var(--surface);text-align:left; }
+  details.rv-career > summary{ cursor:pointer;padding:6px 0;font-size:15px; }
+  details.rv-section{ margin:6px 0 8px 10px;border-top:1px dashed var(--line);padding-top:4px; }
+  details.rv-section > summary{ cursor:pointer;padding:4px 0;font-size:13.5px;font-weight:600; }
+  .rv-count{ font-size:12px;font-weight:400;opacity:.7;margin-left:10px; }
   /* Jendela penyesuaian foto profil */
   .crop-modal{ max-width:420px;text-align:center;margin:auto; }
   .crop-stage{ position:relative;width:min(320px,76vw);aspect-ratio:1/1;margin:14px auto 12px;border-radius:10px;overflow:hidden;background:#E9EDF3;touch-action:none;cursor:grab;outline:none;user-select:none; }
@@ -8128,14 +8136,83 @@ function renderReviewModal(){
       </div>
     </div>`;
   }).join("");
-  box.innerHTML = `<h3 class="review-title">Requests</h3>
-    <div class="pic-status" id="review-status" style="margin-top:10px"></div>
+  const mineHtml = `
     ${resultItems ? `<div class="profile-lbl" style="margin-top:12px">Updates on your requests</div>${resultItems}<div class="off-btns"><button type="button" class="profile-mini" data-results-act="read">Got it</button></div>` : ""}
     ${swapItems ? `<div class="profile-lbl" style="margin-top:12px">Swap requests waiting for your answer</div>${swapItems}` : ""}
     ${infoItems ? `<div class="profile-lbl" style="margin-top:16px">For your information (view only)</div>${infoItems}<div class="off-btns"><button type="button" class="profile-mini" data-results-act="read">Got it</button></div>` : ""}
     ${histItems ? `<div class="profile-lbl" style="margin-top:18px">History (last 30 days)</div>${histItems}` : ""}
     ${items ? `${swapItems ? `<div class="profile-lbl" style="margin-top:16px">Task Description requests</div>` : ""}${items}` : ""}
     ${(items || swapItems || resultItems || infoItems || histItems) ? "" : `<div class="review-empty">Nothing here yet. New requests and updates will appear here.</div>`}`;
+  const adm = isAdminReview();
+  box.innerHTML = `<h3 class="review-title">Requests</h3>
+    ${adm ? `<div class="st-tabs" style="justify-content:center;border:none;margin:6px 0 0;padding-bottom:0">
+      <button type="button" data-rv-tab="mine" class="${reviewAllTab === "mine" ? "on" : ""}">For me</button>
+      <button type="button" data-rv-tab="all" class="${reviewAllTab === "all" ? "on" : ""}">All requests</button></div>` : ""}
+    <div class="pic-status" id="review-status" style="margin-top:10px"></div>
+    ${(adm && reviewAllTab === "all") ? allRequestsHtml() : mineHtml}`;
+}
+
+// ---- Administrator: semua pengajuan, dikelompokkan per Career lalu per Section (hanya lihat) ----
+let reviewAllTab = "mine", reviewAll = null, reviewAllBusy = false, reviewAllErr = "", reviewAllFilter = { status: "all", kind: "all" };
+const isAdminReview = () => !!(lastLoginOpts && lastLoginOpts.introAdmin && (!lastLoginOpts.viewAs || lastLoginOpts.viewAs === "developer"));
+async function loadAllRequests(){
+  if (reviewAllBusy) return;
+  reviewAllBusy = true; reviewAllErr = "";
+  if (reviewAllTab === "all") renderReviewModal();
+  try {
+    const d = await picApi({ action: "adminRequestsGet", actor: getRealEmail() });
+    if (!d || !d.ok) throw new Error((d && d.error) || "Could not load the requests.");
+    reviewAll = d;
+  } catch (err){ reviewAllErr = err.message || "Could not load the requests."; }
+  finally { reviewAllBusy = false; if (reviewAllTab === "all") renderReviewModal(); }
+}
+function allCardHtml(r){
+  const E = (t) => escapeHtml(String(t == null ? "" : t));
+  const what = r.kind === "off" ? "Saturday Off swap" : r.kind === "shift" ? "Shift swap" : "Task Description change";
+  const label = r.status === "pending" ? "In progress" : r.status === "cancelled" ? "Cancelled" : r.status === "approved" ? "Approved"
+    : r.status === "declined" ? (r.statusLabel === "Rejected" ? "Rejected" : "Declined") : (r.statusLabel || "Other");
+  const cls = r.status === "pending" ? "info" : (r.status === "other" ? "cancelled" : r.status);
+  const trim = (t) => { t = String(t || ""); return t.length > 260 ? t.slice(0, 260) + "..." : t; };
+  return `<div class="result-item ${E(cls)}">
+    <div class="result-head"><span class="result-chip ${E(cls)}">${E(label)}</span><b>${what}</b><span class="txt" style="margin-left:auto;opacity:.65">${E(String(r.at || "").slice(0, 10))}</span></div>
+    <div class="txt">${E(r.who)}${r.with ? " \u2194 " + E(r.with) : ""}</div>
+    ${r.stage ? `<div class="txt">${E(r.stage)}</div>` : ""}
+    ${r.when ? `<div class="txt">${E(r.when)}</div>` : ""}
+    ${r.kind === "desc" && r.desc ? `<div class="txt">Proposed description: ${E(trim(r.desc))}${r.edited ? " (edited by a reviewer)" : ""}</div>` : ""}
+    ${r.reason ? `<div class="txt">Reason: ${E(trim(r.reason))}</div>` : ""}
+    ${r.by ? `<div class="txt">By: ${E(r.by)}</div>` : ""}
+    ${r.note ? `<div class="txt">Note: ${E(trim(r.note))}</div>` : ""}
+  </div>`;
+}
+function allRequestsHtml(){
+  const E = (t) => escapeHtml(String(t == null ? "" : t));
+  if (reviewAllErr) return `<div class="review-empty">${E(reviewAllErr)}<div class="off-btns"><button type="button" class="profile-mini" data-rv-refresh>Try again</button></div></div>`;
+  if (!reviewAll) return `<div class="review-empty">Loading all requests...</div>`;
+  const f = reviewAllFilter;
+  const list = reviewAll.items.filter(r => (f.status === "all" || r.status === f.status) && (f.kind === "all" || r.kind === f.kind));
+  const groups = {}, titles = {};
+  (reviewAll.careers || []).forEach(c => (c.sections || []).forEach(s => { titles[s.sheet] = s.title; }));
+  list.forEach(r => { const c = groups[r.career] || (groups[r.career] = {}); (c[r.sheet] || (c[r.sheet] = [])).push(r); if (!titles[r.sheet]) titles[r.sheet] = r.sectionTitle || r.sheet; });
+  const order = (reviewAll.careers || []).map(c => c.career).filter(c => groups[c]).concat(Object.keys(groups).filter(c => !(reviewAll.careers || []).some(x => x.career === c)));
+  const secOrder = (career) => {
+    const known = ((reviewAll.careers || []).find(c => c.career === career) || { sections: [] }).sections.map(s => s.sheet).filter(s => groups[career][s]);
+    return known.concat(Object.keys(groups[career]).filter(s => known.indexOf(s) < 0));
+  };
+  const pend = (arr) => arr.filter(r => r.status === "pending").length;
+  const sel = (id, v, opts) => `<select data-rv-filter="${id}" aria-label="${id}">${opts.map(o => `<option value="${o[0]}"${v === o[0] ? " selected" : ""}>${o[1]}</option>`).join("")}</select>`;
+  const bar = `<div class="rv-filter">
+    ${sel("status", f.status, [["all", "All statuses"], ["pending", "In progress"], ["approved", "Approved"], ["declined", "Declined / Rejected"], ["cancelled", "Cancelled"]])}
+    ${sel("kind", f.kind, [["all", "All types"], ["off", "Saturday Off swaps"], ["shift", "Shift swaps"], ["desc", "Task Description"]])}
+    <button type="button" class="profile-mini" data-rv-refresh>${reviewAllBusy ? "Refreshing..." : "Refresh"}</button>
+    <span class="txt">${list.length} request(s), ${pend(list)} in progress. Shows requests still in progress and those from the last 30 days. View only.</span></div>`;
+  if (!order.length) return bar + `<div class="review-empty">No requests match.</div>`;
+  const body = order.map(career => {
+    const secs = secOrder(career), all = [].concat.apply([], secs.map(s => groups[career][s]));
+    return `<details class="rv-career"${pend(all) ? " open" : ""}><summary><b>${E(career)}</b><span class="rv-count">${all.length} request(s)${pend(all) ? ", " + pend(all) + " in progress" : ""}</span></summary>
+      ${secs.map(s => `<details class="rv-section"${pend(groups[career][s]) ? " open" : ""}><summary>${E(titles[s] || s)}<span class="rv-count">${groups[career][s].length}${pend(groups[career][s]) ? ", " + pend(groups[career][s]) + " in progress" : ""}</span></summary>
+        ${groups[career][s].map(allCardHtml).join("")}</details>`).join("")}</details>`;
+  }).join("");
+  return bar + body;
 }
 
 async function decideReview(id, decision, btn){
@@ -8200,6 +8277,7 @@ async function decideSwap(kind, id, decision, btn){
 }
 
 function openReviewModal(){
+  reviewAllTab = "mine"; reviewAll = null; reviewAllErr = "";   // tab "All requests" (Administrator) dimuat ulang saat dibuka
   renderReviewModal();
   document.getElementById("review-modal-overlay").classList.add("open");
   refreshReviewRequests();
@@ -8209,6 +8287,22 @@ function closeReviewModal(){
   if (resultsUnseen().length || infoUnseen().length){ markResultsSeen(); reviewBadgeSync(); }   // hasil pengajuan yang sudah dilihat tidak muncul lagi
 }
 document.getElementById("review-modal-close").addEventListener("click", closeReviewModal);
+document.getElementById("review-modal-overlay").addEventListener("click", (e) => {
+  const tb = e.target.closest && e.target.closest("[data-rv-tab]");
+  if (tb){
+    reviewAllTab = tb.dataset.rvTab;
+    renderReviewModal();
+    if (reviewAllTab === "all" && !reviewAll) loadAllRequests();
+    return;
+  }
+  if (e.target.closest && e.target.closest("[data-rv-refresh]")) loadAllRequests();
+});
+document.getElementById("review-modal-overlay").addEventListener("change", (e) => {
+  const fl = e.target.closest && e.target.closest("[data-rv-filter]");
+  if (!fl) return;
+  reviewAllFilter[fl.dataset.rvFilter] = fl.value;
+  renderReviewModal();
+});
 document.getElementById("review-modal-overlay").addEventListener("click", (e) => {
   if (e.target.id === "review-modal-overlay") closeReviewModal();
 });

@@ -7977,6 +7977,7 @@ let reviewReqs = [];          // usulan Task Description yang menunggu keputusan
 let reviewSwaps = [];         // pengajuan tukar Off / shift yang menunggu jawaban akun ini (dari server)
 let reviewResults = [];       // hasil pengajuan milik akun ini (disetujui / ditolak / dibatalkan), dari server
 let reviewInfo = [];          // pemberitahuan hanya-lihat (Authorized PIC / Section Head), dari server
+let reviewAdminNew = [];      // Administrator: semua pengajuan baru di semua section (kunci saja), dari server
 const RESULTS_SEEN_PREFIX = "srscSeenResults:";
 function resultsSeenSet(){
   try { return new Set(JSON.parse(localStorage.getItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase()) || "[]")); } catch (e){ return new Set(); }
@@ -7993,10 +7994,25 @@ function markResultsSeen(){
     const seen = resultsSeenSet();
     reviewResults.forEach(r => seen.add(r.key));
     reviewInfo.forEach(r => seen.add(r.key));
-    localStorage.setItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase(), JSON.stringify(Array.from(seen).slice(-300)));
+    localStorage.setItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase(), JSON.stringify(Array.from(seen).slice(-600)));
   } catch (e){ /* penyimpanan browser dimatikan: pemberitahuan muncul lagi, tidak berbahaya */ }
 }
-const reviewTotal = () => reviewReqs.length + reviewSwaps.length + resultsUnseen().length + infoUnseen().length;   // angka pada badge Requests
+// Administrator (tanpa simulasi role): setiap pengajuan BARU di semua section dihitung di badge sampai daftarnya dilihat (tab All requests).
+function adminNewUnseen(){
+  if (!reviewAdminNew.length || !isAdminReview()) return [];
+  const seen = resultsSeenSet();
+  return reviewAdminNew.filter(r => !seen.has(r.key) && resultFresh(r));
+}
+const admKeyOf = (r) => "adm:" + r.kind + ":" + String(r.key).split(":").slice(2).join(":");
+function markAdminSeen(){   // semua pengajuan yang sedang tampil di tab "All requests" dianggap sudah dilihat
+  if (!reviewAll || !reviewAll.items) return;
+  try {
+    const seen = resultsSeenSet();
+    reviewAll.items.forEach(r => seen.add(admKeyOf(r)));
+    localStorage.setItem(RESULTS_SEEN_PREFIX + String(getRealEmail() || "").toLowerCase(), JSON.stringify(Array.from(seen).slice(-600)));
+  } catch (e){ /* penyimpanan browser dimatikan: tidak berbahaya */ }
+}
+const reviewTotal = () => reviewReqs.length + reviewSwaps.length + resultsUnseen().length + infoUnseen().length + adminNewUnseen().length;   // angka pada badge Requests
 let lastLoginOpts = null;     // opsi terakhir renderLoginInfo, untuk menggambar ulang login card
 let reviewBusy = false;
 let reviewTimer = null;
@@ -8019,11 +8035,12 @@ async function refreshReviewRequests(){
     if (!d || !d.ok) return;
     const sig = (arr) => arr.map(x => (x.kind || "desc") + x.id + ":" + (x.stage || 1)).join("|");
     const rsig = (arr) => arr.map(x => x.key).join("|");
-    const changed = sig((d.requests || []).concat(d.swaps || [])) !== sig(reviewReqs.concat(reviewSwaps)) || rsig(d.results || []) !== rsig(reviewResults) || rsig(d.info || []) !== rsig(reviewInfo);
+    const changed = sig((d.requests || []).concat(d.swaps || [])) !== sig(reviewReqs.concat(reviewSwaps)) || rsig(d.results || []) !== rsig(reviewResults) || rsig(d.info || []) !== rsig(reviewInfo) || rsig(d.adminNew || []) !== rsig(reviewAdminNew);
     reviewReqs = d.requests || [];
     reviewSwaps = d.swaps || [];
     reviewResults = d.results || [];
     reviewInfo = d.info || [];
+    reviewAdminNew = d.adminNew || [];
     if (changed){
       reviewBadgeSync();
       if (document.getElementById("review-modal-overlay").classList.contains("open") && !reviewBusy) renderReviewModal();
@@ -8147,7 +8164,7 @@ function renderReviewModal(){
   box.innerHTML = `<h3 class="review-title">Requests</h3>
     ${adm ? `<div class="st-tabs" style="justify-content:center;border:none;margin:6px 0 0;padding-bottom:0">
       <button type="button" data-rv-tab="mine" class="${reviewAllTab === "mine" ? "on" : ""}">For me</button>
-      <button type="button" data-rv-tab="all" class="${reviewAllTab === "all" ? "on" : ""}">All requests</button></div>` : ""}
+      <button type="button" data-rv-tab="all" class="${reviewAllTab === "all" ? "on" : ""}">All requests${adminNewUnseen().length ? ` <span class="notif-badge">${adminNewUnseen().length > 99 ? "99+" : adminNewUnseen().length}</span>` : ""}</button></div>` : ""}
     <div class="pic-status" id="review-status" style="margin-top:10px"></div>
     ${(adm && reviewAllTab === "all") ? allRequestsHtml() : mineHtml}`;
 }
@@ -8166,15 +8183,16 @@ async function loadAllRequests(){
   } catch (err){ reviewAllErr = err.message || "Could not load the requests."; }
   finally { reviewAllBusy = false; if (reviewAllTab === "all") renderReviewModal(); }
 }
-function allCardHtml(r){
+function allCardHtml(r, seen){
   const E = (t) => escapeHtml(String(t == null ? "" : t));
+  const isNew = !!seen && !seen.has(admKeyOf(r)) && resultFresh(r);
   const what = r.kind === "off" ? "Saturday Off swap" : r.kind === "shift" ? "Shift swap" : "Task Description change";
   const label = r.status === "pending" ? "In progress" : r.status === "cancelled" ? "Cancelled" : r.status === "approved" ? "Approved"
     : r.status === "declined" ? (r.statusLabel === "Rejected" ? "Rejected" : "Declined") : (r.statusLabel || "Other");
   const cls = r.status === "pending" ? "info" : (r.status === "other" ? "cancelled" : r.status);
   const trim = (t) => { t = String(t || ""); return t.length > 260 ? t.slice(0, 260) + "..." : t; };
   return `<div class="result-item ${E(cls)}">
-    <div class="result-head"><span class="result-chip ${E(cls)}">${E(label)}</span><b>${what}</b><span class="txt" style="margin-left:auto;opacity:.65">${E(String(r.at || "").slice(0, 10))}</span></div>
+    <div class="result-head"><span class="result-chip ${E(cls)}">${E(label)}</span><b>${what}</b>${isNew ? `<span class="result-chip info" style="background:#FFE9C7;color:#8A4B00">New</span>` : ""}<span class="txt" style="margin-left:auto;opacity:.65">${E(String(r.at || "").slice(0, 10))}</span></div>
     <div class="txt">${E(r.who)}${r.with ? " \u2194 " + E(r.with) : ""}</div>
     ${r.stage ? `<div class="txt">${E(r.stage)}</div>` : ""}
     ${r.when ? `<div class="txt">${E(r.when)}</div>` : ""}
@@ -8199,18 +8217,21 @@ function allRequestsHtml(){
     return known.concat(Object.keys(groups[career]).filter(s => known.indexOf(s) < 0));
   };
   const pend = (arr) => arr.filter(r => r.status === "pending").length;
+  const seenNow = resultsSeenSet();
+  const nNew = list.filter(r => !seenNow.has(admKeyOf(r)) && resultFresh(r)).length;
   const sel = (id, v, opts) => `<select data-rv-filter="${id}" aria-label="${id}">${opts.map(o => `<option value="${o[0]}"${v === o[0] ? " selected" : ""}>${o[1]}</option>`).join("")}</select>`;
   const bar = `<div class="rv-filter">
     ${sel("status", f.status, [["all", "All statuses"], ["pending", "In progress"], ["approved", "Approved"], ["declined", "Declined / Rejected"], ["cancelled", "Cancelled"]])}
     ${sel("kind", f.kind, [["all", "All types"], ["off", "Saturday Off swaps"], ["shift", "Shift swaps"], ["desc", "Task Description"]])}
     <button type="button" class="profile-mini" data-rv-refresh>${reviewAllBusy ? "Refreshing..." : "Refresh"}</button>
+    ${nNew ? `<button type="button" class="profile-mini" data-rv-markread>Mark all as read (${nNew} new)</button>` : ""}
     <span class="txt">${list.length} request(s), ${pend(list)} in progress. Shows requests still in progress and those from the last 30 days. View only.</span></div>`;
   if (!order.length) return bar + `<div class="review-empty">No requests match.</div>`;
   const body = order.map(career => {
     const secs = secOrder(career), all = [].concat.apply([], secs.map(s => groups[career][s]));
     return `<details class="rv-career"${pend(all) ? " open" : ""}><summary><b>${E(career)}</b><span class="rv-count">${all.length} request(s)${pend(all) ? ", " + pend(all) + " in progress" : ""}</span></summary>
       ${secs.map(s => `<details class="rv-section"${pend(groups[career][s]) ? " open" : ""}><summary>${E(titles[s] || s)}<span class="rv-count">${groups[career][s].length}${pend(groups[career][s]) ? ", " + pend(groups[career][s]) + " in progress" : ""}</span></summary>
-        ${groups[career][s].map(allCardHtml).join("")}</details>`).join("")}</details>`;
+        ${groups[career][s].map(r => allCardHtml(r, seenNow)).join("")}</details>`).join("")}</details>`;
   }).join("");
   return bar + body;
 }
@@ -8278,24 +8299,30 @@ async function decideSwap(kind, id, decision, btn){
 
 function openReviewModal(){
   reviewAllTab = "mine"; reviewAll = null; reviewAllErr = "";   // tab "All requests" (Administrator) dimuat ulang saat dibuka
+  // Administrator: bila tidak ada yang perlu dijawab tetapi ada pengajuan baru di section mana pun, langsung buka tab All requests
+  if (isAdminReview() && adminNewUnseen().length && !(reviewReqs.length + reviewSwaps.length + resultsUnseen().length + infoUnseen().length)){ reviewAllTab = "all"; loadAllRequests(); }
   renderReviewModal();
   document.getElementById("review-modal-overlay").classList.add("open");
   refreshReviewRequests();
 }
 function closeReviewModal(){
   document.getElementById("review-modal-overlay").classList.remove("open");
-  if (resultsUnseen().length || infoUnseen().length){ markResultsSeen(); reviewBadgeSync(); }   // hasil pengajuan yang sudah dilihat tidak muncul lagi
+  const viewedAll = reviewAllTab === "all" && !!reviewAll;
+  if (viewedAll) markAdminSeen();   // daftar All requests sudah dilihat
+  if (viewedAll || resultsUnseen().length || infoUnseen().length){ markResultsSeen(); reviewBadgeSync(); }   // hasil pengajuan yang sudah dilihat tidak muncul lagi
 }
 document.getElementById("review-modal-close").addEventListener("click", closeReviewModal);
 document.getElementById("review-modal-overlay").addEventListener("click", (e) => {
   const tb = e.target.closest && e.target.closest("[data-rv-tab]");
   if (tb){
+    if (reviewAllTab === "all" && tb.dataset.rvTab !== "all"){ markAdminSeen(); reviewBadgeSync(); }   // meninggalkan tab All requests = sudah dilihat
     reviewAllTab = tb.dataset.rvTab;
     renderReviewModal();
     if (reviewAllTab === "all" && !reviewAll) loadAllRequests();
     return;
   }
   if (e.target.closest && e.target.closest("[data-rv-refresh]")) loadAllRequests();
+  if (e.target.closest && e.target.closest("[data-rv-markread]")){ markAdminSeen(); renderReviewModal(); reviewBadgeSync(); }
 });
 document.getElementById("review-modal-overlay").addEventListener("change", (e) => {
   const fl = e.target.closest && e.target.closest("[data-rv-filter]");

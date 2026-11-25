@@ -5744,12 +5744,21 @@ const OFF_DECLARATION_TEXT = "I agree to this swap and take responsibility that 
 function offDeclareUi(){
   const sel = document.getElementById("off-with"), box = document.getElementById("off-declare-box");
   if (!sel || !box) return;
-  const cand = ((profileOff && profileOff.candidates) || []).find(x => x.email === sel.value);
+  const isSelf = sel.value === "__self__";
+  const cand = isSelf ? null : ((profileOff && profileOff.candidates) || []).find(x => x.email === sel.value);
   const need = !!(cand && cand.needsDeclaration);
+  const hint = document.getElementById("off-hint");
+  if (hint) hint.textContent = isSelf ? offSelfHint(profileOff) : OFF_PAIR_HINT;
   box.style.display = need ? "flex" : "none";
   const cb = document.getElementById("off-declare"), btn = document.getElementById("off-send");
   if (!need && cb) cb.checked = false;
   if (btn) btn.disabled = need && !(cb && cb.checked);
+}
+const OFF_PAIR_HINT = "A swap always has two Saturdays, so nobody loses an Off: on both dates the two of you exchange status. The other PIC decides. If they agree, it takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.";
+// Tukar Off milik sendiri: tidak ada PIC lawan, jadi Section Head (cadangan: Manager) yang memutuskan.
+function offSelfHint(d){
+  const who = (d && d.selfApproverLabel) || "Section Head";
+  return "You move your own Saturday Off: you take Off on the first Saturday and work on the Payback Saturday, so nobody loses an Off. Because no other PIC is involved, your " + who + " must approve it. Your Authorized PIC is informed.";
 }
 function offSwapFormHtml(d){
   // Tukar berpasangan: "Saturday to swap" (tanggal tukar) + "Payback Saturday" (tanggal pengganti).
@@ -5771,12 +5780,12 @@ function offSwapFormHtml(d){
       <select id="off-date" class="off-input">${opts(dateSats)}</select>
       <div class="profile-lbl">Payback Saturday (${first ? "you work" : "you take Off"})</div>
       <select id="off-payback" class="off-input">${opts(paySats)}</select>
-      <div class="profile-lbl">Swap with (other team, same Section)</div>
-      <select id="off-with" class="off-input">${cands.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)} &mdash; Team ${escapeHtml(c.team)} (${c.cls === "leader" ? "Leader, " : c.cls === "authorized" ? "Authorized PIC, " : ""}${escapeHtml(c.sheetName)})</option>`).join("")}</select>
+      <div class="profile-lbl">Swap with (other team, same Section${d.selfOk ? ", or yourself" : ""})</div>
+      <select id="off-with" class="off-input">${cands.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name)} &mdash; Team ${escapeHtml(c.team)} (${c.cls === "leader" ? "Leader, " : c.cls === "authorized" ? "Authorized PIC, " : ""}${escapeHtml(c.sheetName)})</option>`).join("")}${d.selfOk ? `<option value="__self__">Myself (needs ${escapeHtml(d.selfApproverLabel || "Section Head")} approval)</option>` : ""}</select>
       <label id="off-declare-box" class="profile-hint" style="margin:6px 0 0;display:${cands[0] && cands[0].needsDeclaration ? "flex" : "none"};gap:8px;align-items:flex-start"><input type="checkbox" id="off-declare" style="margin-top:3px"><span>${escapeHtml(d.declarationText || OFF_DECLARATION_TEXT)}</span></label>
       <div class="profile-lbl">Reason</div>
       <textarea id="off-reason" class="off-input" rows="3" maxlength="300" placeholder="Why do you need this swap?"></textarea>
-      <div class="profile-hint" style="margin:0">A swap always has two Saturdays, so nobody loses an Off: on both dates the two of you exchange status. The other PIC decides. If they agree, it takes effect right away. Your Authorized PIC and Section Head are informed, and the Section Head can cancel it.</div>
+      <div class="profile-hint" id="off-hint" style="margin:0">${escapeHtml(cands.length ? OFF_PAIR_HINT : offSelfHint(d))}</div>
       <div class="profile-edit-actions">
         <button type="button" class="pic-btn primary" id="off-send" data-off-act="send"${cands[0] && cands[0].needsDeclaration ? " disabled" : ""}>Send request</button>
         <button type="button" class="pic-btn" data-off-act="cancel">Cancel</button>
@@ -5932,7 +5941,7 @@ function profileOffPaneHtml(){
         : first.status === "work" ? `You are <b>working</b> on ${escapeHtml(first.label)}.`
         : `The Off schedule for ${escapeHtml(first.label)} has not been set yet.`;
       h += `<div class="profile-lbl">Next Saturday</div><div class="off-line">${offChip(first.nonOff ? "nonoff" : first.status)}<span>${line}</span></div>`;
-      if (first.swapWith) h += `<div class="profile-hint">Swapped with ${escapeHtml(first.swapWith)} (approved).</div>`;
+      if (first.swapWith) h += `<div class="profile-hint">${first.swapWith === "myself" ? "Your own swap (approved)." : "Swapped with " + escapeHtml(first.swapWith) + " (approved)."}</div>`;
     }
     const cal = Array.isArray(d.calendar) ? d.calendar : sats;
     const pages = Math.max(1, Math.ceil(cal.length / OFF_CAL_PER_PAGE));
@@ -5958,7 +5967,7 @@ function profileOffPaneHtml(){
     }
   }
   if (inc.length){
-    h += `<div class="profile-lbl">Waiting for your answer</div>` + inc.map(q => `<div class="profile-req"><b>${escapeHtml(q.reqName || q.reqEmail)} (Team ${escapeHtml(q.reqTeam)}) &harr; ${escapeHtml(q.withName || q.withEmail)} (Team ${escapeHtml(q.withTeam)})</b>
+    h += `<div class="profile-lbl">Waiting for your answer</div>` + inc.map(q => `<div class="profile-req"><b>${escapeHtml(q.reqName || q.reqEmail)} (Team ${escapeHtml(q.reqTeam)}) ${q.self ? "&mdash; own Saturday Off" : `&harr; ${escapeHtml(q.withName || q.withEmail)} (Team ${escapeHtml(q.withTeam)})`}</b>
         <span class="txt">${escapeHtml(q.dateLabel)}${q.paybackLabel ? "\nPayback: " + escapeHtml(q.paybackLabel) : ""}\nReason: ${escapeHtml(q.reason)}</span>
         <div class="off-btns">
           <button type="button" class="pic-btn primary" data-off-act="respond" data-id="${escapeHtml(q.id)}" data-decision="approve">${q.stage === "counterpart" ? "I agree" : "Approve"}</button>
@@ -5969,7 +5978,7 @@ function profileOffPaneHtml(){
     h += `<div class="profile-lbl">My swap requests</div>` + out.map(q => {
       const active = String(q.status).indexOf("Awaiting") === 0;
       const note = q.status === "Declined" ? q.withNote : ((q.status === "Rejected" || q.status === "Cancelled by Leader") ? q.byNote : "");
-      return `<div class="profile-req"><b>${escapeHtml(q.dateLabel)} &harr; ${escapeHtml(q.withName || q.withEmail)}</b><span class="txt">${q.paybackLabel ? "Payback: " + escapeHtml(q.paybackLabel) + "\n" : ""}${escapeHtml(offStatusText(q))}${note ? "\nNote: " + escapeHtml(note) : ""}</span>${active && own ? `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="cancel-swap" data-id="${escapeHtml(q.id)}">Cancel request</button></div>` : ""}</div>`;
+      return `<div class="profile-req"><b>${escapeHtml(q.dateLabel)} ${q.self ? "&middot; own Off" : `&harr; ${escapeHtml(q.withName || q.withEmail)}`}</b><span class="txt">${q.paybackLabel ? "Payback: " + escapeHtml(q.paybackLabel) + "\n" : ""}${escapeHtml(offStatusText(q))}${note ? "\nNote: " + escapeHtml(note) : ""}</span>${active && own ? `<div class="off-btns"><button type="button" class="profile-mini" data-off-act="cancel-swap" data-id="${escapeHtml(q.id)}">Cancel request</button></div>` : ""}</div>`;
     }).join("");
   }
   h += swapWatchHtml(wOff, !!d.canCancelWatch, "off");
@@ -6623,9 +6632,9 @@ function swapWatchHtml(list, canCancel, kind){
   if (!list || !list.length) return "";
   const title = kind === "off" ? "Saturday Off swaps in your sections" : "Shift swaps in your sections";
   return `<div class="profile-lbl">${title}${canCancel ? "" : " (for your information)"}</div>` + list.map(q => {
-    const who = `${escapeHtml(q.reqName || q.reqEmail)} &harr; ${escapeHtml(q.withName || q.withEmail)}`;
+    const who = q.self ? `${escapeHtml(q.reqName || q.reqEmail)} (own Off)` : `${escapeHtml(q.reqName || q.reqEmail)} &harr; ${escapeHtml(q.withName || q.withEmail)}`;
     const when = kind === "off" ? escapeHtml(q.dateLabel) + (q.paybackLabel ? " (payback " + escapeHtml(String(q.paybackLabel).replace(/^Saturday,\s*/, "")) + ")" : "") : escapeHtml(q.rangeLabel) + (q.paybackLabel ? " (payback " + escapeHtml(q.paybackLabel) + ")" : "");
-    const st = q.status === "Approved" ? "Approved" : "Waiting for " + escapeHtml(q.withName || q.withEmail);
+    const st = q.status === "Approved" ? "Approved" : (q.status === "Awaiting Section Head" ? "Waiting for Section Head approval" : "Waiting for " + escapeHtml(q.withName || q.withEmail));
     return `<div class="profile-req"><b>${who}</b><span class="txt">${when} &middot; ${st}\nSection: ${escapeHtml(q.sheetName || "")}\nReason: ${escapeHtml(q.reason)}</span>${canCancel ? `<div class="off-btns"><button type="button" class="profile-mini" data-sw-act="${kind}-lcancel" data-id="${escapeHtml(q.id)}">Cancel swap</button></div>` : ""}</div>`;
   }).join("");
 }
@@ -6724,10 +6733,12 @@ document.addEventListener("click", (e) => {
     if (!date || !payback || !withEmail){ setProfileStatus("err", "Please choose a Saturday, a Payback Saturday and a PIC."); return; }
     if (date === payback){ setProfileStatus("err", "The Payback Saturday must be a different Saturday."); return; }
     if (reason.length < 5){ setProfileStatus("err", "Please write a short reason (at least 5 characters)."); return; }
-    const cand = ((profileOff && profileOff.candidates) || []).find(x => x.email === withEmail);
-    const declared = !!(document.getElementById("off-declare") || {}).checked;
+    const isSelf = withEmail === "__self__";
+    const cand = isSelf ? null : ((profileOff && profileOff.candidates) || []).find(x => x.email === withEmail);
+    const declared = !isSelf && !!(document.getElementById("off-declare") || {}).checked;
     if (cand && cand.needsDeclaration && !declared){ setProfileStatus("err", "Please tick the agreement box first."); return; }
-    offCall({ action: "offSwapRequest", date, payback, withEmail, reason, declared }, b, "Sending...", d => `Request sent to ${d.withName || "the PIC"}. They will get an email.`);
+    offCall({ action: "offSwapRequest", date, payback, withEmail: isSelf ? "" : withEmail, self: isSelf, reason, declared }, b, "Sending...",
+      d => d.self ? `Request sent to ${d.withName || "your Section Head"}. They will get an email and decide.` : `Request sent to ${d.withName || "the PIC"}. They will get an email.`);
   }
   else if (act === "cancel-swap"){
     if (confirm("Cancel this swap request?")) offCall({ action: "offSwapCancel", id: b.dataset.id }, b, "Cancelling...", () => "Request cancelled.");
@@ -8100,7 +8111,7 @@ function renderReviewModal(){
       </div>
     </div>`).join("");
   const resultCard = (r, hist) => {
-    const what = r.kind === "off" ? "Saturday Off swap" + (r.with ? " with " + escapeHtml(r.with) : "")
+    const what = r.kind === "off" ? (r.self ? "Saturday Off (own swap)" : "Saturday Off swap") + (r.with ? " with " + escapeHtml(r.with) : "")
       : r.kind === "shift" ? "Shift swap" + (r.with ? " with " + escapeHtml(r.with) : "") : "Task Description change";
     const label = r.status === "cancelled" ? "Cancelled by Section Head" : (r.statusLabel === "Rejected" ? "Rejected" : r.status === "declined" ? "Declined" : "Approved");
     const extra = r.kind === "desc" && r.status === "approved"
@@ -8115,7 +8126,7 @@ function renderReviewModal(){
     </div>`;
   };
   const infoCard = (r, hist) => {
-    const what = r.kind === "off" ? "Saturday Off swap" : r.kind === "shift" ? "Shift swap" : "Task Description change";
+    const what = r.kind === "off" ? (r.self ? "Saturday Off (own swap)" : "Saturday Off swap") : r.kind === "shift" ? "Shift swap" : "Task Description change";
     const label = r.status === "pending" ? "In progress" : r.status === "cancelled" ? "Cancelled" : (r.statusLabel === "Rejected" ? "Rejected" : r.status === "declined" ? "Declined" : "Approved");
     const trim = (t) => { t = String(t || ""); return t.length > 260 ? t.slice(0, 260) + "..." : t; };
     return `<div class="result-item ${escapeHtml(r.status === "pending" ? "info" : r.status)}">
@@ -8135,21 +8146,22 @@ function renderReviewModal(){
   const swapItems = reviewSwaps.map(q => {
     const isOff = q.kind === "off";
     const title = isOff
-      ? `Saturday Off swap: ${escapeHtml(q.reqName || q.reqEmail)}${q.reqTeam ? " (Team " + escapeHtml(q.reqTeam) + ")" : ""} &harr; you${q.withTeam ? " (Team " + escapeHtml(q.withTeam) + ")" : ""}`
+      ? (q.self ? `Own Saturday Off: ${escapeHtml(q.reqName || q.reqEmail)}${q.reqTeam ? " (Team " + escapeHtml(q.reqTeam) + ")" : ""}`
+        : `Saturday Off swap: ${escapeHtml(q.reqName || q.reqEmail)}${q.reqTeam ? " (Team " + escapeHtml(q.reqTeam) + ")" : ""} &harr; you${q.withTeam ? " (Team " + escapeHtml(q.withTeam) + ")" : ""}`)
       : `Shift swap: ${escapeHtml(q.reqName || q.reqEmail)} (${escapeHtml(shiftLabelUi(q.reqShift))}) &harr; you (${escapeHtml(shiftLabelUi(q.withShift))})`;
     const when = isOff
       ? `Saturday to swap: ${escapeHtml(q.dateLabel || q.date)}${q.paybackLabel ? "\nPayback Saturday: " + escapeHtml(q.paybackLabel) : ""}`
       : `${escapeHtml(q.rangeLabel)}${q.paybackLabel ? "\nPayback: " + escapeHtml(q.paybackLabel) : ""}`;
     return `<div class="review-item swap-item" data-swap-kind="${escapeHtml(q.kind)}" data-swap-id="${escapeHtml(q.id)}">
-      <div class="profile-sec">${isOff ? "Saturday Off swap" : "Shift swap"} &middot; waiting for your answer</div>
+      <div class="profile-sec">${isOff ? (q.self ? "Saturday Off (own swap)" : "Saturday Off swap") : "Shift swap"} &middot; ${q.stage === "section head" ? "needs your approval" : "waiting for your answer"}</div>
       <div class="who">${title}</div>
       <div class="txt" style="margin-top:8px">${when}</div>
       <div class="profile-lbl">Reason</div>
       <div class="txt">${escapeHtml(q.reason || "-")}</div>
       <input type="text" maxlength="300" placeholder="Note to the requester (optional)" data-swap-note aria-label="Note">
       <div class="review-actions">
-        <button type="button" class="pic-btn primary" data-swap-act="approve" data-kind="${escapeHtml(q.kind)}" data-id="${escapeHtml(q.id)}">I agree</button>
-        <button type="button" class="pic-btn reject" data-swap-act="reject" data-kind="${escapeHtml(q.kind)}" data-id="${escapeHtml(q.id)}">Decline</button>
+        <button type="button" class="pic-btn primary" data-swap-act="approve" data-kind="${escapeHtml(q.kind)}" data-id="${escapeHtml(q.id)}">${q.stage === "section head" ? "Approve" : "I agree"}</button>
+        <button type="button" class="pic-btn reject" data-swap-act="reject" data-kind="${escapeHtml(q.kind)}" data-id="${escapeHtml(q.id)}">${q.stage === "section head" ? "Reject" : "Decline"}</button>
       </div>
     </div>`;
   }).join("");
@@ -8186,7 +8198,7 @@ async function loadAllRequests(){
 function allCardHtml(r, seen){
   const E = (t) => escapeHtml(String(t == null ? "" : t));
   const isNew = !!seen && !seen.has(admKeyOf(r)) && resultFresh(r);
-  const what = r.kind === "off" ? "Saturday Off swap" : r.kind === "shift" ? "Shift swap" : "Task Description change";
+  const what = r.kind === "off" ? (r.self ? "Saturday Off (own swap)" : "Saturday Off swap") : r.kind === "shift" ? "Shift swap" : "Task Description change";
   const label = r.status === "pending" ? "In progress" : r.status === "cancelled" ? "Cancelled" : r.status === "approved" ? "Approved"
     : r.status === "declined" ? (r.statusLabel === "Rejected" ? "Rejected" : "Declined") : (r.statusLabel || "Other");
   const cls = r.status === "pending" ? "info" : (r.status === "other" ? "cancelled" : r.status);

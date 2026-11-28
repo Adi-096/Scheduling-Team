@@ -748,6 +748,7 @@
   .video-stage video{ display:block;width:100%;max-height:70vh;background:#000;border-radius:10px; }
   .video-note{ font-size:13.5px;line-height:1.55;padding:24px 12px;color:var(--ink-soft); }
   #pic-video-hint[hidden]{ display:none; }
+  .pic-cat-row.ongoing .pic-cat-row-name::before{ content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#2E9E5B;margin-right:9px;vertical-align:middle; }
   #qr-canvas{ display:block;max-width:100%;height:auto;margin:14px auto 0;border:1px solid var(--line);border-radius:10px;background:#fff; }
   .qr-url{ font-size:12.5px;color:var(--ink-soft);word-break:break-all;margin-top:12px; }
   .pic-doc-box{ display:flex;flex-direction:column;gap:8px; }
@@ -2674,7 +2675,7 @@ function renderPicSlot(idx){
   picOwnDeleteMap[idx] = canDelete && viewPerms.delOwn.has(key);
   picManageMap[idx] = canCreate || canDelete;
   // Yang boleh menambah selalu melihat tombolnya (untuk menambah menu pertama di sheet kosong).
-  slot.innerHTML = (list.some(inOurLinks) || canCreate)
+  slot.innerHTML = (list.some(inOurLinks) || canCreate || pinned.length)
     ? `<button class="pic-menu-btn" type="button" data-pic-sec="${idx}">${PIC_SVG}Our Links</button>`
     : "";
 }
@@ -2692,6 +2693,16 @@ function applyPicMenus(){
 // Tampil di daftar Our Links? Menu biasa: ya. Menu On Going: TIDAK bila ditujukan untuk pengguna ini (sudah ditempel di
 // halaman utama), tetapi YA bila On Going-nya untuk role lain (onGoing === false), supaya tetap bisa dibuka dari Our Links.
 function inOurLinks(l){ return !l.pinned || l.onGoing === false; }
+
+// Kategori "On Going" di Our Links: berisi link yang sama dengan yang tampil di halaman utama (label ON GOING).
+const ONGOING_KEY = "__ongoing__", ONGOING_CAT = "On Going";
+function ongoingLinksFor(idx){
+  const meta = sectionMeta[idx];
+  const own = ((meta && meta.links) || []).filter(l => l.pinned && l.onGoing !== false);
+  const seen = new Set(own.map(l => l.url));
+  const extra = ((meta && meta.pinnedFrom) || []).filter(l => !seen.has(l.url));   // + On Going dari sheet lain yang menyebut section ini
+  return own.concat(extra);
+}
 
 function sheetDisplayName(norm){
   const m = sectionMeta.find(x => normSheetName(x.sheetKey) === norm);
@@ -4344,7 +4355,7 @@ function renderPicModal(idx, note){
   // ---- Daftar menu (selalu tampil dulu) ----
   const reordering = picCanCreate && picMode === "reorder";
   const reorderingCat = picCanCreate && picMode === "reorder-cat";
-  const catKey  = (g) => g.cat ? g.cat.toLowerCase() : "__other__";
+  const catKey  = (g) => g.virtual ? ONGOING_KEY : (g.cat ? g.cat.toLowerCase() : "__other__");
   const catName = (g) => g.cat || "Other";
   const qTokens = picSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let showCat = false;   // tampilkan nama kategori di setiap hasil (saat mencari di semua kategori)
@@ -4373,9 +4384,11 @@ function renderPicModal(idx, note){
         </li>`;
   };
   const manageView = deleting || picking;   // mode kelola: semua link tampil penuh agar bisa dipilih
+  // Link On Going (yang juga tampil di halaman utama) dikumpulkan di kategori "On Going", paling atas, pada tampilan biasa.
+  const ongoingItems = (!manageView && !reordering && !reorderingCat) ? ongoingLinksFor(idx).map(l => ({ l, i: -1 })) : [];
   // Kotak pencarian: hanya di tampilan biasa dan Edit Menu (tidak di Delete / Reorder / Add / Edit form).
   const searchable = (picMode === "view" || picMode === "edit-pick") &&
-    (picking ? links.length : links.filter(inOurLinks).length) > 0;
+    (picking ? links.length : links.filter(inOurLinks).length + ongoingItems.length) > 0;
   let searchScope = "";
   let listHtml;
   if (reorderingCat){
@@ -4406,10 +4419,10 @@ function renderPicModal(idx, note){
             <button type="button" data-pic-down="${i}" aria-label="Move down" ${i === picReorderList.length - 1 ? "disabled" : ""}>&#9660;</button>
           </div>
         </li>`).join("")}</ul>`;
-  } else if (!(manageView ? links.length : links.some(inOurLinks))){
-    listHtml = `<p class="pic-empty">${links.length ? "All links here are shown as On Going on the main page." : "No menus yet."}</p>`;
+  } else if (!(manageView ? links.length : (links.some(inOurLinks) || ongoingItems.length))){
+    listHtml = `<p class="pic-empty">No menus yet.</p>`;
   } else {
-    const groups = picGroupLinks(links, manageView ? null : inOurLinks);
+    const groups = (ongoingItems.length ? [{ cat: ONGOING_CAT, virtual: true, items: ongoingItems }] : []).concat(picGroupLinks(links, manageView ? null : inOurLinks));
     const hasCats = !(groups.length === 1 && !groups[0].cat);
     let opened = null;
     if (hasCats && picCatOpen && (!manageView || picking)){   // Edit Menu dari dalam kategori: hanya menu kategori itu
@@ -4441,7 +4454,7 @@ function renderPicModal(idx, note){
         const ul = `<ul class="pic-list">${g.items.map(itemLi).join("")}</ul>`;
         if (!hasCats) return ul;   // tanpa kategori sama sekali: tampilan lama
         if (!manageView){   // semua kategori tampil sebagai folder dulu; link muncul setelah kategori dibuka
-          return `<button type="button" class="pic-cat-row" data-pic-cat="${escapeHtml(catKey(g))}">
+          return `<button type="button" class="pic-cat-row${g.virtual ? " ongoing" : ""}" data-pic-cat="${escapeHtml(catKey(g))}">
               <span class="pic-cat-row-name">${escapeHtml(catName(g))}</span>
               <span class="pic-cat-count">${g.items.length}</span>
               <span class="pic-cat-chev" aria-hidden="true">&rsaquo;</span>
@@ -4560,7 +4573,7 @@ function openPicMenu(idx){
   picOwnCreate = !!picOwnCreateMap[idx];
   picOwnDelete = !!picOwnDeleteMap[idx];
   picCanManage = picCanCreate || picCanDelete;
-  if (!(picVisible[idx] || []).length && !picCanCreate) return;
+  if (!(picVisible[idx] || []).length && !picCanCreate && !ongoingLinksFor(idx).length) return;
   Activity.ctx.sheet = meta.sheetKey;
   picCurrentIdx = idx;
   picMode = "view";
